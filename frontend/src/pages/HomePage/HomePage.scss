@@ -1,0 +1,21 @@
+.home-page {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+
+  &__main {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+}
+
+@media (max-width: 768px) {
+  .home-page {
+    &__main {
+      flex-direction: column;
+      overflow-y: auto;
+    }
+  }
+}
