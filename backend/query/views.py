@@ -3,7 +3,6 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from django.db.models import Q
-from django.core.paginator import Paginator
 from django.shortcuts import get_object_or_404
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
@@ -22,11 +21,10 @@ if search_path not in sys.path:
 from search.meili_search_service import meili_search_service as search_service
 SEARCH_ENGINE = "Meilisearch"
 
-from .models import Query, Answer, QuerySession, TeamAnswer
+from .models import Query, QuerySession
 from .serializers import (
-    QuerySerializer, AnswerSerializer, QueryCreateSerializer, 
-    QueryUpdateSerializer, AnswerCreateSerializer, QuerySessionSerializer,
-    TeamAnswerSerializer, TeamAnswerCreateSerializer
+    QuerySerializer, QueryCreateSerializer, 
+    QueryUpdateSerializer, QuerySessionSerializer
 )
 
 class QueryListCreateAPIView(APIView):
@@ -37,15 +35,10 @@ class QueryListCreateAPIView(APIView):
 
     @swagger_auto_schema(
         operation_summary="List all queries",
-        operation_description="Get a paginated list of all queries with optional filtering",
+        operation_description="Get all queries with optional filtering",
         manual_parameters=[
-            openapi.Parameter('search', openapi.IN_QUERY, description="Search in text, ocr, speech fields", type=openapi.TYPE_STRING),
             openapi.Parameter('session', openapi.IN_QUERY, description="Filter by session ID", type=openapi.TYPE_INTEGER),
-            openapi.Parameter('start_date', openapi.IN_QUERY, description="Filter by start date (YYYY-MM-DD)", type=openapi.TYPE_STRING),
-            openapi.Parameter('end_date', openapi.IN_QUERY, description="Filter by end date (YYYY-MM-DD)", type=openapi.TYPE_STRING),
             openapi.Parameter('viewmode', openapi.IN_QUERY, description="View mode for frames: 'gallery' (flat list) or 'samevideo' (grouped by video)", type=openapi.TYPE_STRING),
-            openapi.Parameter('page', openapi.IN_QUERY, description="Page number", type=openapi.TYPE_INTEGER),
-            openapi.Parameter('page_size', openapi.IN_QUERY, description="Number of items per page", type=openapi.TYPE_INTEGER),
         ],
         responses={
             200: openapi.Response(
@@ -68,55 +61,29 @@ class QueryListCreateAPIView(APIView):
                                 }
                             )
                         ),
-                        'total': openapi.Schema(type=openapi.TYPE_INTEGER),
-                        'page': openapi.Schema(type=openapi.TYPE_INTEGER),
-                        'pages': openapi.Schema(type=openapi.TYPE_INTEGER),
                     }
                 )
             )
         }
     )
     def get(self, request):
-        """Get all queries with filtering and pagination"""
+        """Get all queries with filtering"""
         queryset = Query.objects.all()
-        
-        # Apply filters
-        search = request.query_params.get('search')
-        if search:
-            queryset = queryset.filter(
-                Q(text__icontains=search) |
-                Q(ocr__icontains=search) |
-                Q(speech__icontains=search)
-            )
         
         # Filter by session
         session_id = request.query_params.get('session')
         if session_id:
             queryset = queryset.filter(session_id=session_id)
         
-        start_date = request.query_params.get('start_date')
-        end_date = request.query_params.get('end_date')
-        if start_date:
-            queryset = queryset.filter(time__gte=start_date)
-        if end_date:
-            queryset = queryset.filter(time__lte=end_date)
-        
         queryset = queryset.order_by('-created_at')
         
-        # Pagination
-        page_size = int(request.query_params.get('page_size', 10))
-        page_number = int(request.query_params.get('page', 1))
-        
-        paginator = Paginator(queryset, page_size)
-        page = paginator.get_page(page_number)
-        
-        serializer = QuerySerializer(page.object_list, many=True, context={'request': request})
+        serializer = QuerySerializer(queryset, many=True, context={'request': request})
         
         # Search frames for the latest query if it exists and has OCR data
         frames = []
-        if page.object_list:
-            # Get the most recent query from the current page
-            latest_query = page.object_list[0]  # Already ordered by -created_at
+        if queryset:
+            # Get the most recent query
+            latest_query = queryset[0]  # Already ordered by -created_at
             
             # Perform OCR search on the latest query if it has OCR data
             if latest_query.ocr:
@@ -146,9 +113,6 @@ class QueryListCreateAPIView(APIView):
             'message': 'Queries retrieved successfully',
             'data': serializer.data,
             'frames': frames,  # Add frames to response
-            'total': paginator.count,
-            'page': page_number,
-            'pages': paginator.num_pages
         }, status=status.HTTP_200_OK)
 
     @swagger_auto_schema(
@@ -490,373 +454,6 @@ class QueryBulkDeleteAPIView(APIView):
         }, status=status.HTTP_200_OK)
 
 
-class QueryAnswersAPIView(APIView):
-    """
-    API endpoint for getting answers of a specific query
-    """
-    
-    @swagger_auto_schema(
-        operation_summary="Get query answers",
-        operation_description="Get all answers for a specific query",
-        responses={
-            200: openapi.Response(
-                description="Answers retrieved successfully",
-                schema=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        'message': openapi.Schema(type=openapi.TYPE_STRING),
-                        'data': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Schema(type=openapi.TYPE_OBJECT)),
-                        'total': openapi.Schema(type=openapi.TYPE_INTEGER),
-                    }
-                )
-            ),
-            404: openapi.Response(description="Query not found")
-        }
-    )
-    def get(self, request, pk):
-        """Get all answers for a specific query"""
-        query = get_object_or_404(Query, pk=pk)
-        answers = query.answers.all()
-        serializer = AnswerSerializer(answers, many=True, context={'request': request})
-        return Response({
-            'message': 'Answers retrieved successfully',
-            'data': serializer.data,
-            'total': answers.count()
-        }, status=status.HTTP_200_OK)
-
-
-# ===== ANSWER VIEWS =====
-
-class AnswerListCreateAPIView(APIView):
-    """
-    API endpoint for listing and creating answers
-    """
-    parser_classes = [JSONParser]
-
-    @swagger_auto_schema(
-        operation_summary="List all answers",
-        operation_description="Get a paginated list of all answers with optional filtering",
-        manual_parameters=[
-            openapi.Parameter('round', openapi.IN_QUERY, description="Filter by round: 'prelims' or 'final'", type=openapi.TYPE_STRING),
-            openapi.Parameter('query_index', openapi.IN_QUERY, description="Filter by query index", type=openapi.TYPE_INTEGER),
-            openapi.Parameter('video_name', openapi.IN_QUERY, description="Filter by video name", type=openapi.TYPE_STRING),
-            openapi.Parameter('page', openapi.IN_QUERY, description="Page number", type=openapi.TYPE_INTEGER),
-            openapi.Parameter('page_size', openapi.IN_QUERY, description="Number of items per page", type=openapi.TYPE_INTEGER),
-        ],
-        responses={
-            200: openapi.Response(
-                description="Answers retrieved successfully",
-                schema=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        'message': openapi.Schema(type=openapi.TYPE_STRING),
-                        'data': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Schema(type=openapi.TYPE_OBJECT)),
-                        'total': openapi.Schema(type=openapi.TYPE_INTEGER),
-                        'page': openapi.Schema(type=openapi.TYPE_INTEGER),
-                        'pages': openapi.Schema(type=openapi.TYPE_INTEGER),
-                    }
-                )
-            )
-        }
-    )
-    def get(self, request):
-        """List all answers with optional filtering"""
-        queryset = Answer.objects.all().order_by('-created_at')
-        
-        # Apply filters
-        round_filter = request.query_params.get('round')
-        if round_filter:
-            queryset = queryset.filter(round=round_filter)
-        
-        query_index_filter = request.query_params.get('query_index')
-        if query_index_filter:
-            queryset = queryset.filter(query_index=query_index_filter)
-        
-        video_name_filter = request.query_params.get('video_name')
-        if video_name_filter:
-            queryset = queryset.filter(video_name__icontains=video_name_filter)
-        
-        # Pagination
-        page_size = int(request.query_params.get('page_size', 10))
-        page_number = int(request.query_params.get('page', 1))
-        
-        paginator = Paginator(queryset, page_size)
-        page = paginator.get_page(page_number)
-        
-        serializer = AnswerSerializer(page.object_list, many=True, context={'request': request})
-        
-        return Response({
-            'message': 'Answers retrieved successfully',
-            'data': serializer.data,
-            'total': paginator.count,
-            'page': page_number,
-            'pages': paginator.num_pages,
-        }, status=status.HTTP_200_OK)
-
-    @swagger_auto_schema(
-        operation_summary="Create a new answer",
-        operation_description="Create a new answer submission",
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            required=['video_name', 'frame_index', 'url'],
-            properties={
-                'video_name': openapi.Schema(type=openapi.TYPE_STRING, description="Name of the video"),
-                'frame_index': openapi.Schema(type=openapi.TYPE_INTEGER, description="Frame index in the video"),
-                'url': openapi.Schema(type=openapi.TYPE_STRING, description="URL of the frame image"),
-                'qa': openapi.Schema(type=openapi.TYPE_STRING, description="Question and answer text (optional)"),
-                'query_index': openapi.Schema(type=openapi.TYPE_INTEGER, description="Query index (default: 0)"),
-                'round': openapi.Schema(type=openapi.TYPE_STRING, description="Round type: 'prelims' or 'final' (default: 'prelims')"),
-            }
-        ),
-        responses={
-            201: openapi.Response(
-                description="Answer created successfully",
-                schema=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        'message': openapi.Schema(type=openapi.TYPE_STRING),
-                        'data': openapi.Schema(type=openapi.TYPE_OBJECT),
-                    }
-                )
-            ),
-            400: openapi.Response(description="Invalid data")
-        }
-    )
-    def post(self, request):
-        """Create a new answer"""
-        serializer = AnswerCreateSerializer(data=request.data)
-        
-        if serializer.is_valid():
-            answer = serializer.save()
-            response_serializer = AnswerSerializer(answer, context={'request': request})
-            return Response({
-                'message': 'Answer created successfully',
-                'data': response_serializer.data
-            }, status=status.HTTP_201_CREATED)
-        
-        return Response({
-            'message': 'Invalid data',
-            'errors': serializer.errors
-        }, status=status.HTTP_400_BAD_REQUEST)
-
-
-class AnswerDetailAPIView(APIView):
-    """
-    API endpoint for retrieving, updating, and deleting a specific answer
-    """
-    parser_classes = [JSONParser]
-
-    @swagger_auto_schema(
-        operation_summary="Get answer details",
-        operation_description="Retrieve details of a specific answer",
-        responses={
-            200: openapi.Response(
-                description="Answer retrieved successfully",
-                schema=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        'message': openapi.Schema(type=openapi.TYPE_STRING),
-                        'data': openapi.Schema(type=openapi.TYPE_OBJECT),
-                    }
-                )
-            ),
-            404: openapi.Response(description="Answer not found")
-        }
-    )
-    def get(self, request, answer_id):
-        """Get a specific answer"""
-        try:
-            answer = Answer.objects.get(id=answer_id)
-        except Answer.DoesNotExist:
-            return Response({
-                'message': 'Answer not found'
-            }, status=status.HTTP_404_NOT_FOUND)
-        
-        serializer = AnswerSerializer(answer, context={'request': request})
-        return Response({
-            'message': 'Answer retrieved successfully',
-            'data': serializer.data
-        }, status=status.HTTP_200_OK)
-
-    @swagger_auto_schema(
-        operation_summary="Update answer",
-        operation_description="Update a specific answer",
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            properties={
-                'video_name': openapi.Schema(type=openapi.TYPE_STRING, description="Name of the video"),
-                'frame_index': openapi.Schema(type=openapi.TYPE_INTEGER, description="Frame index in the video"),
-                'url': openapi.Schema(type=openapi.TYPE_STRING, description="URL of the frame image"),
-                'qa': openapi.Schema(type=openapi.TYPE_STRING, description="Question and answer text (optional)"),
-                'query_index': openapi.Schema(type=openapi.TYPE_INTEGER, description="Query index"),
-                'round': openapi.Schema(type=openapi.TYPE_STRING, description="Round type: 'prelims' or 'final'"),
-            }
-        ),
-        responses={
-            200: openapi.Response(
-                description="Answer updated successfully",
-                schema=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        'message': openapi.Schema(type=openapi.TYPE_STRING),
-                        'data': openapi.Schema(type=openapi.TYPE_OBJECT),
-                    }
-                )
-            ),
-            400: openapi.Response(description="Invalid data"),
-            404: openapi.Response(description="Answer not found")
-        }
-    )
-    def put(self, request, answer_id):
-        """Update a specific answer"""
-        try:
-            answer = Answer.objects.get(id=answer_id)
-        except Answer.DoesNotExist:
-            return Response({
-                'message': 'Answer not found'
-            }, status=status.HTTP_404_NOT_FOUND)
-        
-        serializer = AnswerSerializer(answer, data=request.data, partial=True, context={'request': request})
-        
-        if serializer.is_valid():
-            answer = serializer.save()
-            return Response({
-                'message': 'Answer updated successfully',
-                'data': serializer.data
-            }, status=status.HTTP_200_OK)
-        
-        return Response({
-            'message': 'Invalid data',
-            'errors': serializer.errors
-        }, status=status.HTTP_400_BAD_REQUEST)
-
-    @swagger_auto_schema(
-        operation_summary="Delete answer",
-        operation_description="Delete a specific answer",
-        responses={
-            200: openapi.Response(
-                description="Answer deleted successfully",
-                schema=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        'message': openapi.Schema(type=openapi.TYPE_STRING),
-                    }
-                )
-            ),
-            404: openapi.Response(description="Answer not found")
-        }
-    )
-    def delete(self, request, answer_id):
-        """Delete a specific answer"""
-        try:
-            answer = Answer.objects.get(id=answer_id)
-        except Answer.DoesNotExist:
-            return Response({
-                'message': 'Answer not found'
-            }, status=status.HTTP_404_NOT_FOUND)
-        
-        answer.delete()
-        return Response({
-            'message': 'Answer deleted successfully'
-        }, status=status.HTTP_200_OK)
-
-
-class AnswerBulkDeleteAPIView(APIView):
-    """
-    API endpoint for bulk deleting answers
-    """
-    
-    @swagger_auto_schema(
-        operation_summary="Bulk delete answers",
-        operation_description="Delete multiple answers by providing their IDs",
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            properties={
-                'ids': openapi.Schema(
-                    type=openapi.TYPE_ARRAY,
-                    items=openapi.Schema(type=openapi.TYPE_INTEGER),
-                    description="Array of answer IDs to delete"
-                )
-            },
-            required=['ids']
-        ),
-        responses={
-            200: openapi.Response(description="Answers deleted successfully"),
-            400: openapi.Response(description="No answer IDs provided")
-        }
-    )
-    def delete(self, request):
-        """Bulk delete answers"""
-        answer_ids = request.data.get('ids', [])
-        if not answer_ids:
-            return Response({
-                'message': 'No answer IDs provided'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        deleted_count, _ = Answer.objects.filter(id__in=answer_ids).delete()
-        return Response({
-            'message': f'{deleted_count} answers deleted successfully',
-            'deleted_count': deleted_count
-        }, status=status.HTTP_200_OK)
-
-
-class AnswersByQueryAPIView(APIView):
-    """
-    API endpoint for getting answers by query ID
-    """
-    
-    @swagger_auto_schema(
-        operation_summary="Get answers by query ID",
-        operation_description="Get all answers for a specific query by query_id parameter",
-        manual_parameters=[
-            openapi.Parameter('query_id', openapi.IN_QUERY, description="Query ID", type=openapi.TYPE_INTEGER, required=True),
-        ],
-        responses={
-            200: openapi.Response(
-                description="Answers retrieved successfully",
-                schema=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        'message': openapi.Schema(type=openapi.TYPE_STRING),
-                        'data': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Schema(type=openapi.TYPE_OBJECT)),
-                        'total': openapi.Schema(type=openapi.TYPE_INTEGER),
-                        'query_info': openapi.Schema(type=openapi.TYPE_OBJECT),
-                    }
-                )
-            ),
-            400: openapi.Response(description="query_id parameter is required"),
-            404: openapi.Response(description="Query not found")
-        }
-    )
-    def get(self, request):
-        """Get all answers for a specific query by query_id parameter"""
-        query_id = request.query_params.get('query_id')
-        if not query_id:
-            return Response({
-                'message': 'query_id parameter is required'
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        try:
-            query = Query.objects.get(id=query_id)
-        except Query.DoesNotExist:
-            return Response({
-                'message': 'Query not found'
-            }, status=status.HTTP_404_NOT_FOUND)
-        
-        answers = Answer.objects.filter(query_id=query_id).order_by('-created_at')
-        serializer = AnswerSerializer(answers, many=True, context={'request': request})
-        return Response({
-            'message': 'Answers retrieved successfully',
-            'data': serializer.data,
-            'total': answers.count(),
-            'query_info': {
-                'id': query.id,
-                'text': query.text,
-                'created_at': query.created_at
-            }
-        }, status=status.HTTP_200_OK)
-
-
 class QuerySessionListCreateAPIView(APIView):
     """
     API endpoint for listing and creating query sessions
@@ -864,11 +461,7 @@ class QuerySessionListCreateAPIView(APIView):
     
     @swagger_auto_schema(
         operation_summary="List all query sessions",
-        operation_description="Get a list of all query sessions ordered by creation date",
-        manual_parameters=[
-            openapi.Parameter('page', openapi.IN_QUERY, description="Page number", type=openapi.TYPE_INTEGER),
-            openapi.Parameter('page_size', openapi.IN_QUERY, description="Number of items per page", type=openapi.TYPE_INTEGER),
-        ],
+        operation_description="Get all query sessions ordered by creation date",
         responses={
             200: openapi.Response(
                 description="Sessions retrieved successfully",
@@ -877,33 +470,20 @@ class QuerySessionListCreateAPIView(APIView):
                     properties={
                         'message': openapi.Schema(type=openapi.TYPE_STRING),
                         'data': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Schema(type=openapi.TYPE_OBJECT)),
-                        'total': openapi.Schema(type=openapi.TYPE_INTEGER),
-                        'page': openapi.Schema(type=openapi.TYPE_INTEGER),
-                        'pages': openapi.Schema(type=openapi.TYPE_INTEGER),
                     }
                 )
             )
         }
     )
     def get(self, request):
-        """Get all query sessions with pagination"""
+        """Get all query sessions"""
         queryset = QuerySession.objects.all().order_by('-created_at')
         
-        # Pagination
-        page_size = int(request.query_params.get('page_size', 10))
-        page_number = int(request.query_params.get('page', 1))
-        
-        paginator = Paginator(queryset, page_size)
-        page = paginator.get_page(page_number)
-        
-        serializer = QuerySessionSerializer(page.object_list, many=True, context={'request': request})
+        serializer = QuerySessionSerializer(queryset, many=True, context={'request': request})
         
         return Response({
             'message': 'Sessions retrieved successfully',
             'data': serializer.data,
-            'total': paginator.count,
-            'page': page_number,
-            'pages': paginator.num_pages
         }, status=status.HTTP_200_OK)
 
     @swagger_auto_schema(
@@ -1008,10 +588,6 @@ class QuerySessionQueriesAPIView(APIView):
     @swagger_auto_schema(
         operation_summary="Get queries in a session",
         operation_description="Get all queries in a specific session",
-        manual_parameters=[
-            openapi.Parameter('page', openapi.IN_QUERY, description="Page number", type=openapi.TYPE_INTEGER),
-            openapi.Parameter('page_size', openapi.IN_QUERY, description="Number of items per page", type=openapi.TYPE_INTEGER),
-        ],
         responses={
             200: openapi.Response(
                 description="Queries retrieved successfully",
@@ -1020,9 +596,6 @@ class QuerySessionQueriesAPIView(APIView):
                     properties={
                         'message': openapi.Schema(type=openapi.TYPE_STRING),
                         'data': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Schema(type=openapi.TYPE_OBJECT)),
-                        'total': openapi.Schema(type=openapi.TYPE_INTEGER),
-                        'page': openapi.Schema(type=openapi.TYPE_INTEGER),
-                        'pages': openapi.Schema(type=openapi.TYPE_INTEGER),
                         'session_info': openapi.Schema(type=openapi.TYPE_OBJECT),
                     }
                 )
@@ -1041,339 +614,14 @@ class QuerySessionQueriesAPIView(APIView):
         
         queryset = Query.objects.filter(session=session).order_by('-created_at')
         
-        # Pagination
-        page_size = int(request.query_params.get('page_size', 10))
-        page_number = int(request.query_params.get('page', 1))
-        
-        paginator = Paginator(queryset, page_size)
-        page = paginator.get_page(page_number)
-        
-        serializer = QuerySerializer(page.object_list, many=True, context={'request': request})
+        serializer = QuerySerializer(queryset, many=True, context={'request': request})
         
         return Response({
             'message': 'Queries retrieved successfully',
             'data': serializer.data,
-            'total': paginator.count,
-            'page': page_number,
-            'pages': paginator.num_pages,
             'session_info': {
                 'id': session.id,
                 'created_at': session.created_at,
                 'updated_at': session.updated_at
             }
-        }, status=status.HTTP_200_OK)
-
-
-class TeamAnswerListCreateAPIView(APIView):
-    """
-    API endpoint for listing and creating team answers
-    """
-    parser_classes = [JSONParser]
-
-    @swagger_auto_schema(
-        operation_summary="List all team answers",
-        operation_description="Get a paginated list of all team answers with optional filtering",
-        manual_parameters=[
-            openapi.Parameter('round', openapi.IN_QUERY, description="Filter by round: 'prelims' or 'final'", type=openapi.TYPE_STRING),
-            openapi.Parameter('query_index', openapi.IN_QUERY, description="Filter by query index", type=openapi.TYPE_INTEGER),
-            openapi.Parameter('video_name', openapi.IN_QUERY, description="Filter by video name", type=openapi.TYPE_STRING),
-            openapi.Parameter('page', openapi.IN_QUERY, description="Page number", type=openapi.TYPE_INTEGER),
-            openapi.Parameter('page_size', openapi.IN_QUERY, description="Number of items per page", type=openapi.TYPE_INTEGER),
-        ],
-        responses={
-            200: openapi.Response(
-                description="Team answers retrieved successfully",
-                schema=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        'message': openapi.Schema(type=openapi.TYPE_STRING),
-                        'data': openapi.Schema(type=openapi.TYPE_ARRAY, items=openapi.Schema(type=openapi.TYPE_OBJECT)),
-                        'total': openapi.Schema(type=openapi.TYPE_INTEGER),
-                        'page': openapi.Schema(type=openapi.TYPE_INTEGER),
-                        'pages': openapi.Schema(type=openapi.TYPE_INTEGER),
-                    }
-                )
-            )
-        }
-    )
-    def get(self, request):
-        """List all team answers with optional filtering"""
-        queryset = TeamAnswer.objects.all().order_by('-created_at')
-        
-        # Apply filters
-        round_filter = request.query_params.get('round')
-        if round_filter:
-            queryset = queryset.filter(round=round_filter)
-        
-        query_index_filter = request.query_params.get('query_index')
-        if query_index_filter:
-            queryset = queryset.filter(query_index=query_index_filter)
-        
-        video_name_filter = request.query_params.get('video_name')
-        if video_name_filter:
-            queryset = queryset.filter(video_name__icontains=video_name_filter)
-        
-        # Pagination
-        page_size = int(request.query_params.get('page_size', 10))
-        page_number = int(request.query_params.get('page', 1))
-        
-        paginator = Paginator(queryset, page_size)
-        page = paginator.get_page(page_number)
-        
-        serializer = TeamAnswerSerializer(page.object_list, many=True, context={'request': request})
-        
-        return Response({
-            'message': 'Team answers retrieved successfully',
-            'data': serializer.data,
-            'total': paginator.count,
-            'page': page_number,
-            'pages': paginator.num_pages,
-        }, status=status.HTTP_200_OK)
-
-    @swagger_auto_schema(
-        operation_summary="Create a new team answer",
-        operation_description="Create a new team answer submission (temporary answer)",
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            required=['video_name', 'frame_index', 'url'],
-            properties={
-                'video_name': openapi.Schema(type=openapi.TYPE_STRING, description="Name of the video"),
-                'frame_index': openapi.Schema(type=openapi.TYPE_INTEGER, description="Frame index in the video"),
-                'url': openapi.Schema(type=openapi.TYPE_STRING, description="URL of the frame image"),
-                'qa': openapi.Schema(type=openapi.TYPE_STRING, description="Question and answer text (optional)"),
-                'query_index': openapi.Schema(type=openapi.TYPE_INTEGER, description="Query index (default: 0)"),
-                'round': openapi.Schema(type=openapi.TYPE_STRING, description="Round type: 'prelims' or 'final' (default: 'prelims')"),
-            }
-        ),
-        responses={
-            201: openapi.Response(
-                description="Team answer created successfully",
-                schema=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        'message': openapi.Schema(type=openapi.TYPE_STRING),
-                        'data': openapi.Schema(type=openapi.TYPE_OBJECT),
-                    }
-                )
-            ),
-            400: openapi.Response(description="Invalid data or duplicate entry"),
-            409: openapi.Response(description="Team answer already exists for this combination")
-        }
-    )
-    def post(self, request):
-        """Create a new team answer"""
-        serializer = TeamAnswerCreateSerializer(data=request.data)
-        
-        if serializer.is_valid():
-            try:
-                team_answer = serializer.save()
-                response_serializer = TeamAnswerSerializer(team_answer, context={'request': request})
-                return Response({
-                    'message': 'Team answer created successfully',
-                    'data': response_serializer.data
-                }, status=status.HTTP_201_CREATED)
-            except Exception as e:
-                # Handle database unique constraint error
-                if 'unique constraint' in str(e).lower() or 'duplicate' in str(e).lower():
-                    return Response({
-                        'message': 'Team answer already exists for this video, frame, and query index combination',
-                        'errors': {'non_field_errors': ['Duplicate entry']}
-                    }, status=status.HTTP_409_CONFLICT)
-                else:
-                    return Response({
-                        'message': 'Error creating team answer',
-                        'errors': {'non_field_errors': [str(e)]}
-                    }, status=status.HTTP_400_BAD_REQUEST)
-        
-        return Response({
-            'message': 'Invalid data',
-            'errors': serializer.errors
-        }, status=status.HTTP_400_BAD_REQUEST)
-
-
-class TeamAnswerDetailAPIView(APIView):
-    """
-    API endpoint for retrieving, updating, and deleting a specific team answer
-    """
-    parser_classes = [JSONParser]
-
-    @swagger_auto_schema(
-        operation_summary="Get team answer details",
-        operation_description="Retrieve details of a specific team answer",
-        responses={
-            200: openapi.Response(
-                description="Team answer retrieved successfully",
-                schema=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        'message': openapi.Schema(type=openapi.TYPE_STRING),
-                        'data': openapi.Schema(type=openapi.TYPE_OBJECT),
-                    }
-                )
-            ),
-            404: openapi.Response(description="Team answer not found")
-        }
-    )
-    def get(self, request, team_answer_id):
-        """Get a specific team answer"""
-        try:
-            team_answer = TeamAnswer.objects.get(id=team_answer_id)
-        except TeamAnswer.DoesNotExist:
-            return Response({
-                'message': 'Team answer not found'
-            }, status=status.HTTP_404_NOT_FOUND)
-        
-        serializer = TeamAnswerSerializer(team_answer, context={'request': request})
-        return Response({
-            'message': 'Team answer retrieved successfully',
-            'data': serializer.data
-        }, status=status.HTTP_200_OK)
-
-    @swagger_auto_schema(
-        operation_summary="Update team answer",
-        operation_description="Update a specific team answer",
-        request_body=openapi.Schema(
-            type=openapi.TYPE_OBJECT,
-            properties={
-                'video_name': openapi.Schema(type=openapi.TYPE_STRING, description="Name of the video"),
-                'frame_index': openapi.Schema(type=openapi.TYPE_INTEGER, description="Frame index in the video"),
-                'url': openapi.Schema(type=openapi.TYPE_STRING, description="URL of the frame image"),
-                'qa': openapi.Schema(type=openapi.TYPE_STRING, description="Question and answer text (optional)"),
-                'query_index': openapi.Schema(type=openapi.TYPE_INTEGER, description="Query index"),
-                'round': openapi.Schema(type=openapi.TYPE_STRING, description="Round type: 'prelims' or 'final'"),
-            }
-        ),
-        responses={
-            200: openapi.Response(
-                description="Team answer updated successfully",
-                schema=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        'message': openapi.Schema(type=openapi.TYPE_STRING),
-                        'data': openapi.Schema(type=openapi.TYPE_OBJECT),
-                    }
-                )
-            ),
-            400: openapi.Response(description="Invalid data"),
-            404: openapi.Response(description="Team answer not found"),
-            409: openapi.Response(description="Duplicate entry")
-        }
-    )
-    def put(self, request, team_answer_id):
-        """Update a specific team answer"""
-        try:
-            team_answer = TeamAnswer.objects.get(id=team_answer_id)
-        except TeamAnswer.DoesNotExist:
-            return Response({
-                'message': 'Team answer not found'
-            }, status=status.HTTP_404_NOT_FOUND)
-        
-        serializer = TeamAnswerCreateSerializer(team_answer, data=request.data, partial=True, context={'request': request})
-        
-        if serializer.is_valid():
-            try:
-                team_answer = serializer.save()
-                response_serializer = TeamAnswerSerializer(team_answer, context={'request': request})
-                return Response({
-                    'message': 'Team answer updated successfully',
-                    'data': response_serializer.data
-                }, status=status.HTTP_200_OK)
-            except Exception as e:
-                # Handle database unique constraint error
-                if 'unique constraint' in str(e).lower() or 'duplicate' in str(e).lower():
-                    return Response({
-                        'message': 'Team answer already exists for this video, frame, and query index combination',
-                        'errors': {'non_field_errors': ['Duplicate entry']}
-                    }, status=status.HTTP_409_CONFLICT)
-                else:
-                    return Response({
-                        'message': 'Error updating team answer',
-                        'errors': {'non_field_errors': [str(e)]}
-                    }, status=status.HTTP_400_BAD_REQUEST)
-        
-        return Response({
-            'message': 'Invalid data',
-            'errors': serializer.errors
-        }, status=status.HTTP_400_BAD_REQUEST)
-
-    @swagger_auto_schema(
-        operation_summary="Delete team answer",
-        operation_description="Delete a specific team answer",
-        responses={
-            200: openapi.Response(
-                description="Team answer deleted successfully",
-                schema=openapi.Schema(
-                    type=openapi.TYPE_OBJECT,
-                    properties={
-                        'message': openapi.Schema(type=openapi.TYPE_STRING),
-                    }
-                )
-            ),
-            404: openapi.Response(description="Team answer not found")
-        }
-    )
-    def delete(self, request, team_answer_id):
-        """Delete a specific team answer"""
-        try:
-            team_answer = TeamAnswer.objects.get(id=team_answer_id)
-        except TeamAnswer.DoesNotExist:
-            return Response({
-                'message': 'Team answer not found'
-            }, status=status.HTTP_404_NOT_FOUND)
-        
-        team_answer.delete()
-        return Response({
-            'message': 'Team answer deleted successfully'
-        }, status=status.HTTP_200_OK)
-
-
-class TeamAnswerBulkDeleteAPIView(APIView):
-    """
-    API endpoint for bulk deleting team answers with filtering
-    """
-    
-    @swagger_auto_schema(
-        operation_summary="Bulk delete team answers",
-        operation_description="Delete team answers with optional filtering by round, query_index, and video_name",
-        manual_parameters=[
-            openapi.Parameter('round', openapi.IN_QUERY, description="Filter by round: 'prelims' or 'final'", type=openapi.TYPE_STRING),
-            openapi.Parameter('query_index', openapi.IN_QUERY, description="Filter by query index", type=openapi.TYPE_INTEGER),
-            openapi.Parameter('video_name', openapi.IN_QUERY, description="Filter by video name", type=openapi.TYPE_STRING),
-        ],
-        responses={
-            200: openapi.Response(description="Team answers deleted successfully"),
-            404: openapi.Response(description="No team answers found matching the criteria")
-        }
-    )
-    def delete(self, request):
-        """Bulk delete team answers with optional filtering"""
-        queryset = TeamAnswer.objects.all()
-        
-        # Apply filters
-        round_filter = request.query_params.get('round')
-        if round_filter:
-            queryset = queryset.filter(round=round_filter)
-        
-        query_index_filter = request.query_params.get('query_index')
-        if query_index_filter:
-            queryset = queryset.filter(query_index=query_index_filter)
-        
-        video_name_filter = request.query_params.get('video_name')
-        if video_name_filter:
-            queryset = queryset.filter(video_name__icontains=video_name_filter)
-        
-        # Check if any team answers match the criteria
-        count = queryset.count()
-        if count == 0:
-            return Response({
-                'message': 'No team answers found matching the criteria',
-                'deleted_count': 0
-            }, status=status.HTTP_200_OK)
-        
-        # Delete the filtered team answers
-        deleted_count, _ = queryset.delete()
-        
-        return Response({
-            'message': f'{deleted_count} team answers deleted successfully',
-            'deleted_count': deleted_count
         }, status=status.HTTP_200_OK)
