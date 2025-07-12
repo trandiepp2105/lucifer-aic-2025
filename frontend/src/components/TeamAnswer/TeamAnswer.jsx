@@ -4,41 +4,124 @@ import ConfirmationModal from '../ConfirmationModal';
 import { useApp } from '../../contexts/AppContext';
 import { useToast } from '../Toast/ToastProvider';
 import { TeamAnswerService } from '../../services';
+import { apiConfig } from '../../services/apiConfig';
 import './TeamAnswer.scss';
 
 const TeamAnswer = ({ selectedFrame, isVisible, onToggle, onFrameSelect, onFrameDoubleClick, onSubmit }) => {
   const selectedFrameRef = useRef(null);
   const teamAnswerRef = useRef(null);
-  const renderCountRef = useRef(0);
-  renderCountRef.current += 1;
-  
-  console.log('TeamAnswer component render #', renderCountRef.current, 'isVisible:', isVisible);
   
   const [allTeamAnswers, setAllTeamAnswers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [deletingFrames, setDeletingFrames] = useState(new Set());
   const [deletingAll, setDeletingAll] = useState(false);
   const [showDeleteAllModal, setShowDeleteAllModal] = useState(false);
+  const [sseConnected, setSseConnected] = useState(false);
+  
+  // SSE connection ref
+  const eventSourceRef = useRef(null);
   
   // Get app context for queryIndex and round
   const { queryIndex, round } = useApp();
   const toast = useToast();
+
+  // Initialize SSE connection
+  const initializeSSE = () => {
+    try {
+      // Close existing connection if any
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+
+      // Create new EventSource connection
+      const sseUrl = `${apiConfig.baseURL}/team-answers/sse/`;
+      
+      const eventSource = new EventSource(sseUrl);
+      eventSourceRef.current = eventSource;
+
+      // Handle incoming messages
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+
+          switch (data.type) {
+            case 'connected':
+              setSseConnected(true);
+              toast.success('Real-time updates connected', 500);
+              break;
+
+            case 'create':
+              // Add new team answer to the list
+              setAllTeamAnswers(prevAnswers => [data.data, ...prevAnswers]);
+              toast.success('New team answer added', 500);
+              break;
+
+            case 'delete':
+              // Remove team answers from the list
+              const deletedIds = Array.isArray(data.data) ? data.data : [data.data];
+              setAllTeamAnswers(prevAnswers => 
+                prevAnswers.filter(answer => !deletedIds.includes(answer.id))
+              );
+              toast.info(`${deletedIds.length} team answer(s) removed`, 500);
+              break;
+
+            case 'heartbeat':
+              // Ignore heartbeat messages
+              break;
+
+            case 'error':
+              console.error('❌ SSE Error:', data.message);
+              toast.error(data.message, 500);
+              break;
+
+            default:
+              // Ignore unknown message types
+              break;
+          }
+        } catch (error) {
+          console.error('Error parsing SSE message:', error, event.data);
+        }
+      };
+
+      // Handle connection open
+      eventSource.onopen = (event) => {
+        setSseConnected(true);
+      };
+
+      // Handle connection errors
+      eventSource.onerror = (event) => {
+        setSseConnected(false);
+        
+        if (eventSource.readyState === EventSource.CLOSED) {
+          toast.warning('Real-time connection lost', 500);
+        }
+      };
+
+    } catch (error) {
+      console.error('Failed to initialize SSE:', error);
+      setSseConnected(false);
+    }
+  };
+
+  // Close SSE connection
+  const closeSSE = () => {
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+      eventSourceRef.current = null;
+      setSseConnected(false);
+    }
+  };
 
   // Fetch team answers from server
   const fetchTeamAnswers = async () => {
     try {
       setLoading(true);
       
-      console.log('Fetching all team answers from server...');
-      
       // Get all team answers without any query params
       const response = await TeamAnswerService.getTeamAnswers();
 
-      console.log('All team answers response:', response);
-
       if (response.success) {
-        console.log('All team answers data:', response.data);
-        console.log('All team answers array:', response.data.data);
         setAllTeamAnswers(response.data.data || []);
       } else {
         console.error('Failed to fetch all team answers:', response.error);
@@ -58,20 +141,9 @@ const TeamAnswer = ({ selectedFrame, isVisible, onToggle, onFrameSelect, onFrame
     const currentQueryIndex = round === 'final' ? 0 : (queryIndex || 1);
     const currentRound = round || 'prelims';
     
-    console.log('Filtering team answers for:', {
-      query_index: currentQueryIndex,
-      round: currentRound,
-      totalAnswers: allTeamAnswers.length
-    });
-    
     const filtered = allTeamAnswers.filter(teamAnswer => {
       return teamAnswer.query_index === currentQueryIndex && 
              teamAnswer.round === currentRound;
-    });
-    
-    console.log('Filtered team answers:', {
-      count: filtered.length,
-      answers: filtered
     });
     
     return filtered;
@@ -81,11 +153,8 @@ const TeamAnswer = ({ selectedFrame, isVisible, onToggle, onFrameSelect, onFrame
   const handleDeleteTeamAnswer = async (teamAnswer) => {
     const frameId = `${teamAnswer.video_name}-${teamAnswer.frame_index}`;
     
-    console.log('Deleting team answer:', teamAnswer);
-    
     // Check if already deleting
     if (deletingFrames.has(frameId)) {
-      console.log('Already deleting this frame:', frameId);
       return;
     }
 
@@ -96,15 +165,11 @@ const TeamAnswer = ({ selectedFrame, isVisible, onToggle, onFrameSelect, onFrame
       // Show loading toast
       toast.info('Deleting team answer...', 500);
       
-      console.log('Calling deleteTeamAnswer API with ID:', teamAnswer.id);
       const response = await TeamAnswerService.deleteTeamAnswer(teamAnswer.id);
-      
-      console.log('Delete response:', response);
       
       if (response.success) {
         toast.success('Team answer deleted successfully!', 500);
         // Refresh the list
-        console.log('Refreshing team answers list...');
         fetchTeamAnswers();
       } else {
         console.error('Delete failed:', response.error);
@@ -126,7 +191,6 @@ const TeamAnswer = ({ selectedFrame, isVisible, onToggle, onFrameSelect, onFrame
   // Handle delete all team answers for current query index
   const handleDeleteAllTeamAnswers = async () => {
     if (deletingAll) {
-      console.log('Already deleting all team answers');
       return;
     }
 
@@ -145,19 +209,14 @@ const TeamAnswer = ({ selectedFrame, isVisible, onToggle, onFrameSelect, onFrame
       // Show loading toast
       toast.info('Deleting all team answers...', 500);
       
-      console.log('Deleting all team answers for query index:', currentQueryIndex, 'round:', round);
-      
       const response = await TeamAnswerService.deleteAllTeamAnswers({
         query_index: currentQueryIndex,
         round: round || 'prelims'
       });
       
-      console.log('Delete all response:', response);
-      
       if (response.success) {
         toast.success('All team answers deleted successfully!', 500);
         // Refresh the list
-        console.log('Refreshing team answers list...');
         fetchTeamAnswers();
       } else {
         console.error('Delete all failed:', response.error);
@@ -173,7 +232,6 @@ const TeamAnswer = ({ selectedFrame, isVisible, onToggle, onFrameSelect, onFrame
 
   // Fetch team answers when component becomes visible (only once)
   useEffect(() => {
-    console.log('TeamAnswer useEffect triggered - isVisible:', isVisible, 'queryIndex:', queryIndex, 'round:', round);
     if (isVisible) {
       fetchTeamAnswers();
     }
@@ -211,6 +269,17 @@ const TeamAnswer = ({ selectedFrame, isVisible, onToggle, onFrameSelect, onFrame
     }
   }, [isVisible, selectedFrame?.video_name, selectedFrame?.frame_index]);
 
+  // Initialize SSE connection when component mounts
+  useEffect(() => {
+    // Initialize SSE connection
+    initializeSSE();
+
+    // Cleanup on unmount
+    return () => {
+      closeSSE();
+    };
+  }, []); // Empty dependency array - only run on mount/unmount
+
   if (!isVisible) {
     return (
       <div className="team-answer team-answer--collapsed">
@@ -245,6 +314,14 @@ const TeamAnswer = ({ selectedFrame, isVisible, onToggle, onFrameSelect, onFrame
         isLoading={deletingAll}
       />
       <div className="team-answer__header">
+        <div className="team-answer__status">
+          <span 
+            className={`team-answer__sse-indicator ${sseConnected ? 'connected' : 'disconnected'}`}
+            title={sseConnected ? 'Real-time updates connected' : 'Real-time updates disconnected'}
+          >
+            {sseConnected ? '🟢' : '🔴'}
+          </span>
+        </div>
         <button 
           className="team-answer__reload"
           onClick={fetchTeamAnswers}

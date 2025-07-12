@@ -146,14 +146,11 @@ const HomePage = () => {
         qa: '' // Can be extended later if needed
       };
 
-      // Show loading toast
-      toast.info('Sending frame...', 2000);
-
       // Call the API
       const response = await TeamAnswerService.createTeamAnswer(teamAnswerData);
 
       if (response.success) {
-        toast.success('Frame sent successfully!', 3000);
+        toast.success('Frame sent successfully!', 500);
       } else {
         toast.error(response.error || 'Failed to send frame', 4000);
       }

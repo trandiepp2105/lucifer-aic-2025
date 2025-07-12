@@ -1,5 +1,6 @@
 from django.urls import path
 from . import views
+from .sse_views import TeamAnswerSSEView
 
 urlpatterns = [
     # Answer endpoints
@@ -11,6 +12,9 @@ urlpatterns = [
     path('api/team-answers/', views.TeamAnswerListCreateAPIView.as_view(), name='team-answer-list-create'),
     path('api/team-answers/delete-all/', views.TeamAnswerBulkDeleteAPIView.as_view(), name='team-answer-bulk-delete'),
     path('api/team-answers/<int:team_answer_id>/', views.TeamAnswerDetailAPIView.as_view(), name='team-answer-detail'),
+    
+    # SSE endpoint for real-time team answer updates
+    path('api/team-answers/sse/', TeamAnswerSSEView.as_view(), name='team-answer-sse'),
 ]
 
 # Available endpoints:
@@ -29,3 +33,6 @@ urlpatterns = [
 # GET /api/team-answers/{id}/ - Get a specific team answer
 # PUT /api/team-answers/{id}/ - Update a team answer
 # DELETE /api/team-answers/{id}/ - Delete a team answer
+
+# Real-time Updates:
+# GET /api/team-answers/sse/ - Subscribe to real-time team answer updates via Server-Sent Events

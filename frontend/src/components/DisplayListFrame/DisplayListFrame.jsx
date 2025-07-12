@@ -73,8 +73,6 @@ const DisplayListFrame = ({
     const frameId = `${frame.video_name}-${frame.frame_index}`;
     
     try {
-      // Show loading toast
-      toast.info('Sending frame...', 2000);
       
       // Prepare team answer data
       const teamAnswerData = {
@@ -89,7 +87,7 @@ const DisplayListFrame = ({
       const result = await TeamAnswerService.createTeamAnswer(teamAnswerData);
       
       if (result.success) {
-        toast.success('Frame sent successfully!', 3000);
+        toast.success('Frame sent successfully!', 500);
       } else {
         // Handle different error types
         if (result.error && result.error.includes('already exists')) {

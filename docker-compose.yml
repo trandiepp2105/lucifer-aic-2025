@@ -121,7 +121,7 @@ services:
       - SECRET_KEY=${SECRET_KEY}
       - DEBUG=${DEBUG}
       - ALLOWED_HOSTS=${ALLOWED_HOSTS}
-      - SERVER_TYPE=uvicorn  # Use ASGI server for async support
+      - SERVER_TYPE=django
       - CONTAINER_STORAGE_DIR=${CONTAINER_STORAGE_DIR}
     depends_on:
       mysql:

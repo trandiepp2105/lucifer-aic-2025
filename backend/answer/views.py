@@ -4,12 +4,15 @@ from rest_framework import status
 from rest_framework.parsers import JSONParser
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
+import json
 
 from .models import Answer, TeamAnswer
 from .serializers import (
     AnswerSerializer, AnswerCreateSerializer,
     TeamAnswerSerializer, TeamAnswerCreateSerializer
 )
+from .sse_service import team_answer_sse_service
+
 
 class AnswerListCreateAPIView(APIView):
     """
@@ -358,6 +361,10 @@ class TeamAnswerListCreateAPIView(APIView):
             try:
                 team_answer = serializer.save()
                 response_serializer = TeamAnswerSerializer(team_answer, context={'request': request})
+                
+                # Publish SSE message for real-time updates
+                team_answer_sse_service.publish_simple_message('create', response_serializer.data)
+                
                 return Response({
                     'message': 'Team answer created successfully',
                     'data': response_serializer.data
@@ -511,7 +518,13 @@ class TeamAnswerDetailAPIView(APIView):
                 'message': 'Team answer not found'
             }, status=status.HTTP_404_NOT_FOUND)
         
+        # Get the ID before deletion for SSE message
+        deleted_id = team_answer.id
         team_answer.delete()
+        
+        # Publish SSE message for real-time updates
+        team_answer_sse_service.publish_simple_message('delete', [deleted_id])
+        
         return Response({
             'message': 'Team answer deleted successfully'
         }, status=status.HTTP_200_OK)
@@ -560,8 +573,14 @@ class TeamAnswerBulkDeleteAPIView(APIView):
                 'deleted_count': 0
             }, status=status.HTTP_200_OK)
         
+        # Get IDs before deletion for SSE message
+        deleted_ids = list(queryset.values_list('id', flat=True))
+        
         # Delete the filtered team answers
         deleted_count, _ = queryset.delete()
+        
+        # Publish SSE message for real-time updates
+        team_answer_sse_service.publish_simple_message('delete', deleted_ids)
         
         return Response({
             'message': f'{deleted_count} team answers deleted successfully',

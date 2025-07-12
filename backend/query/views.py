@@ -89,21 +89,14 @@ class QueryListCreateAPIView(APIView):
             if latest_query.ocr:
                 total_start = time.time()
                 
-                print(f"Starting OCR search for latest query: '{latest_query.ocr}'")
                 ocr_results = self._search_ocr(latest_query.ocr)
-                print("result[0]:", ocr_results[0] if ocr_results else "No results found")
+
                 raw_frames = self.adjust_response(request, ocr_results)
                 
                 # Process frames based on viewmode
                 viewmode = request.query_params.get('viewmode', 'gallery')
-                print(f"Processing frames with viewmode: {viewmode}")
                 frames = self._process_frames_by_viewmode(raw_frames, viewmode)
-                print(f"Processed frames count: {len(frames)}")
-                if viewmode == 'samevideo' and frames:
-                    print(f"Video groups: {len(frames)}, first group frames: {len(frames[0]) if frames[0] else 0}")
-                elif viewmode == 'gallery':
-                    print(f"Gallery frames: {len(frames)}")
-                
+
                 total_end = time.time()
                 total_duration = total_end - total_start
                 

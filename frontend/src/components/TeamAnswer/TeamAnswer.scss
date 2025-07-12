@@ -63,6 +63,37 @@
     gap: 0.5rem;
   }
 
+  &__status {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  &__sse-indicator {
+    font-size: 0.75rem;
+    opacity: 0.8;
+    transition: opacity 0.3s ease;
+    cursor: help;
+
+    &.connected {
+      opacity: 1;
+    }
+
+    &.disconnected {
+      opacity: 0.6;
+      animation: pulse 2s infinite;
+    }
+  }
+
+  @keyframes pulse {
+    0%, 100% {
+      opacity: 0.6;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+
   &__reload {
     display: flex;
     align-items: center;
