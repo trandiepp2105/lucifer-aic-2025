@@ -34,7 +34,7 @@ const HomePage = () => {
 
   // Debug queryMode
   useEffect(() => {
-    console.log('DEBUG HomePage: Current queryMode:', queryMode);
+    // QueryMode tracking
   }, [queryMode]);
 
   const [showNeighboringFrames, setShowNeighboringFrames] = useState(false); // Mặc định ẩn
@@ -221,8 +221,6 @@ const HomePage = () => {
   };
 
   const handleSendFrame = async (frame) => {
-    console.log('DEBUG HomePage handleSendFrame called with:', { frame, queryMode });
-    
     // If queryMode is 'qa', delegate to DisplayListFrame internal logic
     // This shouldn't happen if we remove onSend prop and let DisplayListFrame handle it
     const frameId = `${frame.video_name}-${frame.frame_index}`;
@@ -332,7 +330,6 @@ const HomePage = () => {
   // Auto-detect queryMode when queryIndex changes based on existing team answers
   useEffect(() => {
     const detectQueryMode = () => {
-      console.log('DEBUG HomePage: Auto-detect triggered for queryIndex:', queryIndex, 'round:', round);
       if (queryIndex === null || queryIndex === undefined) return;
       
       // Filter team answers for current queryIndex and round
@@ -340,21 +337,16 @@ const HomePage = () => {
         answer.query_index === queryIndex && answer.round === round
       );
       
-      console.log('DEBUG HomePage: Relevant team answers for queryIndex', queryIndex, ':', relevantAnswers);
-      
       if (relevantAnswers.length > 0) {
         // Check the first team answer to determine the type
         const firstAnswer = relevantAnswers[0];
         const detectedMode = (firstAnswer.qa && firstAnswer.qa.trim() !== '') ? 'qa' : 'kis';
         
-        console.log('DEBUG HomePage: Detected mode:', detectedMode, 'current mode:', queryMode);
         // Only update if different from current mode
         if (detectedMode !== queryMode) {
           console.log(`Auto-detected queryMode: ${detectedMode} for queryIndex: ${queryIndex}`);
           setQueryMode(detectedMode);
         }
-      } else {
-        console.log('DEBUG HomePage: No team answers found for queryIndex', queryIndex);
       }
     };
 

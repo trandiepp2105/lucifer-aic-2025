@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import FrameItem from '../FrameItem/FrameItem';
 import ConfirmationModal from '../ConfirmationModal';
+import TeamAnswerModal from '../TeamAnswerModal/TeamAnswerModal';
 import { useApp } from '../../contexts/AppContext';
 import { useToast } from '../Toast/ToastProvider';
 import { TeamAnswerService } from '../../services';
@@ -25,13 +26,14 @@ const TeamAnswer = ({
   const [deletingFrames, setDeletingFrames] = useState(new Set());
   const [deletingAll, setDeletingAll] = useState(false);
   const [showDeleteAllModal, setShowDeleteAllModal] = useState(false);
+  const [editingItem, setEditingItem] = useState(null); // For edit modal
   const [sseConnected, setSseConnected] = useState(false);
   
   // SSE connection ref
   const eventSourceRef = useRef(null);
   
-  // Get app context for queryIndex and round
-  const { queryIndex, round } = useApp();
+  // Get app context for queryIndex, round and queryMode
+  const { queryIndex, round, queryMode } = useApp();
   const toast = useToast();
 
   // Initialize SSE connection
@@ -73,6 +75,16 @@ const TeamAnswer = ({
                 prevAnswers.filter(answer => !deletedIds.includes(answer.id))
               );
               toast.info(`${deletedIds.length} team answer(s) removed`, 500);
+              break;
+
+            case 'edit':
+              // Update existing team answer in the list
+              setAllTeamAnswers(prevAnswers => 
+                prevAnswers.map(answer => 
+                  answer.id === data.data.id ? data.data : answer
+                )
+              );
+              toast.success('Team answer updated', 500);
               break;
 
             case 'heartbeat':
@@ -212,6 +224,43 @@ const TeamAnswer = ({
       toast.error('An error occurred while deleting all team answers', 500);
     } finally {
       setDeletingAll(false);
+    }
+  };
+
+  // Handle edit team answer
+  const handleEditTeamAnswer = (teamAnswer) => {
+    setEditingItem(teamAnswer);
+  };
+
+  // Handle edit modal close
+  const handleEditModalClose = () => {
+    setEditingItem(null);
+  };
+
+  // Handle edit modal submit
+  const handleEditModalSubmit = async (qaData) => {
+    if (!editingItem) return;
+    
+    try {
+      const response = await TeamAnswerService.updateTeamAnswer(editingItem.id, {
+        video_name: editingItem.video_name,
+        frame_index: editingItem.frame_index,
+        url: editingItem.url,
+        qa: qaData.qaText.trim(),
+        query_index: editingItem.query_index,
+        round: editingItem.round
+      });
+      
+      if (response.success) {
+        toast.success('Team answer updated successfully!', 500);
+        handleEditModalClose();
+        // SSE will handle the update automatically
+      } else {
+        toast.error(response.error || 'Failed to update team answer', 4000);
+      }
+    } catch (error) {
+      console.error('Error updating team answer:', error);
+      toast.error('An error occurred while updating team answer', 4000);
     }
   };
 
@@ -389,6 +438,16 @@ const TeamAnswer = ({
                       size="small"
                       className="team-answer__frame"
                     />
+                    {/* Edit button - only show for QA mode */}
+                    {queryMode === 'qa' && (
+                      <button
+                        className="team-answer__edit-btn"
+                        onClick={() => handleEditTeamAnswer(teamAnswer)}
+                        title="Edit Q&A text"
+                      >
+                        <img src="/assets/edit.svg" alt="Edit" />
+                      </button>
+                    )}
                     <button
                       className={`team-answer__delete-btn ${
                         deletingFrames.has(frameId) ? 'team-answer__delete-btn--loading' : ''
@@ -410,6 +469,16 @@ const TeamAnswer = ({
           </div>
         )}
       </div>
+
+      {/* Edit Modal for team answers */}
+      <TeamAnswerModal
+        isOpen={!!editingItem}
+        onClose={handleEditModalClose}
+        onSubmit={handleEditModalSubmit}
+        frame={editingItem}
+        allTeamAnswers={allTeamAnswers}
+        isEditMode={true}
+      />
     </div>
   );
 };

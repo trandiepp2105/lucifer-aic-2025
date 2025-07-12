@@ -9,7 +9,8 @@ const TeamAnswerModal = ({
   onClose, 
   onSubmit, 
   frame,
-  allTeamAnswers = [] // Add allTeamAnswers prop
+  allTeamAnswers = [], // Add allTeamAnswers prop
+  isEditMode = false  // Add edit mode prop
 }) => {
   const { round, queryIndex } = useApp();
   const toast = useToast();
@@ -21,21 +22,25 @@ const TeamAnswerModal = ({
   // Auto-fill QA text when modal opens
   useEffect(() => {
     if (isOpen) {
-      // Find existing team answers for current query index
-      const relevantAnswers = allTeamAnswers.filter(answer => 
-        answer.query_index === queryIndex && answer.round === round
-      );
-      
-      if (relevantAnswers.length > 0) {
-        // Use QA from first team answer as default
-        const defaultQA = relevantAnswers[0].qa || '';
-        setQaText(defaultQA);
-        console.log('DEBUG TeamAnswerModal: Auto-filled QA text:', defaultQA);
+      if (isEditMode && frame && frame.qa) {
+        // In edit mode, use the current QA text from the frame
+        setQaText(frame.qa || '');
       } else {
-        setQaText('');
+        // In create mode, find existing team answers for current query index
+        const relevantAnswers = allTeamAnswers.filter(answer => 
+          answer.query_index === queryIndex && answer.round === round
+        );
+        
+        if (relevantAnswers.length > 0) {
+          // Use QA from first team answer as default
+          const defaultQA = relevantAnswers[0].qa || '';
+          setQaText(defaultQA);
+        } else {
+          setQaText('');
+        }
       }
     }
-  }, [isOpen, allTeamAnswers, queryIndex, round]);
+  }, [isOpen, allTeamAnswers, queryIndex, round, isEditMode, frame]);
 
   // Focus modal when it opens to ensure it receives keyboard events
   useEffect(() => {
@@ -49,14 +54,15 @@ const TeamAnswerModal = ({
     if (isOpen && textareaRef.current) {
       // Small delay to ensure modal is fully rendered
       setTimeout(() => {
-        textareaRef.current.focus();
-        // Move cursor to end of text
-        const length = qaText.length;
-        textareaRef.current.setSelectionRange(length, length);
-        console.log('DEBUG TeamAnswerModal: Focused textarea and moved cursor to end');
+        if (textareaRef.current) { // Check again in timeout
+          textareaRef.current.focus();
+          // Move cursor to end of text
+          const length = qaText.length;
+          textareaRef.current.setSelectionRange(length, length);
+        }
       }, 100);
     }
-  }, [isOpen, qaText]); // Trigger when modal opens or text changes
+  }, [isOpen]); // Only trigger when modal opens, not when text changes
 
   const handleSubmit = useCallback(async () => {
     if (!frame) {
@@ -108,7 +114,6 @@ const TeamAnswerModal = ({
       document.addEventListener('keydown', handleKeyDown, { capture: true });
       document.addEventListener('keyup', handleKeyDown, { capture: true });
       document.addEventListener('keypress', handleKeyDown, { capture: true });
-      console.log('DEBUG TeamAnswerModal: All Enter key handlers added');
     }
 
     return () => {
@@ -116,7 +121,6 @@ const TeamAnswerModal = ({
         document.removeEventListener('keydown', handleKeyDown, { capture: true });
         document.removeEventListener('keyup', handleKeyDown, { capture: true });
         document.removeEventListener('keypress', handleKeyDown, { capture: true });
-        console.log('DEBUG TeamAnswerModal: All Enter key handlers removed');
       }
     };
   }, [isOpen, isSubmitting, qaText, handleSubmit]); // Include handleSubmit in dependencies
@@ -159,7 +163,9 @@ const TeamAnswerModal = ({
     >
       <div className="team-answer-modal__content" onKeyDown={handleModalKeyDown} tabIndex={-1}>
         <div className="team-answer-modal__header">
-          <h3 className="team-answer-modal__title">Send Team Answer</h3>
+          <h3 className="team-answer-modal__title">
+            {isEditMode ? 'Edit Team Answer' : 'Send Team Answer'}
+          </h3>
           <button 
             className="team-answer-modal__close"
             onClick={handleCancel}
@@ -214,7 +220,7 @@ const TeamAnswerModal = ({
             onClick={handleSubmit}
             disabled={isSubmitting || !qaText.trim()}
           >
-            {isSubmitting ? 'Sending...' : 'Send'}
+            {isSubmitting ? (isEditMode ? 'Updating...' : 'Sending...') : (isEditMode ? 'Update' : 'Send')}
           </button>
         </div>
       </div>

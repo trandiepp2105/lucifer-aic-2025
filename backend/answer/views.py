@@ -5,6 +5,7 @@ from rest_framework.parsers import JSONParser
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 import json
+import logging
 
 from .models import Answer, TeamAnswer
 from .serializers import (
@@ -12,6 +13,8 @@ from .serializers import (
     TeamAnswerSerializer, TeamAnswerCreateSerializer
 )
 from .sse_service import team_answer_sse_service
+
+logger = logging.getLogger(__name__)
 
 
 class AnswerListCreateAPIView(APIView):
@@ -471,6 +474,14 @@ class TeamAnswerDetailAPIView(APIView):
             try:
                 team_answer = serializer.save()
                 response_serializer = TeamAnswerSerializer(team_answer, context={'request': request})
+                
+                # Publish SSE message for real-time updates
+                try:
+                    team_answer_sse_service.publish_simple_message('edit', response_serializer.data)
+                except Exception as sse_error:
+                    # Log SSE error but don't fail the request
+                    logger.error(f"SSE error during team answer update: {sse_error}")
+                
                 return Response({
                     'message': 'Team answer updated successfully',
                     'data': response_serializer.data

@@ -287,6 +287,36 @@
     // height: 160px;
   }
 
+  &__edit-btn {
+    position: absolute;
+    top: 8px;
+    right: 36px; // Position to the left of delete button
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    background: rgba(0, 123, 255, 0.9);
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    opacity: 0;
+    transform: scale(0.8);
+    z-index: 1000;
+
+    &:hover {
+      background: rgba(0, 123, 255, 1);
+      transform: scale(1);
+    }
+
+    img {
+      width: 14px;
+      height: 14px;
+      filter: brightness(0) invert(1);
+    }
+  }
+
   &__delete-btn {
     position: absolute;
     top: 8px;
@@ -328,6 +358,11 @@
     color: white;
     font-size: 16px;
     animation: spin 1s linear infinite;
+  }
+
+  &__item:hover &__edit-btn {
+    opacity: 1;
+    transform: scale(1);
   }
 
   &__item:hover &__delete-btn {

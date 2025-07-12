@@ -96,7 +96,7 @@ class TeamAnswerServiceClass {
    */
   async getTeamAnswer(teamAnswerId) {
     try {
-      const response = await fetch(`${this.baseURL}/${teamAnswerId}/`, {
+      const response = await fetch(`${this.baseURL}${teamAnswerId}/`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -130,14 +130,13 @@ class TeamAnswerServiceClass {
    */
   async updateTeamAnswer(teamAnswerId, teamAnswerData) {
     try {
-      const response = await fetch(`${this.baseURL}/${teamAnswerId}/`, {
+      const response = await fetch(`${this.baseURL}${teamAnswerId}/`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(teamAnswerData)
       });
-
       const data = await response.json();
 
       if (!response.ok) {
@@ -165,7 +164,7 @@ class TeamAnswerServiceClass {
    */
   async deleteTeamAnswer(teamAnswerId) {
     try {
-      const response = await fetch(`${this.baseURL}/${teamAnswerId}/`, {
+      const response = await fetch(`${this.baseURL}${teamAnswerId}/`, {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',

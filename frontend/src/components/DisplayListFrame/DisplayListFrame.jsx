@@ -29,12 +29,7 @@ const DisplayListFrame = ({
   
   // Debug modal states
   useEffect(() => {
-    console.log('DEBUG: Modal states changed:', {
-      isVideoPlayerOpen,
-      isSubmissionModalOpen,
-      isTeamAnswerModalOpen,
-      frameToSubmit: frameToSubmit ? `${frameToSubmit.video_name}-${frameToSubmit.frame_index}` : null
-    });
+    // Modal states tracking
   }, [isVideoPlayerOpen, isSubmissionModalOpen, isTeamAnswerModalOpen, frameToSubmit]);
   
   // Get app context for round and queryIndex
@@ -43,7 +38,7 @@ const DisplayListFrame = ({
   
   // Debug queryMode prop
   useEffect(() => {
-    console.log('DEBUG DisplayListFrame: queryMode prop received:', queryMode);
+    // QueryMode tracking
   }, [queryMode]);
   
   // Ref for content container to control scrolling (where the actual scrollbar is)
@@ -78,16 +73,10 @@ const DisplayListFrame = ({
   };
 
   const handleSendFrame = (frame) => {
-    console.log('DEBUG handleSendFrame called with frame:', frame);
-    console.log('DEBUG handleSendFrame - onSend prop:', onSend);
-    console.log('DEBUG handleSendFrame - queryMode:', queryMode);
-    
     // Use onSend prop if available, otherwise use internal implementation
     if (onSend) {
-      console.log('DEBUG: Using onSend prop');
       onSend(frame);
     } else {
-      console.log('DEBUG: Using internal implementation');
       // Fallback to internal implementation for backward compatibility
       handleSendFrameInternal(frame);
     }
@@ -96,21 +85,12 @@ const DisplayListFrame = ({
   const handleSendFrameInternal = async (frame) => {
     const frameId = `${frame.video_name}-${frame.frame_index}`;
     
-    console.log('DEBUG: handleSendFrameInternal called with:', {
-      frame,
-      queryMode,
-      frameId
-    });
-    
     // If queryMode is 'qa', open TeamAnswerModal for QA input
     if (queryMode === 'qa') {
-      console.log('DEBUG: Opening TeamAnswerModal for QA mode');
       setFrameToSubmit(frame);
       setIsTeamAnswerModalOpen(true);
       return;
     }
-    
-    console.log('DEBUG: Sending frame directly (KIS mode)');
     
     // Validate queryMode consistency before sending
     const validation = validateQueryModeConsistency(allTeamAnswers, queryIndex, round, 'kis');

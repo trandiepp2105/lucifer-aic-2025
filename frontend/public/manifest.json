@@ -2,6 +2,16 @@
   "short_name": "🔥 Lucifer",
   "name": "🔥 Lucifer - Video Frame Analyzer",
   "icons": [
+    {
+      "src": "fire.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "favicon.ico",
+      "sizes": "16x16 32x32",
+      "type": "image/x-icon"
+    }
   ],
   "start_url": ".",
   "display": "standalone",

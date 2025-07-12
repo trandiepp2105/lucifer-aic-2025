@@ -977,7 +977,6 @@ const Sidebar = ({
                   key={index}
                   className={`sidebar__query-item ${queryIndex === index ? 'sidebar__query-item--active' : ''}`}
                   onClick={() => {
-                    console.log('DEBUG Sidebar: Clicking query index:', index);
                     setQueryIndex(index);
                   }}
                 >
@@ -1061,7 +1060,6 @@ const Sidebar = ({
                 if (/^\d+$/.test(value)) {
                   const numValue = parseInt(value, 10);
                   if (numValue >= 1 && numValue <= 999) {
-                    console.log('DEBUG Sidebar: Setting queryIndex from input:', numValue);
                     setQueryIndex(numValue);
                   }
                 }
@@ -1069,7 +1067,6 @@ const Sidebar = ({
               onBlur={(e) => {
                 // If empty when focus is lost, set to 1
                 if (e.target.value === '') {
-                  console.log('DEBUG Sidebar: Setting queryIndex to 1 on blur');
                   setQueryIndex(1);
                 }
               }}
