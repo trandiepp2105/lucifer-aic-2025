@@ -6,7 +6,7 @@ const getInitialStateFromURL = () => {
   const defaultState = {
     session: null,        // số
     queryMode: 'kis',     // 'kis' hoặc 'qa'
-    round: 'prelims',     // 'prelims' hoặc 'final'
+    round: 'final',     // 'prelims' hoặc 'final'
     viewMode: 'gallery',  // 'gallery' hoặc 'samevideo'
     stage: 1,             // số
     section: 'chat',      // 'chat' hoặc 'history'

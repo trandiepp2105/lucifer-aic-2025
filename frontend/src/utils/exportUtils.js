@@ -1,12 +1,33 @@
 import JSZip from 'jszip';
 
 /**
+ * Formats filename based on template and values
+ * @param {string} template - Template string with placeholders like "query-{query_index}-{type}"
+ * @param {Object} values - Object with values to replace placeholders
+ * @returns {string} Formatted filename
+ */
+const formatFilename = (template, values) => {
+  if (!template || typeof template !== 'string') {
+    return 'query-{query_index}-{type}'; // fallback to default
+  }
+  
+  let result = template;
+  Object.keys(values).forEach(key => {
+    const placeholder = `{${key}}`;
+    result = result.replace(new RegExp(placeholder, 'g'), values[key]);
+  });
+  
+  return result;
+};
+
+/**
  * Converts team answers to CSV format and creates a zip file for download
  * @param {Array} teamAnswers - Array of team answer objects
  * @param {string} round - Current round ('prelims' or 'final')
+ * @param {string} filenameFormat - Custom filename format template (e.g., "query-{query_index}-{type}")
  * @returns {Promise<void>}
  */
-export const exportTeamAnswersToZip = async (teamAnswers, round = 'prelims') => {
+export const exportTeamAnswersToZip = async (teamAnswers, round = 'prelims', filenameFormat = 'query-{query_index}-{type}') => {
   if (!teamAnswers || teamAnswers.length === 0) {
     throw new Error('No team answers to export');
   }
@@ -50,7 +71,10 @@ export const exportTeamAnswersToZip = async (teamAnswers, round = 'prelims') => 
     });
     
     // Add CSV file to zip
-    const fileName = `query-${queryIndex}-${type}.csv`;
+    const fileName = formatFilename(filenameFormat, {
+      query_index: queryIndex,
+      type: type
+    }) + '.csv';
     zip.file(fileName, csvContent);
   }
 
@@ -81,9 +105,10 @@ export const exportTeamAnswersToZip = async (teamAnswers, round = 'prelims') => 
  * Converts answers to CSV format and creates a zip file for download
  * @param {Array} answers - Array of answer objects  
  * @param {string} round - Current round ('prelims' or 'final')
+ * @param {string} filenameFormat - Custom filename format template (e.g., "query-{query_index}-{type}")
  * @returns {Promise<void>}
  */
-export const exportAnswersToZip = async (answers, round = 'prelims') => {
+export const exportAnswersToZip = async (answers, round = 'prelims', filenameFormat = 'query-{query_index}-{type}') => {
   if (!answers || answers.length === 0) {
     throw new Error('No answers to export');
   }
@@ -123,7 +148,10 @@ export const exportAnswersToZip = async (answers, round = 'prelims') => {
     });
     
     // Add CSV file to zip
-    const fileName = `query-${queryIndex}-${type}.csv`;
+    const fileName = formatFilename(filenameFormat, {
+      query_index: queryIndex,
+      type: type
+    }) + '.csv';
     zip.file(fileName, csvContent);
   }
 

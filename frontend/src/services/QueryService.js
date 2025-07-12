@@ -91,16 +91,15 @@ class QueryServiceClass {
   async getQueriesBySession(sessionId, params = {}) {
     try {
       const queryParams = new URLSearchParams({
-        session: sessionId,
-        page: params.page || 1,
-        page_size: params.page_size || 100,
-        ...params
+        session: sessionId
       });
 
-      // Add stage filter if provided
-      if (params.stage) {
-        queryParams.set('stage', params.stage);
-      }
+      // Only add other parameters if explicitly provided
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '' && key !== 'session') {
+          queryParams.append(key, value);
+        }
+      });
 
       const response = await fetch(`${this.baseURL}/?${queryParams}`, {
         method: 'GET',
@@ -130,18 +129,20 @@ class QueryServiceClass {
    */
   async getQueries(params = {}) {
     try {
-      const queryParams = new URLSearchParams({
-        page: params.page || 1,
-        page_size: params.page_size || 20,
-        ...params
+      const queryParams = new URLSearchParams();
+      
+      // Only add pagination if explicitly requested
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          queryParams.append(key, value);
+        }
       });
 
-      // Add stage filter if provided
-      if (params.stage) {
-        queryParams.set('stage', params.stage);
-      }
+      const url = queryParams.toString() ? 
+        `${this.baseURL}/?${queryParams.toString()}` : 
+        `${this.baseURL}/`;
 
-      const response = await fetch(`${this.baseURL}/?${queryParams}`, {
+      const response = await fetch(url, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -411,7 +412,7 @@ class QueryServiceClass {
   async deleteAllQueries() {
     try {
       // First get all queries to get their IDs
-      const queriesResponse = await this.getQueries({ page_size: 1000 }); // Get all queries
+      const queriesResponse = await this.getQueries(); // Get all queries (no pagination limit)
       if (!queriesResponse.success) {
         return {
           success: false,

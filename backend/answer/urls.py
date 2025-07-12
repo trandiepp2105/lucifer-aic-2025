@@ -11,6 +11,7 @@ urlpatterns = [
     # TeamAnswer endpoints
     path('api/team-answers/', views.TeamAnswerListCreateAPIView.as_view(), name='team-answer-list-create'),
     path('api/team-answers/delete-all/', views.TeamAnswerBulkDeleteAPIView.as_view(), name='team-answer-bulk-delete'),
+    path('api/team-answers/<int:team_answer_id>/sort/', views.TeamAnswerSortAPIView.as_view(), name='team-answer-sort'),
     path('api/team-answers/<int:team_answer_id>/', views.TeamAnswerDetailAPIView.as_view(), name='team-answer-detail'),
     
     # SSE endpoint for real-time team answer updates

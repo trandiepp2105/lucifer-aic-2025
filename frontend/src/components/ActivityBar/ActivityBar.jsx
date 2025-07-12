@@ -1,10 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import './ActivityBar.scss';
 
-const ActivityBar = ({ onSectionChange, activeSection, onRoundChange, onQueryModeChange, selectedRound = 'prelims', selectedQueryMode = 'kis' }) => {
+const ActivityBar = ({ onSectionChange, activeSection, onRoundChange, onQueryModeChange, onCsvFormatChange, selectedRound = 'prelims', selectedQueryMode = 'kis', csvFilenameFormat = 'query-{query_index}-{type}' }) => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [currentRound, setCurrentRound] = useState(selectedRound);
   const [currentQueryMode, setCurrentQueryMode] = useState(selectedQueryMode);
+  const [currentCsvFormat, setCurrentCsvFormat] = useState(csvFilenameFormat);
   const settingsRef = useRef(null);
 
   // Update internal state when props change
@@ -15,6 +16,10 @@ const ActivityBar = ({ onSectionChange, activeSection, onRoundChange, onQueryMod
   useEffect(() => {
     setCurrentQueryMode(selectedQueryMode);
   }, [selectedQueryMode]);
+
+  useEffect(() => {
+    setCurrentCsvFormat(csvFilenameFormat);
+  }, [csvFilenameFormat]);
 
   const allSections = [
     { id: 'chat', icon: '/assets/chat.svg', title: 'Chat' },
@@ -78,6 +83,14 @@ const ActivityBar = ({ onSectionChange, activeSection, onRoundChange, onQueryMod
 
   const handleQueryModeClick = (mode) => {
     handleQueryModeChange(mode);
+  };
+
+  const handleCsvFormatChange = (format) => {
+    setCurrentCsvFormat(format);
+    // Notify parent component about CSV format change
+    if (onCsvFormatChange) {
+      onCsvFormatChange(format);
+    }
   };
 
   return (
@@ -156,6 +169,25 @@ const ActivityBar = ({ onSectionChange, activeSection, onRoundChange, onQueryMod
                     >
                       FINAL
                     </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="activity-bar__settings-section">
+                <label className="activity-bar__settings-label" htmlFor="csv-format-input">
+                  CSV Filename Format
+                </label>
+                <div className="activity-bar__csv-format">
+                  <input
+                    id="csv-format-input"
+                    type="text"
+                    className="activity-bar__csv-format-input"
+                    value={currentCsvFormat}
+                    onChange={(e) => handleCsvFormatChange(e.target.value)}
+                    placeholder="query-{query_index}-{type}"
+                  />
+                  <div className="activity-bar__csv-format-help">
+                    Use {'{query_index}'} and {'{type}'} as placeholders
                   </div>
                 </div>
               </div>

@@ -93,37 +93,35 @@ const TeamAnswerModal = ({
   // Handle Enter key to submit and block all other Enter behaviors
   useEffect(() => {
     const handleKeyDown = (e) => {
+      // Only handle if modal is open and event is within modal
+      if (!isOpen || !modalRef.current) return;
+      
+      // Check if the event target is within our modal
+      if (!modalRef.current.contains(e.target)) return;
+      
       if (e.key === 'Enter' && !e.shiftKey) {
-        // Completely stop the event from bubbling or doing anything else
+        // Prevent default behavior and stop propagation
         e.preventDefault();
         e.stopPropagation();
-        e.stopImmediatePropagation();
         
         // Only submit if not already submitting and QA text is not empty
         if (!isSubmitting && qaText.trim()) {
           handleSubmit();
         }
-        
-        // Return false to ensure no other handlers run
-        return false;
       }
     };
 
-    if (isOpen) {
-      // Add event listener at multiple levels to ensure complete override
-      document.addEventListener('keydown', handleKeyDown, { capture: true });
-      document.addEventListener('keyup', handleKeyDown, { capture: true });
-      document.addEventListener('keypress', handleKeyDown, { capture: true });
+    if (isOpen && modalRef.current) {
+      // Only add listener to the modal element, not document
+      modalRef.current.addEventListener('keydown', handleKeyDown, true);
     }
 
     return () => {
-      if (isOpen) {
-        document.removeEventListener('keydown', handleKeyDown, { capture: true });
-        document.removeEventListener('keyup', handleKeyDown, { capture: true });
-        document.removeEventListener('keypress', handleKeyDown, { capture: true });
+      if (modalRef.current) {
+        modalRef.current.removeEventListener('keydown', handleKeyDown, true);
       }
     };
-  }, [isOpen, isSubmitting, qaText, handleSubmit]); // Include handleSubmit in dependencies
+  }, [isOpen, isSubmitting, qaText, handleSubmit]);
 
   const handleCancel = () => {
     setQaText('');
@@ -137,15 +135,14 @@ const TeamAnswerModal = ({
   };
 
   const handleModalKeyDown = (e) => {
+    // Only handle Enter key within this modal
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       e.stopPropagation();
-      e.stopImmediatePropagation();
       
       if (!isSubmitting && qaText.trim()) {
         handleSubmit();
       }
-      return false;
     }
   };
 
@@ -161,7 +158,7 @@ const TeamAnswerModal = ({
       onKeyDown={handleModalKeyDown} 
       tabIndex={-1}
     >
-      <div className="team-answer-modal__content" onKeyDown={handleModalKeyDown} tabIndex={-1}>
+      <div className="team-answer-modal__content" tabIndex={-1}>
         <div className="team-answer-modal__header">
           <h3 className="team-answer-modal__title">
             {isEditMode ? 'Edit Team Answer' : 'Send Team Answer'}

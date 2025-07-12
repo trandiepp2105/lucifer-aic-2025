@@ -1,4 +1,23 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import {
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { restrictToVerticalAxis, restrictToParentElement } from '@dnd-kit/modifiers';
 import FrameItem from '../FrameItem/FrameItem';
 import ConfirmationModal from '../ConfirmationModal';
 import TeamAnswerModal from '../TeamAnswerModal/TeamAnswerModal';
@@ -28,6 +47,21 @@ const TeamAnswer = ({
   const [showDeleteAllModal, setShowDeleteAllModal] = useState(false);
   const [editingItem, setEditingItem] = useState(null); // For edit modal
   const [sseConnected, setSseConnected] = useState(false);
+  
+  // Drag & Drop state
+  const [sortingItems, setSortingItems] = useState(new Set());
+  
+  // DnD Kit sensors with vertical-only constraint
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8, // Minimum distance before drag starts
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
   
   // SSE connection ref
   const eventSourceRef = useRef(null);
@@ -85,6 +119,21 @@ const TeamAnswer = ({
                 )
               );
               toast.success('Team answer updated', 500);
+              break;
+
+            case 'sort':
+              // Update both source and target team answers in the list
+              setAllTeamAnswers(prevAnswers => 
+                prevAnswers.map(answer => {
+                  if (answer.id === data.data.source.id) {
+                    return data.data.source;
+                  } else if (answer.id === data.data.target.id) {
+                    return data.data.target;
+                  }
+                  return answer;
+                })
+              );
+              toast.info('Team answers reordered', 500);
               break;
 
             case 'heartbeat':
@@ -145,7 +194,8 @@ const TeamAnswer = ({
              teamAnswer.round === currentRound;
     });
     
-    return filtered;
+    // Sort by created_at descending (newest first)
+    return filtered.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   }, [allTeamAnswers, queryIndex, round]);
 
   // Handle delete team answer
@@ -261,6 +311,48 @@ const TeamAnswer = ({
     } catch (error) {
       console.error('Error updating team answer:', error);
       toast.error('An error occurred while updating team answer', 4000);
+    }
+  };
+
+  // DnD Kit drag handlers
+  const handleDragEnd = async (event) => {
+    const { active, over } = event;
+
+    if (!over || active.id === over.id) {
+      return;
+    }
+
+    const sourceId = active.id;
+    const targetId = over.id;
+
+    // Check if already sorting
+    if (sortingItems.has(sourceId) || sortingItems.has(targetId)) {
+      return;
+    }
+
+    try {
+      // Add items to sorting set
+      setSortingItems(prev => new Set(prev).add(sourceId).add(targetId));
+      
+      const response = await TeamAnswerService.sortTeamAnswer(sourceId, targetId);
+      
+      if (response.success) {
+        toast.success('Team answers reordered successfully!', 500);
+        // SSE will handle the update automatically
+      } else {
+        toast.error(response.error || 'Failed to reorder team answers', 2000);
+      }
+    } catch (error) {
+      console.error('Error sorting team answers:', error);
+      toast.error('An error occurred while reordering team answers', 2000);
+    } finally {
+      // Remove items from sorting set
+      setSortingItems(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(sourceId);
+        newSet.delete(targetId);
+        return newSet;
+      });
     }
   };
 
@@ -401,71 +493,44 @@ const TeamAnswer = ({
             <p>No team answers found</p>
           </div>
         )}
-        
-        {!loading && teamAnswers.length > 0 && (
+         {!loading && teamAnswers.length > 0 && (
           <div className="team-answer__list">
-            <div className="team-answer__grid">
-              {teamAnswers.map((teamAnswer) => {
-                const frameId = `${teamAnswer.video_name}-${teamAnswer.frame_index}`;
-                const isSelected = selectedFrame && 
-                  selectedFrame.video_name === teamAnswer.video_name && 
-                  parseInt(selectedFrame.frame_index) === parseInt(teamAnswer.frame_index);
-                
-                return (
-                  <div
-                    key={teamAnswer.id}
-                    ref={isSelected ? selectedFrameRef : null}
-                    className="team-answer__item"
-                    data-frame-id={frameId}
-                    data-frame-index={teamAnswer.frame_index}
-                  >
-                    <FrameItem
-                      frame={teamAnswer}
-                      isSelected={isSelected}
-                      onClick={(clickedFrame) => {
-                        if (onFrameSelect) {
-                          onFrameSelect(clickedFrame);
-                        }
-                      }}
-                      onDoubleClick={(clickedFrame) => {
-                        if (onFrameDoubleClick) {
-                          onFrameDoubleClick(clickedFrame);
-                        }
-                      }}
-                      onSubmit={onSubmit}
-                      // No onSend prop - we don't want send button
-                      showFilename={true}
-                      size="small"
-                      className="team-answer__frame"
-                    />
-                    {/* Edit button - only show for QA mode */}
-                    {queryMode === 'qa' && (
-                      <button
-                        className="team-answer__edit-btn"
-                        onClick={() => handleEditTeamAnswer(teamAnswer)}
-                        title="Edit Q&A text"
-                      >
-                        <img src="/assets/edit.svg" alt="Edit" />
-                      </button>
-                    )}
-                    <button
-                      className={`team-answer__delete-btn ${
-                        deletingFrames.has(frameId) ? 'team-answer__delete-btn--loading' : ''
-                      }`}
-                      onClick={() => handleDeleteTeamAnswer(teamAnswer)}
-                      disabled={deletingFrames.has(frameId)}
-                      title="Delete team answer"
-                    >
-                      {deletingFrames.has(frameId) ? (
-                        <span className="team-answer__spinner">⟳</span>
-                      ) : (
-                        <img src="/assets/trash-bin.svg" alt="Delete" />
-                      )}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+              modifiers={[restrictToVerticalAxis, restrictToParentElement]}
+            >
+              <SortableContext
+                items={teamAnswers.map(item => item.id)}
+                strategy={verticalListSortingStrategy}
+              >
+                <div className="team-answer__grid">
+                  {teamAnswers.map((teamAnswer) => {
+                    const isSelected = selectedFrame && 
+                      selectedFrame.video_name === teamAnswer.video_name && 
+                      parseInt(selectedFrame.frame_index) === parseInt(teamAnswer.frame_index);
+                    
+                    return (
+                      <SortableTeamAnswerItem
+                        key={teamAnswer.id}
+                        teamAnswer={teamAnswer}
+                        isSelected={isSelected}
+                        selectedFrameRef={isSelected ? selectedFrameRef : null}
+                        onFrameSelect={onFrameSelect}
+                        onFrameDoubleClick={onFrameDoubleClick}
+                        onSubmit={onSubmit}
+                        queryMode={queryMode}
+                        handleEditTeamAnswer={handleEditTeamAnswer}
+                        handleDeleteTeamAnswer={handleDeleteTeamAnswer}
+                        deletingFrames={deletingFrames}
+                        sortingItems={sortingItems}
+                      />
+                    );
+                  })}
+                </div>
+              </SortableContext>
+            </DndContext>
           </div>
         )}
       </div>
@@ -479,6 +544,105 @@ const TeamAnswer = ({
         allTeamAnswers={allTeamAnswers}
         isEditMode={true}
       />
+    </div>
+  );
+};
+
+// Sortable Item Component
+const SortableTeamAnswerItem = ({
+  teamAnswer,
+  isSelected,
+  selectedFrameRef,
+  onFrameSelect,
+  onFrameDoubleClick,
+  onSubmit,
+  queryMode,
+  handleEditTeamAnswer,
+  handleDeleteTeamAnswer,
+  deletingFrames,
+  sortingItems
+}) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: teamAnswer.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.8 : 1,
+    zIndex: isDragging ? 1000 : 1,
+  };
+
+  const frameId = `${teamAnswer.video_name}-${teamAnswer.frame_index}`;
+  const isSorting = sortingItems.has(teamAnswer.id);
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`team-answer__item ${isSorting ? 'team-answer__item--sorting' : ''} ${isDragging ? 'team-answer__item--dragging' : ''}`}
+      data-frame-id={frameId}
+      data-frame-index={teamAnswer.frame_index}
+      data-team-answer-id={teamAnswer.id}
+      data-dragging={isDragging}
+      {...attributes}
+      {...listeners}
+    >
+      <div ref={isSelected ? selectedFrameRef : null}>
+        <FrameItem
+          frame={teamAnswer}
+          isSelected={isSelected}
+          onClick={(clickedFrame) => {
+            if (onFrameSelect) {
+              onFrameSelect(clickedFrame);
+            }
+          }}
+          onDoubleClick={(clickedFrame) => {
+            if (onFrameDoubleClick) {
+              onFrameDoubleClick(clickedFrame);
+            }
+          }}
+          onSubmit={onSubmit}
+          showFilename={true}
+          size="small"
+          className="team-answer__frame"
+        />
+        {/* Edit button - only show for QA mode */}
+        {queryMode === 'qa' && (
+          <button
+            className="team-answer__edit-btn"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleEditTeamAnswer(teamAnswer);
+            }}
+            title="Edit Q&A text"
+          >
+            <img src="/assets/edit.svg" alt="Edit" />
+          </button>
+        )}
+        <button
+          className={`team-answer__delete-btn ${
+            deletingFrames.has(frameId) ? 'team-answer__delete-btn--loading' : ''
+          }`}
+          onClick={(e) => {
+            e.stopPropagation();
+            handleDeleteTeamAnswer(teamAnswer);
+          }}
+          disabled={deletingFrames.has(frameId)}
+          title="Delete team answer"
+        >
+          {deletingFrames.has(frameId) ? (
+            <span className="team-answer__spinner">⟳</span>
+          ) : (
+            <img src="/assets/trash-bin.svg" alt="Delete" />
+          )}
+        </button>
+      </div>
     </div>
   );
 };

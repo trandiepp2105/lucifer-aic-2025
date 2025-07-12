@@ -19,7 +19,8 @@ const Sidebar = ({
   isLoading = false, // Loading state for data
   onRefresh = null, // Refresh function for data
   allTeamAnswers = [], // All team answers data for export
-  allAnswers = [] // All answers data for export
+  allAnswers = [], // All answers data for export
+  csvFilenameFormat = 'query-{query_index}-{type}' // Custom CSV filename format
 }) => {
   const { stage, viewMode, round, queryIndex, setStage, setViewMode, setQueryIndex } = useApp();
   const toast = useToast();
@@ -144,10 +145,7 @@ const Sidebar = ({
     setLoading(true);
     try {
       const response = await QueryService.getQueriesBySession(targetSessionId, {
-        page: 1,
-        page_size: 100,
-        // Remove stage filter - load all queries for the session
-        viewmode: viewMode, // Add viewmode parameter
+        // Remove pagination and viewmode - let server decide defaults
         // Don't trigger search_frames automatically when loading queries
       });
 
@@ -850,7 +848,7 @@ const Sidebar = ({
         }
         
         toast.info('Generating export file...', 1000);
-        await exportTeamAnswersToZip(allTeamAnswers, round);
+        await exportTeamAnswersToZip(allTeamAnswers, round, csvFilenameFormat);
         toast.success('Export completed successfully!', 2000);
         
       } else if (mode === 'answer') {
@@ -860,7 +858,7 @@ const Sidebar = ({
         }
         
         toast.info('Generating export file...', 1000);
-        await exportAnswersToZip(allAnswers, round);
+        await exportAnswersToZip(allAnswers, round, csvFilenameFormat);
         toast.success('Export completed successfully!', 2000);
       }
     } catch (error) {

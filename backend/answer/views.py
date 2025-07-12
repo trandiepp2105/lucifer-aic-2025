@@ -597,3 +597,99 @@ class TeamAnswerBulkDeleteAPIView(APIView):
             'message': f'{deleted_count} team answers deleted successfully',
             'deleted_count': deleted_count
         }, status=status.HTTP_200_OK)
+
+
+class TeamAnswerSortAPIView(APIView):
+    """
+    API endpoint for sorting team answers by swapping created_at timestamps
+    """
+    parser_classes = [JSONParser]
+
+    @swagger_auto_schema(
+        operation_summary="Sort team answer",
+        operation_description="Sort a team answer by swapping created_at with target team answer",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            required=['target_team_answer_id'],
+            properties={
+                'target_team_answer_id': openapi.Schema(
+                    type=openapi.TYPE_INTEGER, 
+                    description="ID of the target team answer to swap created_at with"
+                ),
+            }
+        ),
+        responses={
+            200: openapi.Response(
+                description="Team answers sorted successfully",
+                schema=openapi.Schema(
+                    type=openapi.TYPE_OBJECT,
+                    properties={
+                        'message': openapi.Schema(type=openapi.TYPE_STRING),
+                        'data': openapi.Schema(
+                            type=openapi.TYPE_OBJECT,
+                            properties={
+                                'source': openapi.Schema(type=openapi.TYPE_OBJECT),
+                                'target': openapi.Schema(type=openapi.TYPE_OBJECT),
+                            }
+                        ),
+                    }
+                )
+            ),
+            400: openapi.Response(description="Invalid data"),
+            404: openapi.Response(description="Team answer not found")
+        }
+    )
+    def put(self, request, team_answer_id):
+        """Sort team answer by swapping created_at timestamps"""
+        try:
+            source_team_answer = TeamAnswer.objects.get(id=team_answer_id)
+        except TeamAnswer.DoesNotExist:
+            return Response({
+                'message': 'Source team answer not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        target_team_answer_id = request.data.get('target_team_answer_id')
+        if not target_team_answer_id:
+            return Response({
+                'message': 'target_team_answer_id is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            target_team_answer = TeamAnswer.objects.get(id=target_team_answer_id)
+        except TeamAnswer.DoesNotExist:
+            return Response({
+                'message': 'Target team answer not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        
+        # Swap created_at timestamps
+        source_created_at = source_team_answer.created_at
+        target_created_at = target_team_answer.created_at
+        
+        source_team_answer.created_at = target_created_at
+        target_team_answer.created_at = source_created_at
+        
+        # Save both objects
+        source_team_answer.save()
+        target_team_answer.save()
+        
+        # Serialize the updated objects
+        source_serializer = TeamAnswerSerializer(source_team_answer, context={'request': request})
+        target_serializer = TeamAnswerSerializer(target_team_answer, context={'request': request})
+        
+        # Publish SSE message for real-time updates
+        try:
+            team_answer_sse_service.publish_simple_message('sort', {
+                'source': source_serializer.data,
+                'target': target_serializer.data
+            })
+        except Exception as sse_error:
+            # Log SSE error but don't fail the request
+            logger.error(f"SSE error during team answer sort: {sse_error}")
+        
+        return Response({
+            'message': 'Team answers sorted successfully',
+            'data': {
+                'source': source_serializer.data,
+                'target': target_serializer.data
+            }
+        }, status=status.HTTP_200_OK)

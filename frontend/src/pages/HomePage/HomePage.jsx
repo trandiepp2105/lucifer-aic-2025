@@ -55,6 +55,7 @@ const HomePage = () => {
   const [isVideoPlayerOpen, setIsVideoPlayerOpen] = useState(false);
   const [isSubmissionModalOpen, setIsSubmissionModalOpen] = useState(false);
   const [frameToSubmit, setFrameToSubmit] = useState(null);
+  const [csvFilenameFormat, setCsvFilenameFormat] = useState('query-{query_index}-{type}');
   
   // Ref to store the loadQueries function from Sidebar
   const loadQueriesRef = useRef(null);
@@ -69,9 +70,11 @@ const HomePage = () => {
       return;
     }
     
-    if (loadQueriesRef.current) {
-      loadQueriesRef.current();
-    }
+    // Temporarily disable automatic loadQueries on viewMode change
+    // to prevent unnecessary API calls when submitting team answers
+    // if (loadQueriesRef.current) {
+    //   loadQueriesRef.current();
+    // }
   }, [viewMode]);
 
   // Function to register loadQueries from Sidebar
@@ -192,6 +195,10 @@ const HomePage = () => {
     // TODO: Add logic to handle query mode change (e.g., switch between KIS and Q&A interfaces)
   }, [setQueryMode]);
 
+  const handleCsvFormatChange = useCallback((format) => {
+    setCsvFilenameFormat(format);
+  }, []);
+
   const handleSectionChange = (sectionId) => {
     setSection(sectionId);
     
@@ -303,6 +310,7 @@ const HomePage = () => {
           onRefresh={fetchAllTeamAnswers}
           allTeamAnswers={allTeamAnswers}
           allAnswers={allAnswers}
+          csvFilenameFormat={csvFilenameFormat}
         />;
       case 'answer':
         return <Sidebar 
@@ -312,6 +320,7 @@ const HomePage = () => {
           onRefresh={fetchAllAnswers}
           allTeamAnswers={allTeamAnswers}
           allAnswers={allAnswers}
+          csvFilenameFormat={csvFilenameFormat}
         />;
       default:
         return <Sidebar 
@@ -361,8 +370,10 @@ const HomePage = () => {
           activeSection={section}
           onRoundChange={handleRoundChange}
           onQueryModeChange={handleQueryModeChange}
+          onCsvFormatChange={handleCsvFormatChange}
           selectedRound={round}
           selectedQueryMode={queryMode}
+          csvFilenameFormat={csvFilenameFormat}
         />
         {renderSidePanel()}
         <DisplayListFrame 

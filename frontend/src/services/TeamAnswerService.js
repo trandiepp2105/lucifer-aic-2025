@@ -271,6 +271,44 @@ class TeamAnswerServiceClass {
       return handleApiError(error);
     }
   }
+
+  /**
+   * Sort team answer by swapping created_at with target team answer
+   * @param {number} sourceTeamAnswerId - Source team answer ID
+   * @param {number} targetTeamAnswerId - Target team answer ID to swap with
+   * @returns {Promise<Object>} Response data
+   */
+  async sortTeamAnswer(sourceTeamAnswerId, targetTeamAnswerId) {
+    try {
+      const response = await fetch(`${this.baseURL}${sourceTeamAnswerId}/sort/`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          target_team_answer_id: targetTeamAnswerId
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        return {
+          success: false,
+          error: data.message || `HTTP error! status: ${response.status}`,
+          errors: data.errors || {},
+          status: response.status
+        };
+      }
+
+      return {
+        success: true,
+        data: data.data
+      };
+    } catch (error) {
+      return handleApiError(error);
+    }
+  }
 }
 
 // Export singleton instance

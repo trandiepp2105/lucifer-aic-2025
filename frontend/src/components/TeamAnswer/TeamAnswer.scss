@@ -85,13 +85,20 @@
     }
   }
 
+  // Drop indicator
+  &__drop-indicator {
+    height: 3px;
+    background: linear-gradient(90deg, #007bff, #0056b3);
+    border-radius: 2px;
+    margin: 4px 0;
+    opacity: 0.8;
+    animation: pulse 1s infinite;
+    box-shadow: 0 0 8px rgba(0, 123, 255, 0.5);
+  }
+
   @keyframes pulse {
-    0%, 100% {
-      opacity: 0.6;
-    }
-    50% {
-      opacity: 1;
-    }
+    0%, 100% { opacity: 0.8; }
+    50% { opacity: 1; }
   }
 
   &__reload {
@@ -272,14 +279,83 @@
     overflow: hidden;
     transition: all 0.3s ease;
     box-sizing: border-box;
-    // padding: 2px;
     background: transparent;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-    // &:hover {
-    //   transform: translateY(-2px);
-    //   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-    //   z-index: 5;
-    // }
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+
+    // Drag & Drop states
+    &--drag-over {
+      border: 2px solid #007bff;
+      box-shadow: 0 6px 16px rgba(0, 123, 255, 0.3);
+      background: rgba(0, 123, 255, 0.05);
+    }
+
+    &--sorting {
+      opacity: 0.7;
+      pointer-events: none;
+      
+      &::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 123, 255, 0.1);
+        border-radius: 8px;
+        z-index: 10;
+      }
+    }
+
+    &--preview {
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+      border: 2px solid #007bff;
+      background: rgba(255, 255, 255, 0.95);
+    }
+
+    // Add cursor pointer for draggable items
+    cursor: grab;
+    
+    &:active {
+      cursor: grabbing;
+    }
+
+    // Restrict dragging to vertical only
+    &--dragging {
+      cursor: grabbing;
+      opacity: 0.8;
+      z-index: 1000;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+      
+      // Ensure dragged item stays within container bounds horizontally
+      position: relative;
+      left: 0 !important;
+      right: 0 !important;
+      max-width: 100% !important;
+      width: 200px !important; // Fixed width
+      box-sizing: border-box;
+      
+      // Enhance visual feedback
+      transform-origin: center center;
+      border: 2px solid #007bff;
+      background: rgba(255, 255, 255, 0.95);
+    }
+
+    &[data-dragging="true"] {
+      cursor: grabbing;
+      opacity: 0.8;
+      z-index: 1000;
+      
+      // Ensure dragged item stays within container bounds horizontally
+      position: relative;
+      left: 0 !important;
+      right: 0 !important;
+      max-width: 100% !important;
+      width: 200px !important; // Fixed width
+      box-sizing: border-box;
+    }
+
+    // Smooth transform transitions
+    will-change: transform;
   }
 
   &__frame {
@@ -368,6 +444,15 @@
   &__item:hover &__delete-btn {
     opacity: 1;
     transform: scale(1);
+  }
+
+  // Drag preview styles
+  &__drag-preview {
+    .team-answer__item {
+      width: 200px; // Fixed width for preview
+      transform: none !important;
+      transition: none !important;
+    }
   }
 
   // Responsive adjustments
