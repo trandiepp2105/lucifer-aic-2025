@@ -9,12 +9,19 @@ const getInitialStateFromURL = () => {
     viewMode: 'gallery',  // 'gallery' hoặc 'samevideo'
     stage: 1,             // số
     section: 'chat',      // 'chat' hoặc 'history'
-    queryIndex: 1,        // query index for prelims round
+  };
+
+  // Determine queryIndex based on round
+  const getDefaultQueryIndex = (round) => {
+    return round === 'final' ? 0 : 1;
   };
 
   // Only read URL params on client side
   if (typeof window === 'undefined') {
-    return defaultState;
+    return {
+      ...defaultState,
+      queryIndex: getDefaultQueryIndex(defaultState.round)
+    };
   }
 
   const urlParams = new URLSearchParams(window.location.search);
@@ -53,6 +60,9 @@ const getInitialStateFromURL = () => {
   const queryIndexParam = urlParams.get('queryindex');
   if (queryIndexParam) {
     urlState.queryIndex = parseInt(queryIndexParam, 10);
+  } else {
+    // Set default queryIndex based on round
+    urlState.queryIndex = getDefaultQueryIndex(urlState.round);
   }
 
   console.log('AppContext: Initial state from URL:', urlState);
@@ -83,7 +93,11 @@ const appReducer = (state, action) => {
     case ActionTypes.SET_QUERY_MODE:
       return { ...state, queryMode: action.payload };
     case ActionTypes.SET_ROUND:
-      return { ...state, round: action.payload };
+      return { 
+        ...state, 
+        round: action.payload,
+        queryIndex: action.payload === 'final' ? 0 : (state.queryIndex || 1)
+      };
     case ActionTypes.SET_VIEW_MODE:
       return { ...state, viewMode: action.payload };
     case ActionTypes.SET_STAGE:

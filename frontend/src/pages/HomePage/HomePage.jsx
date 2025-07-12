@@ -5,11 +5,12 @@ import HistoryPanel from '../../components/HistoryPanel/HistoryPanel';
 import DisplayListFrame from '../../components/DisplayListFrame/DisplayListFrame';
 // import NeighboringFrames from '../../components/NeighboringFrames/NeighboringFrames';
 import TeamAnswer from '../../components/TeamAnswer/TeamAnswer';
+import Answer from '../../components/Answer/Answer';
 import VideoPlayer from '../../components/VideoPlayer/VideoPlayer';
 import SubmissionModal from '../../components/SubmissionModal/SubmissionModal';
 import { useApp } from '../../contexts/AppContext';
 import { useToast } from '../../components/Toast/ToastProvider';
-import { TeamAnswerService } from '../../services';
+import { TeamAnswerService, AnswerService } from '../../services';
 import './HomePage.scss';
 
 const HomePage = () => {
@@ -35,6 +36,12 @@ const HomePage = () => {
   const [frames, setFrames] = useState([]); // Add frames state
   const [availableStages, setAvailableStages] = useState(1); // Add available stages state
   const [sendingFrames, setSendingFrames] = useState(new Set()); // Track sending frames
+  
+  // Centralized data management for TeamAnswer and Answer
+  const [allTeamAnswers, setAllTeamAnswers] = useState([]);
+  const [allAnswers, setAllAnswers] = useState([]);
+  const [isLoadingTeamAnswers, setIsLoadingTeamAnswers] = useState(false);
+  const [isLoadingAnswers, setIsLoadingAnswers] = useState(false);
   
   // Local state for UI components (not managed by AppContext)
   const [selectedFrame, setSelectedFrame] = useState(null);
@@ -89,12 +96,59 @@ const HomePage = () => {
     // The useEffect will handle the reload when viewMode changes
   }, [setViewMode]);
 
+  const handleAvailableStagesChange = useCallback((availableStages) => {
+    setAvailableStages(availableStages);
+  }, []);
+
   const handleFramesUpdate = useCallback((newFrames) => {
     setFrames(newFrames || []);
   }, []);
 
-  const handleAvailableStagesChange = useCallback((stages) => {
-    setAvailableStages(stages);
+  // Centralized data fetching for TeamAnswer and Answer
+  const fetchAllTeamAnswers = useCallback(async () => {
+    setIsLoadingTeamAnswers(true);
+    try {
+      const response = await TeamAnswerService.getTeamAnswers();
+      if (response.success) {
+        setAllTeamAnswers(response.data.data || []);
+      } else {
+        console.error('Failed to fetch team answers:', response.error);
+        toast.error('Failed to load team answers', 500);
+        setAllTeamAnswers([]);
+      }
+    } catch (error) {
+      console.error('Error fetching team answers:', error);
+      toast.error('Error loading team answers', 500);
+      setAllTeamAnswers([]);
+    } finally {
+      setIsLoadingTeamAnswers(false);
+    }
+  }, [toast]);
+
+  const fetchAllAnswers = useCallback(async () => {
+    setIsLoadingAnswers(true);
+    try {
+      const response = await AnswerService.getAnswers();
+      if (response.success) {
+        setAllAnswers(response.data || []);
+      } else {
+        console.error('Failed to fetch answers:', response.error);
+        toast.error('Failed to load answers', 500);
+        setAllAnswers([]);
+      }
+    } catch (error) {
+      console.error('Error fetching answers:', error);
+      toast.error('Error loading answers', 500);
+      setAllAnswers([]);
+    } finally {
+      setIsLoadingAnswers(false);
+    }
+  }, [toast]);
+
+  // Get unique query indexes from data
+  const getUniqueQueryIndexes = useCallback((data) => {
+    const queryIndexes = [...new Set(data.map(item => item.query_index))];
+    return queryIndexes.sort((a, b) => a - b);
   }, []);
 
   const handleRoundChange = useCallback((round) => {
@@ -109,6 +163,13 @@ const HomePage = () => {
 
   const handleSectionChange = (sectionId) => {
     setSection(sectionId);
+    
+    // Fetch data when switching to relevant sections
+    if (sectionId === 'team-answer' && allTeamAnswers.length === 0 && !isLoadingTeamAnswers) {
+      fetchAllTeamAnswers();
+    } else if (sectionId === 'answer' && allAnswers.length === 0 && !isLoadingAnswers) {
+      fetchAllAnswers();
+    }
   };
 
   const toggleNeighboringFrames = () => {
@@ -197,6 +258,20 @@ const HomePage = () => {
         />;
       case 'history':
         return <HistoryPanel />;
+      case 'team-answer':
+        return <Sidebar 
+          mode="team-answer"
+          queryIndexes={getUniqueQueryIndexes(allTeamAnswers)}
+          isLoading={isLoadingTeamAnswers}
+          onRefresh={fetchAllTeamAnswers}
+        />;
+      case 'answer':
+        return <Sidebar 
+          mode="answer"
+          queryIndexes={getUniqueQueryIndexes(allAnswers)}
+          isLoading={isLoadingAnswers}
+          onRefresh={fetchAllAnswers}
+        />;
       default:
         return <Sidebar 
           currentStage={stage} 
@@ -247,14 +322,41 @@ const HomePage = () => {
           queryMode={queryMode}
           sendingFrames={sendingFrames}
         /> */}
-        <TeamAnswer
-          selectedFrame={selectedFrame}
-          isVisible={showTeamAnswer}
-          onToggle={toggleTeamAnswer}
-          onFrameSelect={handleFrameSelect}
-          onFrameDoubleClick={handleFrameDoubleClick}
-          onSubmit={handleSubmitFrame}
-        />
+        {section === 'team-answer' && (
+          <TeamAnswer
+            selectedFrame={selectedFrame}
+            isVisible={showTeamAnswer}
+            onToggle={toggleTeamAnswer}
+            onFrameSelect={handleFrameSelect}
+            onFrameDoubleClick={handleFrameDoubleClick}
+            onSubmit={handleSubmitFrame}
+            allTeamAnswers={allTeamAnswers}
+            setAllTeamAnswers={setAllTeamAnswers}
+            onRefresh={fetchAllTeamAnswers}
+          />
+        )}
+        {section === 'answer' && (
+          <Answer
+            allAnswers={allAnswers}
+            setAllAnswers={setAllAnswers}
+            refreshAnswers={fetchAllAnswers}
+            round={round}
+            isVisible={true}
+          />
+        )}
+        {(section === 'chat' || section === 'history') && (
+          <TeamAnswer
+            selectedFrame={selectedFrame}
+            isVisible={showTeamAnswer}
+            onToggle={toggleTeamAnswer}
+            onFrameSelect={handleFrameSelect}
+            onFrameDoubleClick={handleFrameDoubleClick}
+            onSubmit={handleSubmitFrame}
+            allTeamAnswers={allTeamAnswers}
+            setAllTeamAnswers={setAllTeamAnswers}
+            onRefresh={fetchAllTeamAnswers}
+          />
+        )}
       </div>
 
       <VideoPlayer

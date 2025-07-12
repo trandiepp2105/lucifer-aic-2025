@@ -1,15 +1,22 @@
 import React, { useState, useEffect } from 'react';
 // Direct import to avoid cache issues
 import SessionService from '../../services/SessionService';
+import { useApp } from '../../contexts/AppContext';
+import ConfirmationModal from '../ConfirmationModal';
 import './HistoryPanel.scss';
 
 const HistoryPanel = () => {
+  const { session: currentSessionId, setSession } = useApp();
   const [sessions, setSessions] = useState([]);
-  const [currentSessionId, setCurrentSessionId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [newSessionName, setNewSessionName] = useState('');
   const [showCreateForm, setShowCreateForm] = useState(false);
+  
+  // Confirmation modal states
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [sessionToDelete, setSessionToDelete] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Load sessions on component mount
   useEffect(() => {
@@ -27,9 +34,10 @@ const HistoryPanel = () => {
       setSessions(sessionList);
       setError(null);
       
-      // Set first session as current if none selected
-      if (sessionList.length > 0 && !currentSessionId) {
-        setCurrentSessionId(sessionList[0].id);
+      // Set first session as current if none selected (but only from non-current sessions)
+      const availableSessions = sessionList.filter(session => session.id !== currentSessionId);
+      if (availableSessions.length > 0 && !currentSessionId) {
+        setSession(availableSessions[0].id);
       }
     } catch (err) {
       setError('Failed to load sessions');
@@ -56,35 +64,42 @@ const HistoryPanel = () => {
   };
 
   const handleSelectSession = (sessionId) => {
-    setCurrentSessionId(sessionId);
+    setSession(sessionId);
     setError(null);
   };
 
-  const handleDeleteSession = async (sessionId, e) => {
+  const handleDeleteSession = (sessionId, e) => {
     e.stopPropagation(); // Prevent selecting session when deleting
     
-    if (!window.confirm('Are you sure you want to delete this session?')) {
-      return;
-    }
+    // Find session to show in confirmation
+    const session = sessions.find(s => s.id === sessionId);
+    setSessionToDelete(session);
+    setShowDeleteModal(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!sessionToDelete) return;
 
     try {
-      await SessionService.deleteSession(sessionId);
-      setSessions(prev => prev.filter(session => session.id !== sessionId));
+      setIsDeleting(true);
+      await SessionService.deleteSession(sessionToDelete.id);
+      setSessions(prev => prev.filter(session => session.id !== sessionToDelete.id));
       
-      // If deleted session was current, clear current session
-      if (currentSessionId === sessionId) {
-        setCurrentSessionId(null);
-        // Set first remaining session as current
-        setSessions(prev => {
-          if (prev.length > 0) {
-            setCurrentSessionId(prev[0].id);
-          }
-          return prev;
-        });
-      }
+      // Since we filter out current session, we don't need to handle deleting current session
+      // Just reload the sessions list
+      loadSessions();
     } catch (err) {
       setError('Failed to delete session');
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteModal(false);
+      setSessionToDelete(null);
     }
+  };
+
+  const handleCancelDelete = () => {
+    setShowDeleteModal(false);
+    setSessionToDelete(null);
   };
 
   const formatTime = (dateString) => {
@@ -115,6 +130,17 @@ const HistoryPanel = () => {
 
   return (
     <div className="history-panel">
+      <ConfirmationModal
+        isOpen={showDeleteModal}
+        onClose={handleCancelDelete}
+        onConfirm={handleConfirmDelete}
+        title="Delete Session"
+        message={`Are you sure you want to delete "${sessionToDelete?.name || `Session ${sessionToDelete?.id}`}"? This action cannot be undone.`}
+        confirmText="Delete"
+        cancelText="Cancel"
+        isLoading={isDeleting}
+      />
+      
       <div className="history-panel__header">
         <h3>Session Manager</h3>
         <button 
@@ -165,14 +191,16 @@ const HistoryPanel = () => {
           <div className="history-panel__loading">
             Loading sessions...
           </div>
-        ) : sessions.length === 0 ? (
+        ) : sessions.filter(session => session.id !== currentSessionId).length === 0 ? (
           <div className="history-panel__empty">
-            <p>No sessions found.</p>
+            <p>No other sessions found.</p>
             <p>Create a new session to get started.</p>
           </div>
         ) : (
           <div className="history-panel__list">
-            {sessions.map((session) => (
+            {sessions
+              .filter(session => session.id !== currentSessionId)
+              .map((session) => (
               <div
                 key={session.id}
                 className={`history-panel__item ${

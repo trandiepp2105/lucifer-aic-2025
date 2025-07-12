@@ -36,7 +36,8 @@
     width: 100%;
 
     &:hover {
-      background: #2a2d2e;
+      background: #404040;
+      color: #ffffff;
       
       .activity-bar__icon {
         filter: invert(1); // Make icons white on hover

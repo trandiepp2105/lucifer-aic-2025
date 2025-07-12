@@ -6,7 +6,16 @@ import { useApp } from '../../contexts/AppContext';
 import { getSessionIdFromUrl, getStageFromUrl, getViewModeFromUrl, updateUrlParams } from '../../utils/urlParams';
 import './Sidebar.scss';
 
-const Sidebar = ({ onFramesUpdate, onAvailableStagesChange, onSessionChange, onLoadQueriesRegister }) => {
+const Sidebar = ({ 
+  onFramesUpdate = () => {}, // Default empty function
+  onAvailableStagesChange = () => {}, // Default empty function
+  onSessionChange = () => {}, // Default empty function
+  onLoadQueriesRegister = () => {}, // Default empty function
+  mode = 'chat', // Default mode is chat
+  queryIndexes = [], // For team-answer and answer modes
+  isLoading = false, // Loading state for data
+  onRefresh = null // Refresh function for data
+}) => {
   const { stage, viewMode, round, queryIndex, setStage, setViewMode, setQueryIndex } = useApp();
   const toast = useToast();
   
@@ -115,6 +124,8 @@ const Sidebar = ({ onFramesUpdate, onAvailableStagesChange, onSessionChange, onL
 
   // Load queries for current session
   const loadQueries = useCallback(async (sessionId = null) => {
+    if (mode !== 'chat') return; // Only run in chat mode
+    
     onFramesUpdate([]);
     const targetSessionId = sessionId || currentSession?.id;
     
@@ -151,12 +162,12 @@ const Sidebar = ({ onFramesUpdate, onAvailableStagesChange, onSessionChange, onL
     } finally {
       setLoading(false);
     }
-  }, [currentSession, viewMode, onFramesUpdate, toast]);
+  }, [currentSession, viewMode, onFramesUpdate, toast, mode]);
 
   useEffect(() => {
     // Initialize session when component mounts
     const initializeApp = async () => {
-      if (hasInitialized.current) {
+      if (hasInitialized.current || mode !== 'chat') {
         return;
       }
       
@@ -181,7 +192,7 @@ const Sidebar = ({ onFramesUpdate, onAvailableStagesChange, onSessionChange, onL
       }
     };
     initializeApp();
-  }, []); // Empty dependency array to run only once
+  }, [mode]); // Add mode dependency
 
   useEffect(() => {
     scrollToBottom();
@@ -820,9 +831,93 @@ const Sidebar = ({ onFramesUpdate, onAvailableStagesChange, onSessionChange, onL
            value.trim() !== '';
   };
 
+  // Render query index list for team-answer and answer modes
+  const renderQueryIndexList = () => {
+    if (mode !== 'team-answer' && mode !== 'answer') {
+      return null;
+    }
+
+    return (
+      <div className="sidebar__query-index-list">
+        <div className="sidebar__header">
+          <button 
+            onClick={() => {
+              // TODO: Implement export functionality
+              console.log('Export clicked for mode:', mode);
+            }}
+            disabled={isLoading || queryIndexes.length === 0}
+            className="sidebar__export-btn"
+            title="Export data"
+          >
+            <img src="/assets/export.svg" alt="Export" className="sidebar__action-icon" />
+          </button>
+          <h3>{mode === 'team-answer' ? 'Team Answers' : 'Final Answers'}</h3>
+          {onRefresh && (
+            <button 
+              onClick={onRefresh}
+              disabled={isLoading}
+              className="sidebar__refresh-btn"
+              title="Refresh data"
+            >
+              {isLoading ? (
+                <span className="sidebar__loading-dots">...</span>
+              ) : (
+                <img src="/assets/reload.svg" alt="Reload" className="sidebar__action-icon" />
+              )}
+            </button>
+          )}
+        </div>
+        
+        <div className="sidebar__content">
+          {isLoading ? (
+            <div className="sidebar__loading">Loading...</div>
+          ) : queryIndexes.length === 0 ? (
+            <div className="sidebar__no-data">
+              No {mode === 'team-answer' ? 'team answers' : 'answers'} found
+            </div>
+          ) : (
+            <div className="sidebar__queries">
+              {queryIndexes.map(index => (
+                <div
+                  key={index}
+                  className={`sidebar__query-item ${queryIndex === index ? 'sidebar__query-item--active' : ''}`}
+                  onClick={() => setQueryIndex(index)}
+                >
+                  <div className="sidebar__query-content">
+                    <div className="sidebar__query-title">Query {index}</div>
+                    <div className="sidebar__query-meta">
+                      {mode === 'team-answer' ? 'Team Answer' : 'Final Answer'}
+                    </div>
+                  </div>
+                  <button
+                    className="sidebar__delete-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      // TODO: Implement delete functionality
+                      console.log('Delete query index:', index);
+                    }}
+                    title={`Delete ${mode === 'team-answer' ? 'team answers' : 'answers'} for Query ${index + 1}`}
+                  >
+                    <img src="/assets/trash-bin.svg" alt="Delete" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="sidebar">
-      <div className="sidebar__header">
+      {/* Render query index list for team-answer and answer modes */}
+      {(mode === 'team-answer' || mode === 'answer') ? (
+        renderQueryIndexList()
+      ) : (
+        <>
+          {/* Original chat sidebar content */}
+          <div className="sidebar__header">
         {/* <button 
           className={`sidebar__action-btn sidebar__delete-btn ${!currentSession || filteredQueries.length === 0 ? 'sidebar__delete-btn--disabled' : ''}`}
           onClick={handleDeleteAllQueries}
@@ -1141,6 +1236,8 @@ const Sidebar = ({ onFramesUpdate, onAvailableStagesChange, onSessionChange, onL
           </div>
         </div>
       </div>
+        </>
+      )}
     </div>
   );
 };

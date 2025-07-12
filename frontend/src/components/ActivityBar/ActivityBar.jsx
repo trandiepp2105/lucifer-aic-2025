@@ -16,10 +16,27 @@ const ActivityBar = ({ onSectionChange, activeSection, onRoundChange, onQueryMod
     setCurrentQueryMode(selectedQueryMode);
   }, [selectedQueryMode]);
 
-  const sections = [
+  const allSections = [
     { id: 'chat', icon: '/assets/chat.svg', title: 'Chat' },
     { id: 'history', icon: '/assets/history.svg', title: 'Chat History' },
+    { id: 'team-answer', icon: '/assets/team.svg', title: 'Team Answer' },
+    { id: 'answer', icon: '/assets/send.svg', title: 'Answer' },
   ];
+
+  // Filter sections based on round - team-answer and answer only for prelims
+  const sections = allSections.filter(section => {
+    if (currentRound === 'final' && (section.id === 'team-answer' || section.id === 'answer')) {
+      return false;
+    }
+    return true;
+  });
+
+  // Auto-switch section when round changes
+  useEffect(() => {
+    if (currentRound === 'final' && (activeSection === 'team-answer' || activeSection === 'answer')) {
+      onSectionChange('chat');
+    }
+  }, [currentRound, activeSection, onSectionChange]);
 
   // Close settings dropdown when clicking outside
   useEffect(() => {

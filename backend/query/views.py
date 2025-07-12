@@ -167,16 +167,9 @@ class QueryListCreateAPIView(APIView):
             List of search results or empty list if error
         """
         try:
-            search_start = time.time()
-            print(f"Starting OCR search for: '{ocr_text}' using {SEARCH_ENGINE}")
-            
             # Sử dụng sync method 
             results = search_service.search_ocr(ocr_text, size=300)
-            
-            search_end = time.time()
-            search_duration = search_end - search_start
-            print(f"{SEARCH_ENGINE} search took {search_duration:.3f} seconds")
-            
+
             return results
             
         except Exception as e:

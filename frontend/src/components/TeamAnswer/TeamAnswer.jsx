@@ -7,11 +7,20 @@ import { TeamAnswerService } from '../../services';
 import { apiConfig } from '../../services/apiConfig';
 import './TeamAnswer.scss';
 
-const TeamAnswer = ({ selectedFrame, isVisible, onToggle, onFrameSelect, onFrameDoubleClick, onSubmit }) => {
+const TeamAnswer = ({ 
+  selectedFrame, 
+  isVisible, 
+  onToggle, 
+  onFrameSelect, 
+  onFrameDoubleClick, 
+  onSubmit,
+  allTeamAnswers = [], // Get from props instead of local state
+  setAllTeamAnswers,  // Setter from parent
+  onRefresh           // Refresh function from parent
+}) => {
   const selectedFrameRef = useRef(null);
   const teamAnswerRef = useRef(null);
   
-  const [allTeamAnswers, setAllTeamAnswers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [deletingFrames, setDeletingFrames] = useState(new Set());
   const [deletingAll, setDeletingAll] = useState(false);
@@ -113,32 +122,10 @@ const TeamAnswer = ({ selectedFrame, isVisible, onToggle, onFrameSelect, onFrame
     }
   };
 
-  // Fetch team answers from server
-  const fetchTeamAnswers = async () => {
-    try {
-      setLoading(true);
-      
-      // Get all team answers without any query params
-      const response = await TeamAnswerService.getTeamAnswers();
-
-      if (response.success) {
-        setAllTeamAnswers(response.data.data || []);
-      } else {
-        console.error('Failed to fetch all team answers:', response.error);
-        toast.error('Failed to load team answers', 500);
-      }
-    } catch (error) {
-      console.error('Error fetching all team answers:', error);
-      toast.error('Error loading team answers', 500);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   // Filter team answers based on current queryIndex and round
   const getFilteredTeamAnswers = useCallback(() => {
-    // Determine query index based on round
-    const currentQueryIndex = round === 'final' ? 0 : (queryIndex || 1);
+    // Use queryIndex directly from AppContext (matches server query_index)
+    const currentQueryIndex = queryIndex;
     const currentRound = round || 'prelims';
     
     const filtered = allTeamAnswers.filter(teamAnswer => {
@@ -170,7 +157,7 @@ const TeamAnswer = ({ selectedFrame, isVisible, onToggle, onFrameSelect, onFrame
       if (response.success) {
         toast.success('Team answer deleted successfully!', 500);
         // Refresh the list
-        fetchTeamAnswers();
+        if (onRefresh) onRefresh();
       } else {
         console.error('Delete failed:', response.error);
         toast.error(response.error || 'Failed to delete team answer', 500);
@@ -200,7 +187,8 @@ const TeamAnswer = ({ selectedFrame, isVisible, onToggle, onFrameSelect, onFrame
 
   // Handle confirmed delete all team answers
   const handleConfirmDeleteAll = async () => {
-    const currentQueryIndex = round === 'final' ? 0 : (queryIndex || 1);
+    // Use queryIndex directly from AppContext (matches server query_index)
+    const currentQueryIndex = queryIndex;
     
     try {
       setDeletingAll(true);
@@ -217,7 +205,7 @@ const TeamAnswer = ({ selectedFrame, isVisible, onToggle, onFrameSelect, onFrame
       if (response.success) {
         toast.success('All team answers deleted successfully!', 500);
         // Refresh the list
-        fetchTeamAnswers();
+        if (onRefresh) onRefresh();
       } else {
         console.error('Delete all failed:', response.error);
         toast.error(response.error || 'Failed to delete all team answers', 500);
@@ -232,10 +220,10 @@ const TeamAnswer = ({ selectedFrame, isVisible, onToggle, onFrameSelect, onFrame
 
   // Fetch team answers when component becomes visible (only once)
   useEffect(() => {
-    if (isVisible) {
-      fetchTeamAnswers();
+    if (isVisible && onRefresh) {
+      onRefresh();
     }
-  }, [isVisible, queryIndex, round]); // Remove fetchTeamAnswers dependency and add queryIndex, round
+  }, [isVisible, queryIndex, round, onRefresh]); // Add onRefresh dependency
 
   // Auto scroll to selected frame when component becomes visible
   useEffect(() => {
@@ -298,7 +286,7 @@ const TeamAnswer = ({ selectedFrame, isVisible, onToggle, onFrameSelect, onFrame
   const teamAnswers = getFilteredTeamAnswers();
   
   // Get current query info for modal message
-  const currentQueryIndex = round === 'final' ? 0 : (queryIndex || 1);
+  const currentQueryIndex = queryIndex;
   const currentRound = round || 'prelims';
 
   return (
@@ -324,7 +312,7 @@ const TeamAnswer = ({ selectedFrame, isVisible, onToggle, onFrameSelect, onFrame
         </div>
         <button 
           className="team-answer__reload"
-          onClick={fetchTeamAnswers}
+          onClick={onRefresh}
           disabled={loading}
           title="Reload team answers"
         >
