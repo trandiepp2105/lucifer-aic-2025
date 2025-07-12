@@ -65,3 +65,18 @@ class Query(models.Model):
 
     def __str__(self):
         return f"Query {self.id} - {self.text[:50] if self.text else 'No text'}"
+
+    def delete_image_file(self):
+        """Delete the associated image file from storage"""
+        if self.image:
+            try:
+                if os.path.isfile(self.image.path):
+                    os.remove(self.image.path)
+                    print(f"Deleted image file: {self.image.path}")
+            except Exception as e:
+                print(f"Error deleting image file {self.image.path}: {e}")
+
+    def delete(self, *args, **kwargs):
+        """Override delete method to remove image file"""
+        self.delete_image_file()
+        super().delete(*args, **kwargs)

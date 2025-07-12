@@ -91,3 +91,21 @@ class QueryUpdateSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError("File is not an image")
         
         return value
+
+    def update(self, instance, validated_data):
+        """Custom update method to handle image file deletion"""
+        # Store old image before updating
+        old_image = instance.image
+        
+        # Check if image is being updated or removed
+        if 'image' in validated_data:
+            new_image = validated_data['image']
+            
+            # If image is being removed (None) or replaced with new image
+            if new_image != old_image:
+                # Delete old image file if it exists
+                if old_image:
+                    instance.delete_image_file()
+        
+        # Perform the update
+        return super().update(instance, validated_data)

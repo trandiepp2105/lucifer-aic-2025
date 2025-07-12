@@ -5,3 +5,6 @@ class QueryConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
     name = 'query'
     verbose_name = 'Query Management'
+
+    def ready(self):
+        import query.signals

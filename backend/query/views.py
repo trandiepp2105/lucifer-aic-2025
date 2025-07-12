@@ -557,7 +557,7 @@ class QuerySessionDetailAPIView(APIView):
         queries = session.queries.all()
         for query in queries:
             if query.image:
-                query.image.delete(save=False)
+                query.delete_image_file()
         
         session.delete()
         
