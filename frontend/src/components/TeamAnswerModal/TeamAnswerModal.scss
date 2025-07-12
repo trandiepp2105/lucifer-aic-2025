@@ -1,0 +1,232 @@
+// TeamAnswerModal.scss
+.team-answer-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10001;
+  padding: 0 20px;
+  backdrop-filter: blur(4px);
+  outline: none; // Remove focus outline for modal container
+  
+  // Ensure modal can receive focus for keyboard events
+  &:focus {
+    outline: none;
+  }
+    overflow-y: auto;
+  &__content {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+    width: 100%;
+    max-width: 450px;
+    max-height: 95vh;
+    overflow-y: auto;
+    animation: modalSlideIn 0.3s ease-out;
+    outline: none;
+    
+    &:focus {
+      outline: none;
+    }
+  }
+
+  &__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px;
+    border-bottom: 1px solid #e5e7eb;
+    background: #f9fafb;
+    border-radius: 12px 12px 0 0;
+  }
+
+  &__title {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #1f2937;
+  }
+
+  &__close {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 8px;
+    color: #6b7280;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    &:hover {
+      background: #f3f4f6;
+      color: #374151;
+    }
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  }
+
+  &__body {
+    padding: 10px;
+  }
+
+  &__frame {
+    margin-bottom: 20px;
+    display: flex;
+    justify-content: center;
+  }
+
+  &__frame-item {
+    max-width: 300px;
+    width: 100%;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+    border-radius: 12px;
+    overflow: hidden;
+    
+    .frame-item__thumbnail {
+      img {
+        width: 100%;
+        object-fit: cover;
+      }
+    }
+
+    .frame-item__info {
+      padding: 10px 14px;
+      background: #f8fafc;
+      border-top: 1px solid #e2e8f0;
+      text-align: center;
+      font-size: 0.8rem;
+      color: #64748b;
+      font-weight: 500;
+    }
+  }
+
+  &__label {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #374151;
+  }
+
+  &__textarea {
+    width: 100%;
+    padding: 12px;
+    border: 2px solid #e5e7eb;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    resize: vertical;
+    min-height: 80px;
+    font-family: inherit;
+    transition: border-color 0.2s ease;
+
+    &:focus {
+      outline: none;
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+
+    &::placeholder {
+      color: #9ca3af;
+    }
+
+    &:disabled {
+      background: #f9fafb;
+      color: #6b7280;
+      cursor: not-allowed;
+    }
+  }
+
+  &__footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    padding: 20px;
+    border-top: 1px solid #e5e7eb;
+    background: #f9fafb;
+    border-radius: 0 0 12px 12px;
+  }
+
+  &__button {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    min-width: 80px;
+
+    &--cancel {
+      background: #f3f4f6;
+      color: #374151;
+
+      &:hover:not(:disabled) {
+        background: #e5e7eb;
+      }
+    }
+
+    &--submit {
+      background: #3b82f6;
+      color: white;
+
+      &:hover:not(:disabled) {
+        background: #2563eb;
+      }
+
+      &:disabled {
+        background: #9ca3af;
+        cursor: not-allowed;
+      }
+    }
+
+    &:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+  }
+
+  // Responsive design
+  @media (max-width: 768px) {
+    &__content {
+      width: 95%;
+      margin: 1rem;
+    }
+
+    &__header,
+    &__body,
+    &__footer {
+      padding: 1rem;
+    }
+
+    &__footer {
+      flex-direction: column;
+      gap: 0.5rem;
+
+      button {
+        width: 100%;
+      }
+    }
+  }
+}
+
+@keyframes modalSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}

@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
+import { TeamAnswerService } from '../services/TeamAnswerService';
 
 // Function to get initial state from URL
 const getInitialStateFromURL = () => {
@@ -83,6 +84,7 @@ const ActionTypes = {
   SET_QUERY_INDEX: 'SET_QUERY_INDEX',
   UPDATE_FROM_URL: 'UPDATE_FROM_URL',
   RESET_STATE: 'RESET_STATE',
+  AUTO_DETECT_QUERY_MODE: 'AUTO_DETECT_QUERY_MODE',
 };
 
 // Reducer
@@ -106,6 +108,8 @@ const appReducer = (state, action) => {
       return { ...state, section: action.payload };
     case ActionTypes.SET_QUERY_INDEX:
       return { ...state, queryIndex: action.payload };
+    case ActionTypes.AUTO_DETECT_QUERY_MODE:
+      return { ...state, queryMode: action.payload };
     case ActionTypes.UPDATE_FROM_URL:
       return { ...state, ...action.payload };
     case ActionTypes.RESET_STATE:
@@ -155,6 +159,14 @@ export const AppProvider = ({ children }) => {
   // Load initial state from URL - REMOVED since we read URL in initialState
   // This prevents race condition between default state and URL params
   
+  // Remove auto-detect from here - will be handled in HomePage
+  // useEffect(() => {
+  //   const detectQueryMode = () => {
+  //     // Auto-detect logic moved to HomePage
+  //   };
+  //   detectQueryMode();
+  // }, [state.queryIndex, state.round]);
+
   // Update URL when state changes - with proper dependencies
   useEffect(() => {
     updateUrlState({
@@ -180,9 +192,39 @@ export const AppProvider = ({ children }) => {
     resetState: (keepState = {}) => dispatch({ type: ActionTypes.RESET_STATE, payload: keepState }),
   };
 
+  // Utility function to validate queryMode consistency (will use allTeamAnswers from caller)
+  const validateQueryModeConsistency = (allTeamAnswers, queryIndex, round, proposedMode) => {
+    try {
+      // Filter team answers for current queryIndex and round
+      const relevantAnswers = allTeamAnswers.filter(answer => 
+        answer.query_index === queryIndex && answer.round === round
+      );
+      
+      if (relevantAnswers.length > 0) {
+        // Check existing team answers
+        const existingAnswer = relevantAnswers[0];
+        const existingMode = (existingAnswer.qa && existingAnswer.qa.trim() !== '') ? 'qa' : 'kis';
+        
+        if (existingMode !== proposedMode) {
+          return {
+            valid: false,
+            existingMode,
+            message: `Query index ${queryIndex} already has team answers with type "${existingMode}". Cannot create answer with type "${proposedMode}".`
+          };
+        }
+      }
+      
+      return { valid: true };
+    } catch (error) {
+      console.error('Error validating queryMode consistency:', error);
+      return { valid: true }; // Allow if we can't validate
+    }
+  };
+
   const value = {
     ...state,
     ...actions,
+    validateQueryModeConsistency,
   };
 
   return (

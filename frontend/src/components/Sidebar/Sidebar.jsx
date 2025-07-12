@@ -1,9 +1,12 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { translatorService } from '../../services/TranslatorService';
 import { QueryService, getErrorMessage } from '../../services';
+import { TeamAnswerService, AnswerService } from '../../services';
 import { useToast } from '../Toast/ToastProvider';
 import { useApp } from '../../contexts/AppContext';
 import { getSessionIdFromUrl, getStageFromUrl, getViewModeFromUrl, updateUrlParams } from '../../utils/urlParams';
+import { exportTeamAnswersToZip, exportAnswersToZip } from '../../utils/exportUtils';
+import ConfirmationModal from '../ConfirmationModal';
 import './Sidebar.scss';
 
 const Sidebar = ({ 
@@ -14,7 +17,9 @@ const Sidebar = ({
   mode = 'chat', // Default mode is chat
   queryIndexes = [], // For team-answer and answer modes
   isLoading = false, // Loading state for data
-  onRefresh = null // Refresh function for data
+  onRefresh = null, // Refresh function for data
+  allTeamAnswers = [], // All team answers data for export
+  allAnswers = [] // All answers data for export
 }) => {
   const { stage, viewMode, round, queryIndex, setStage, setViewMode, setQueryIndex } = useApp();
   const toast = useToast();
@@ -30,6 +35,9 @@ const Sidebar = ({
   const [uploadedImageFile, setUploadedImageFile] = useState(null);
   const [isRecording, setIsRecording] = useState(false);
   const [isTranslating, setIsTranslating] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null); // { queryIndex, mode }
+  const [isDeleting, setIsDeleting] = useState(false);
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
   const textareaRef = useRef(null);
@@ -832,6 +840,96 @@ const Sidebar = ({
   };
 
   // Render query index list for team-answer and answer modes
+  // Handle export functionality
+  const handleExport = async () => {
+    try {
+      if (mode === 'team-answer') {
+        if (!allTeamAnswers || allTeamAnswers.length === 0) {
+          toast.warning('No team answers to export', 3000);
+          return;
+        }
+        
+        toast.info('Generating export file...', 1000);
+        await exportTeamAnswersToZip(allTeamAnswers, round);
+        toast.success('Export completed successfully!', 2000);
+        
+      } else if (mode === 'answer') {
+        if (!allAnswers || allAnswers.length === 0) {
+          toast.warning('No answers to export', 3000);
+          return;
+        }
+        
+        toast.info('Generating export file...', 1000);
+        await exportAnswersToZip(allAnswers, round);
+        toast.success('Export completed successfully!', 2000);
+      }
+    } catch (error) {
+      console.error('Export error:', error);
+      toast.error(error.message || 'Failed to export data', 4000);
+    }
+  };
+
+  // Handle delete query index items
+  const handleDeleteQueryIndex = (queryIndex, mode) => {
+    setDeleteTarget({ queryIndex, mode });
+    setShowDeleteModal(true);
+  };
+
+  const confirmDeleteQueryIndex = async () => {
+    if (!deleteTarget) return;
+    
+    const { queryIndex: targetQueryIndex, mode: targetMode } = deleteTarget;
+    
+    try {
+      setIsDeleting(true);
+      toast.info(`Deleting ${targetMode === 'team-answer' ? 'team answers' : 'answers'} for query ${targetQueryIndex}...`, 1000);
+      
+      if (targetMode === 'team-answer') {
+        // Delete all team answers for this query index
+        const response = await TeamAnswerService.deleteAllTeamAnswers({
+          query_index: targetQueryIndex,
+          round: round || 'prelims'
+        });
+        
+        if (response.success) {
+          toast.success(`All team answers for query ${targetQueryIndex} deleted successfully!`, 2000);
+        } else {
+          toast.error(response.error || `Failed to delete team answers for query ${targetQueryIndex}`, 4000);
+        }
+      } else if (targetMode === 'answer') {
+        // Delete all answers for this query index
+        const response = await AnswerService.deleteAllAnswers({
+          query_index: targetQueryIndex,
+          round: round || 'prelims'
+        });
+        
+        if (response.success) {
+          toast.success(`All answers for query ${targetQueryIndex} deleted successfully!`, 2000);
+        } else {
+          toast.error(response.error || `Failed to delete answers for query ${targetQueryIndex}`, 4000);
+        }
+      }
+      
+      // Refresh data after deletion
+      if (onRefresh) {
+        await onRefresh();
+      }
+      
+    } catch (error) {
+      console.error('Error deleting items:', error);
+      toast.error(`Failed to delete ${targetMode === 'team-answer' ? 'team answers' : 'answers'}`, 4000);
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteModal(false);
+      setDeleteTarget(null);
+    }
+  };
+
+  const cancelDeleteQueryIndex = () => {
+    setShowDeleteModal(false);
+    setDeleteTarget(null);
+  };
+
   const renderQueryIndexList = () => {
     if (mode !== 'team-answer' && mode !== 'answer') {
       return null;
@@ -841,10 +939,7 @@ const Sidebar = ({
       <div className="sidebar__query-index-list">
         <div className="sidebar__header">
           <button 
-            onClick={() => {
-              // TODO: Implement export functionality
-              console.log('Export clicked for mode:', mode);
-            }}
+            onClick={handleExport}
             disabled={isLoading || queryIndexes.length === 0}
             className="sidebar__export-btn"
             title="Export data"
@@ -881,7 +976,10 @@ const Sidebar = ({
                 <div
                   key={index}
                   className={`sidebar__query-item ${queryIndex === index ? 'sidebar__query-item--active' : ''}`}
-                  onClick={() => setQueryIndex(index)}
+                  onClick={() => {
+                    console.log('DEBUG Sidebar: Clicking query index:', index);
+                    setQueryIndex(index);
+                  }}
                 >
                   <div className="sidebar__query-content">
                     <div className="sidebar__query-title">Query {index}</div>
@@ -893,10 +991,9 @@ const Sidebar = ({
                     className="sidebar__delete-btn"
                     onClick={(e) => {
                       e.stopPropagation();
-                      // TODO: Implement delete functionality
-                      console.log('Delete query index:', index);
+                      handleDeleteQueryIndex(index, mode);
                     }}
-                    title={`Delete ${mode === 'team-answer' ? 'team answers' : 'answers'} for Query ${index + 1}`}
+                    title={`Delete ${mode === 'team-answer' ? 'team answers' : 'answers'} for Query ${index}`}
                   >
                     <img src="/assets/trash-bin.svg" alt="Delete" />
                   </button>
@@ -964,6 +1061,7 @@ const Sidebar = ({
                 if (/^\d+$/.test(value)) {
                   const numValue = parseInt(value, 10);
                   if (numValue >= 1 && numValue <= 999) {
+                    console.log('DEBUG Sidebar: Setting queryIndex from input:', numValue);
                     setQueryIndex(numValue);
                   }
                 }
@@ -971,6 +1069,7 @@ const Sidebar = ({
               onBlur={(e) => {
                 // If empty when focus is lost, set to 1
                 if (e.target.value === '') {
+                  console.log('DEBUG Sidebar: Setting queryIndex to 1 on blur');
                   setQueryIndex(1);
                 }
               }}
@@ -1238,6 +1337,18 @@ const Sidebar = ({
       </div>
         </>
       )}
+      
+      {/* Delete Confirmation Modal */}
+      <ConfirmationModal
+        isOpen={showDeleteModal}
+        onClose={cancelDeleteQueryIndex}
+        onConfirm={confirmDeleteQueryIndex}
+        title={`Delete ${deleteTarget?.mode === 'team-answer' ? 'Team Answers' : 'Final Answers'}`}
+        message={`Are you sure you want to delete all ${deleteTarget?.mode === 'team-answer' ? 'team answers' : 'final answers'} for Query ${deleteTarget?.queryIndex} in ${round || 'prelims'} round? This action cannot be undone.`}
+        confirmText="Delete All"
+        cancelText="Cancel"
+        isLoading={isDeleting}
+      />
     </div>
   );
 };

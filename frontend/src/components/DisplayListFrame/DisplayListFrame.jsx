@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import VideoPlayer from '../VideoPlayer/VideoPlayer';
 import FrameItem from '../FrameItem/FrameItem';
 import SubmissionModal from '../SubmissionModal/SubmissionModal';
+import TeamAnswerModal from '../TeamAnswerModal/TeamAnswerModal';
 import { useApp } from '../../contexts/AppContext';
 import { useToast } from '../Toast/ToastProvider';
 import { TeamAnswerService } from '../../services/TeamAnswerService';
@@ -18,15 +19,32 @@ const DisplayListFrame = ({
   availableStages = 1,
   queryMode = 'kis', // Add queryMode prop
   onSend, // Add onSend prop
-  sendingFrames = new Set() // Add sendingFrames prop
+  sendingFrames = new Set(), // Add sendingFrames prop
+  allTeamAnswers = [] // Add allTeamAnswers prop for validation
 }) => {
   const [isVideoPlayerOpen, setIsVideoPlayerOpen] = useState(false);
   const [isSubmissionModalOpen, setIsSubmissionModalOpen] = useState(false);
+  const [isTeamAnswerModalOpen, setIsTeamAnswerModalOpen] = useState(false);
   const [frameToSubmit, setFrameToSubmit] = useState(null);
   
+  // Debug modal states
+  useEffect(() => {
+    console.log('DEBUG: Modal states changed:', {
+      isVideoPlayerOpen,
+      isSubmissionModalOpen,
+      isTeamAnswerModalOpen,
+      frameToSubmit: frameToSubmit ? `${frameToSubmit.video_name}-${frameToSubmit.frame_index}` : null
+    });
+  }, [isVideoPlayerOpen, isSubmissionModalOpen, isTeamAnswerModalOpen, frameToSubmit]);
+  
   // Get app context for round and queryIndex
-  const { round, queryIndex } = useApp();
+  const { round, queryIndex, validateQueryModeConsistency } = useApp();
   const toast = useToast();
+  
+  // Debug queryMode prop
+  useEffect(() => {
+    console.log('DEBUG DisplayListFrame: queryMode prop received:', queryMode);
+  }, [queryMode]);
   
   // Ref for content container to control scrolling (where the actual scrollbar is)
   const contentRef = useRef(null);
@@ -60,10 +78,16 @@ const DisplayListFrame = ({
   };
 
   const handleSendFrame = (frame) => {
+    console.log('DEBUG handleSendFrame called with frame:', frame);
+    console.log('DEBUG handleSendFrame - onSend prop:', onSend);
+    console.log('DEBUG handleSendFrame - queryMode:', queryMode);
+    
     // Use onSend prop if available, otherwise use internal implementation
     if (onSend) {
+      console.log('DEBUG: Using onSend prop');
       onSend(frame);
     } else {
+      console.log('DEBUG: Using internal implementation');
       // Fallback to internal implementation for backward compatibility
       handleSendFrameInternal(frame);
     }
@@ -72,15 +96,39 @@ const DisplayListFrame = ({
   const handleSendFrameInternal = async (frame) => {
     const frameId = `${frame.video_name}-${frame.frame_index}`;
     
+    console.log('DEBUG: handleSendFrameInternal called with:', {
+      frame,
+      queryMode,
+      frameId
+    });
+    
+    // If queryMode is 'qa', open TeamAnswerModal for QA input
+    if (queryMode === 'qa') {
+      console.log('DEBUG: Opening TeamAnswerModal for QA mode');
+      setFrameToSubmit(frame);
+      setIsTeamAnswerModalOpen(true);
+      return;
+    }
+    
+    console.log('DEBUG: Sending frame directly (KIS mode)');
+    
+    // Validate queryMode consistency before sending
+    const validation = validateQueryModeConsistency(allTeamAnswers, queryIndex, round, 'kis');
+    if (!validation.valid) {
+      const modeText = validation.existingMode === 'qa' ? 'Q&A' : 'KIS';
+      toast.error(`Query index ${queryIndex} already has ${modeText} answers. Cannot create KIS answer.`, 2000);
+      return;
+    }
+    
+    // For 'kis' mode, send directly without QA text
     try {
-      
       // Prepare team answer data
       const teamAnswerData = {
         video_name: frame.video_name,
         frame_index: frame.frame_index,
         url: frame.url,
         round: round,
-        query_index: round === 'final' ? 0 : (queryIndex || 1) // Use 0 for final round, otherwise use queryIndex
+        query_index: queryIndex // Use queryIndex directly from AppContext
       };
 
       // Call API to create team answer
@@ -98,6 +146,53 @@ const DisplayListFrame = ({
       }
     } catch (error) {
       console.error('Error sending frame:', error);
+      toast.error('An error occurred while sending frame', 4000);
+    }
+  };
+
+  const handleTeamAnswerModalClose = () => {
+    setIsTeamAnswerModalOpen(false);
+    setFrameToSubmit(null);
+  };
+
+  const handleTeamAnswerComplete = async (qaData) => {
+    if (!frameToSubmit) return;
+    
+    // Validate queryMode consistency before proceeding
+    const qaValidation = validateQueryModeConsistency(allTeamAnswers, queryIndex, round, 'qa');
+    if (!qaValidation.valid) {
+      const modeText = qaValidation.existingMode === 'qa' ? 'Q&A' : 'KIS';
+      toast.error(`Query index ${queryIndex} already has ${modeText} answers. Cannot create Q&A answer.`, 2000);
+      return;
+    }
+    
+    try {
+      // Prepare team answer data with QA text
+      const teamAnswerData = {
+        video_name: frameToSubmit.video_name,
+        frame_index: frameToSubmit.frame_index,
+        url: frameToSubmit.url,
+        round: round,
+        query_index: queryIndex,
+        qa: qaData.qaText // Add QA text from modal
+      };
+
+      // Call API to create team answer
+      const result = await TeamAnswerService.createTeamAnswer(teamAnswerData);
+      
+      if (result.success) {
+        toast.success('Frame sent successfully!', 500);
+        handleTeamAnswerModalClose();
+      } else {
+        // Handle different error types
+        if (result.error && result.error.includes('already exists')) {
+          toast.warning('This frame has already been sent for this query', 3000);
+        } else {
+          toast.error(result.error || 'Failed to send frame', 4000);
+        }
+      }
+    } catch (error) {
+      console.error('Error sending frame with QA:', error);
       toast.error('An error occurred while sending frame', 4000);
     }
   };
@@ -299,6 +394,14 @@ const DisplayListFrame = ({
         onSubmit={handleSubmissionComplete}
         frame={frameToSubmit}
         queryMode={queryMode}
+      />
+
+      <TeamAnswerModal
+        isOpen={isTeamAnswerModalOpen}
+        onClose={handleTeamAnswerModalClose}
+        onSubmit={handleTeamAnswerComplete}
+        frame={frameToSubmit}
+        allTeamAnswers={allTeamAnswers}
       />
     </div>
   );

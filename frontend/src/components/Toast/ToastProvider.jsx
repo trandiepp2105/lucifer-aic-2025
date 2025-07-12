@@ -13,12 +13,17 @@ export const useToast = () => {
 
 export const ToastProvider = ({ children }) => {
   const [toasts, setToasts] = useState([]);
+  const MAX_TOASTS = 3;
 
   const showToast = useCallback((message, type = 'info', duration = 3000) => {
     const id = Date.now();
     const newToast = { id, message, type, duration };
     
-    setToasts(prev => [...prev, newToast]);
+    setToasts(prev => {
+      const newToasts = [...prev, newToast];
+      // Keep only the last MAX_TOASTS toasts
+      return newToasts.slice(-MAX_TOASTS);
+    });
   }, []);
 
   const removeToast = useCallback((id) => {
@@ -37,16 +42,23 @@ export const ToastProvider = ({ children }) => {
     <ToastContext.Provider value={value}>
       {children}
       <div className="toast-container">
-        {toasts.map((toast, index) => (
-          <Toast
-            key={toast.id}
-            message={toast.message}
-            type={toast.type}
-            duration={toast.duration}
-            onClose={() => removeToast(toast.id)}
-            style={{ top: `${20 + index * 70}px` }}
-          />
-        ))}
+        {toasts.map((toast, index) => {
+          // Calculate position from bottom
+          // Newest toast (highest index) should be at bottom
+          const fromBottom = toasts.length - 1 - index;
+          const bottomOffset = 20 + fromBottom * 70; // 70px spacing between toasts
+          
+          return (
+            <Toast
+              key={toast.id}
+              message={toast.message}
+              type={toast.type}
+              duration={toast.duration}
+              onClose={() => removeToast(toast.id)}
+              style={{ bottom: `${bottomOffset}px` }}
+            />
+          );
+        })}
       </div>
     </ToastContext.Provider>
   );

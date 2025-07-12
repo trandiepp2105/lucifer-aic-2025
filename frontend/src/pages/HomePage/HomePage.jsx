@@ -21,6 +21,7 @@ const HomePage = () => {
     viewMode,
     stage,
     section,
+    queryIndex, // Add queryIndex
     setSession,
     setQueryMode,
     setRound,
@@ -31,8 +32,14 @@ const HomePage = () => {
 
   const toast = useToast();
 
+  // Debug queryMode
+  useEffect(() => {
+    console.log('DEBUG HomePage: Current queryMode:', queryMode);
+  }, [queryMode]);
+
   const [showNeighboringFrames, setShowNeighboringFrames] = useState(false); // Mặc định ẩn
   const [showTeamAnswer, setShowTeamAnswer] = useState(true); // Show team answer panel by default
+  const [showAnswer, setShowAnswer] = useState(true); // Show answer panel by default
   const [frames, setFrames] = useState([]); // Add frames state
   const [availableStages, setAvailableStages] = useState(1); // Add available stages state
   const [sendingFrames, setSendingFrames] = useState(new Set()); // Track sending frames
@@ -151,6 +158,30 @@ const HomePage = () => {
     return queryIndexes.sort((a, b) => a - b);
   }, []);
 
+  // Get query indexes for team answers (exclude index 0)
+  const getTeamAnswerQueryIndexes = useCallback((data) => {
+    const queryIndexes = [...new Set(data.map(item => item.query_index))];
+    // Filter out query index 0 for team answers
+    const filtered = queryIndexes.filter(index => index !== 0);
+    return filtered.sort((a, b) => a - b);
+  }, []);
+
+  // Get query indexes for answers based on round
+  const getAnswerQueryIndexes = useCallback((data, currentRound) => {
+    const queryIndexes = [...new Set(data.map(item => item.query_index))];
+    let filtered;
+    
+    if (currentRound === 'final') {
+      // For final round, only show query index 0
+      filtered = queryIndexes.filter(index => index === 0);
+    } else {
+      // For prelims round, only show query indexes other than 0
+      filtered = queryIndexes.filter(index => index !== 0);
+    }
+    
+    return filtered.sort((a, b) => a - b);
+  }, []);
+
   const handleRoundChange = useCallback((round) => {
     setRound(round);
     // TODO: Add logic to handle round change (e.g., update API endpoints, reload data)
@@ -180,12 +211,20 @@ const HomePage = () => {
     setShowTeamAnswer(!showTeamAnswer);
   };
 
+  const toggleAnswer = () => {
+    setShowAnswer(!showAnswer);
+  };
+
   const handleSubmitFrame = (frame) => {
     setFrameToSubmit(frame);
     setIsSubmissionModalOpen(true);
   };
 
   const handleSendFrame = async (frame) => {
+    console.log('DEBUG HomePage handleSendFrame called with:', { frame, queryMode });
+    
+    // If queryMode is 'qa', delegate to DisplayListFrame internal logic
+    // This shouldn't happen if we remove onSend prop and let DisplayListFrame handle it
     const frameId = `${frame.video_name}-${frame.frame_index}`;
     
     // Check if already sending
@@ -202,7 +241,7 @@ const HomePage = () => {
         video_name: frame.video_name,
         frame_index: frame.frame_index,
         url: frame.url,
-        query_index: round === 'final' ? 0 : (stage || 1), // Use 0 for final round, otherwise use current stage
+        query_index: queryIndex, // Use queryIndex directly from AppContext
         round: round || 'prelims', // Use current round
         qa: '' // Can be extended later if needed
       };
@@ -261,16 +300,20 @@ const HomePage = () => {
       case 'team-answer':
         return <Sidebar 
           mode="team-answer"
-          queryIndexes={getUniqueQueryIndexes(allTeamAnswers)}
+          queryIndexes={getTeamAnswerQueryIndexes(allTeamAnswers)}
           isLoading={isLoadingTeamAnswers}
           onRefresh={fetchAllTeamAnswers}
+          allTeamAnswers={allTeamAnswers}
+          allAnswers={allAnswers}
         />;
       case 'answer':
         return <Sidebar 
           mode="answer"
-          queryIndexes={getUniqueQueryIndexes(allAnswers)}
+          queryIndexes={getAnswerQueryIndexes(allAnswers, round)}
           isLoading={isLoadingAnswers}
           onRefresh={fetchAllAnswers}
+          allTeamAnswers={allTeamAnswers}
+          allAnswers={allAnswers}
         />;
       default:
         return <Sidebar 
@@ -285,6 +328,38 @@ const HomePage = () => {
         />;
     }
   };
+
+  // Auto-detect queryMode when queryIndex changes based on existing team answers
+  useEffect(() => {
+    const detectQueryMode = () => {
+      console.log('DEBUG HomePage: Auto-detect triggered for queryIndex:', queryIndex, 'round:', round);
+      if (queryIndex === null || queryIndex === undefined) return;
+      
+      // Filter team answers for current queryIndex and round
+      const relevantAnswers = allTeamAnswers.filter(answer => 
+        answer.query_index === queryIndex && answer.round === round
+      );
+      
+      console.log('DEBUG HomePage: Relevant team answers for queryIndex', queryIndex, ':', relevantAnswers);
+      
+      if (relevantAnswers.length > 0) {
+        // Check the first team answer to determine the type
+        const firstAnswer = relevantAnswers[0];
+        const detectedMode = (firstAnswer.qa && firstAnswer.qa.trim() !== '') ? 'qa' : 'kis';
+        
+        console.log('DEBUG HomePage: Detected mode:', detectedMode, 'current mode:', queryMode);
+        // Only update if different from current mode
+        if (detectedMode !== queryMode) {
+          console.log(`Auto-detected queryMode: ${detectedMode} for queryIndex: ${queryIndex}`);
+          setQueryMode(detectedMode);
+        }
+      } else {
+        console.log('DEBUG HomePage: No team answers found for queryIndex', queryIndex);
+      }
+    };
+
+    detectQueryMode();
+  }, [queryIndex, round, allTeamAnswers, queryMode, setQueryMode]); // Depend on allTeamAnswers
 
   return (
     <div className="home-page">
@@ -308,8 +383,8 @@ const HomePage = () => {
           viewMode={viewMode}
           availableStages={availableStages}
           queryMode={queryMode}
-          onSend={handleSendFrame}
           sendingFrames={sendingFrames}
+          allTeamAnswers={allTeamAnswers}
         />
         {/* <NeighboringFrames 
           selectedFrame={selectedFrame}
@@ -337,11 +412,13 @@ const HomePage = () => {
         )}
         {section === 'answer' && (
           <Answer
+            selectedFrame={selectedFrame}
+            isVisible={showAnswer}
+            onToggle={toggleAnswer}
+            onFrameSelect={handleFrameSelect}
+            onFrameDoubleClick={handleFrameDoubleClick}
             allAnswers={allAnswers}
-            setAllAnswers={setAllAnswers}
-            refreshAnswers={fetchAllAnswers}
-            round={round}
-            isVisible={true}
+            onRefresh={fetchAllAnswers}
           />
         )}
         {(section === 'chat' || section === 'history') && (
@@ -365,7 +442,6 @@ const HomePage = () => {
         currentFrame={selectedFrame}
         onFrameSelect={handleFrameSelect}
         onSubmit={handleSubmitFrame}
-        onSend={handleSendFrame}
         queryMode={queryMode}
         sendingFrames={sendingFrames}
       />

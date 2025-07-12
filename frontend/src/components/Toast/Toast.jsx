@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './Toast.scss';
 
-const Toast = ({ message, type = 'info', duration = 3000, onClose }) => {
+const Toast = ({ message, type = 'info', duration = 3000, onClose, style }) => {
   const [isVisible, setIsVisible] = useState(true);
 
   useEffect(() => {
@@ -18,7 +18,10 @@ const Toast = ({ message, type = 'info', duration = 3000, onClose }) => {
   if (!isVisible) return null;
 
   return (
-    <div className={`toast toast--${type} ${isVisible ? 'toast--visible' : ''}`}>
+    <div 
+      className={`toast toast--${type} ${isVisible ? 'toast--visible' : ''}`}
+      style={style}
+    >
       <div className="toast__content">
         <span className="toast__message">{message}</span>
         <button 

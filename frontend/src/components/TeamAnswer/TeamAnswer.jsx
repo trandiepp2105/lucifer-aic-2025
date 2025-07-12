@@ -149,9 +149,6 @@ const TeamAnswer = ({
       // Add frame to deleting set
       setDeletingFrames(prev => new Set(prev).add(frameId));
       
-      // Show loading toast
-      toast.info('Deleting team answer...', 500);
-      
       const response = await TeamAnswerService.deleteTeamAnswer(teamAnswer.id);
       
       if (response.success) {

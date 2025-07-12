@@ -23,17 +23,17 @@ const ActivityBar = ({ onSectionChange, activeSection, onRoundChange, onQueryMod
     { id: 'answer', icon: '/assets/send.svg', title: 'Answer' },
   ];
 
-  // Filter sections based on round - team-answer and answer only for prelims
+  // Filter sections based on round - only team-answer is hidden for final round
   const sections = allSections.filter(section => {
-    if (currentRound === 'final' && (section.id === 'team-answer' || section.id === 'answer')) {
+    if (currentRound === 'final' && section.id === 'team-answer') {
       return false;
     }
     return true;
   });
 
-  // Auto-switch section when round changes
+  // Auto-switch section when round changes - only switch from team-answer when round becomes final
   useEffect(() => {
-    if (currentRound === 'final' && (activeSection === 'team-answer' || activeSection === 'answer')) {
+    if (currentRound === 'final' && activeSection === 'team-answer') {
       onSectionChange('chat');
     }
   }, [currentRound, activeSection, onSectionChange]);

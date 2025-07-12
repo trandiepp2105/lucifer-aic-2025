@@ -191,6 +191,50 @@ class AnswerServiceClass {
       return handleApiError(error);
     }
   }
+
+  /**
+   * Delete all answers with optional filtering
+   * @param {Object} params - Filter parameters
+   * @param {string} [params.round] - Filter by round
+   * @param {number} [params.query_index] - Filter by query index
+   * @returns {Promise<Object>} Response with deletion status
+   */
+  async deleteAllAnswers(params = {}) {
+    try {
+      const queryParams = new URLSearchParams();
+      
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null) {
+          queryParams.append(key, value);
+        }
+      });
+
+      const response = await fetch(`${this.baseURL}bulk-delete/?${queryParams}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        return {
+          success: false,
+          error: data.detail || data.error || `HTTP ${response.status}`,
+          status: response.status
+        };
+      }
+
+      return { 
+        success: true, 
+        message: data.message || 'Answers deleted successfully',
+        deleted_count: data.deleted_count || 0
+      };
+    } catch (error) {
+      return handleApiError(error);
+    }
+  }
 }
 
 export const AnswerService = new AnswerServiceClass();

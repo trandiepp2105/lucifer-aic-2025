@@ -1,6 +1,6 @@
 .toast {
   position: fixed;
-  top: 20px;
+  bottom: 20px;
   right: 20px;
   z-index: 1000;
   min-width: 300px;
@@ -11,12 +11,12 @@
   background: white;
   border: 1px solid #e9ecef;
   opacity: 0;
-  transform: translateX(100%);
+  transform: translateY(100%);
   transition: all 0.3s ease;
 
   &--visible {
     opacity: 1;
-    transform: translateX(0);
+    transform: translateY(0);
   }
 
   &--success {
@@ -76,6 +76,7 @@
   .toast {
     right: 10px;
     left: 10px;
+    bottom: 10px;
     min-width: auto;
     max-width: none;
   }
