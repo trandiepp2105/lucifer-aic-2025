@@ -34,6 +34,7 @@ const Sidebar = ({
   const [speechText, setSpeechText] = useState('');
   const [uploadedImage, setUploadedImage] = useState(null);
   const [uploadedImageFile, setUploadedImageFile] = useState(null);
+  const [imageRemoved, setImageRemoved] = useState(false); // Track if user explicitly removed image
   const [isRecording, setIsRecording] = useState(false);
   const [isTranslating, setIsTranslating] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -276,10 +277,12 @@ const Sidebar = ({
       // Handle image if exists
       if (hasValidValue(currentStageQuery.image)) {
         setUploadedImage(currentStageQuery.image);
+        setImageRemoved(false); // Reset image removed flag when loading existing query
         // Note: We don't set uploadedImageFile as it's for new uploads
       } else {
         setUploadedImage(null);
         setUploadedImageFile(null);
+        setImageRemoved(false); // Reset flag when no existing image
       }
 
       // Note: Frames will be loaded automatically when loadQueries is called
@@ -290,6 +293,7 @@ const Sidebar = ({
       setSpeechText('');
       setUploadedImage(null);
       setUploadedImageFile(null);
+      setImageRemoved(false); // Reset flag for new query
       
       // Reset file input
       if (fileInputRef.current) {
@@ -318,6 +322,17 @@ const Sidebar = ({
   // Keyboard shortcuts for translation
   useEffect(() => {
     const handleKeyDown = (e) => {
+      // Only handle keyboard events if we're in chat mode and no modals are open
+      if (mode !== 'chat') return;
+      
+      // Check if any modal is open by looking for modal elements that are actually visible
+      const modals = document.querySelectorAll('.team-answer-modal, .submission-modal, .confirmation-modal');
+      if (modals.length > 0) {
+        // If any modal exists in DOM (since they're conditionally rendered), don't handle keyboard events
+        console.log('🚫 Sidebar: Modal detected, ignoring keyboard event');
+        return;
+      }
+      
       // Ctrl + Delete: Delete current stage query
       if (e.ctrlKey && e.key === 'Delete') {
         e.preventDefault();
@@ -360,10 +375,17 @@ const Sidebar = ({
       }
     };
 
-    // Listen on document level to catch all keyboard events
-    document.addEventListener('keydown', handleKeyDown, true);
-    return () => document.removeEventListener('keydown', handleKeyDown, true);
-  }, [currentInputIndex, ocrText, speechText, inputMessage, uploadedImage]);
+    // Listen on document level to catch all keyboard events only in chat mode
+    if (mode === 'chat') {
+      document.addEventListener('keydown', handleKeyDown, true);
+    }
+    
+    return () => {
+      if (mode === 'chat') {
+        document.removeEventListener('keydown', handleKeyDown, true);
+      }
+    };
+  }, [mode, currentInputIndex, ocrText, speechText, inputMessage, uploadedImage]);
 
   // Navigation function for input fields
   const navigateInputs = (direction) => {
@@ -414,7 +436,7 @@ const Sidebar = ({
         text: inputMessage.trim() || null,
         ocr: ocrText.trim() || null,
         speech: speechText.trim() || null,
-        image: uploadedImageFile || null,
+        image: uploadedImageFile || (imageRemoved ? null : undefined), // Send null if explicitly removed, undefined if unchanged
       };
 
       let response;
@@ -435,6 +457,7 @@ const Sidebar = ({
         setSpeechText('');
         setUploadedImage(null);
         setUploadedImageFile(null);
+        setImageRemoved(false); // Reset image removed flag after successful submission
 
         // Reset file input
         if (fileInputRef.current) {
@@ -522,6 +545,14 @@ const Sidebar = ({
   };
 
   const handleKeyPress = (e) => {
+    // Only handle if no modals are open
+    const modals = document.querySelectorAll('.team-answer-modal, .submission-modal, .confirmation-modal');
+    if (modals.length > 0) {
+      // If any modal exists in DOM (since they're conditionally rendered), don't handle keyboard events
+      console.log('🚫 Sidebar: Modal detected in handleKeyPress, ignoring keyboard event');
+      return;
+    }
+    
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
@@ -532,6 +563,7 @@ const Sidebar = ({
     const file = e.target.files[0];
     if (file) {
       setUploadedImageFile(file);
+      setImageRemoved(false); // Reset flag when new image is uploaded
       const reader = new FileReader();
       reader.onload = (e) => {
         setUploadedImage(e.target.result);
@@ -543,6 +575,7 @@ const Sidebar = ({
   const handleRemoveImage = () => {
     setUploadedImage(null);
     setUploadedImageFile(null);
+    setImageRemoved(true); // Mark that user explicitly removed the image
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -554,6 +587,7 @@ const Sidebar = ({
       if (item.type.indexOf('image') !== -1) {
         const file = item.getAsFile();
         setUploadedImageFile(file);
+        setImageRemoved(false); // Reset flag when image is pasted
         const reader = new FileReader();
         reader.onload = (e) => {
           setUploadedImage(e.target.result);
@@ -562,6 +596,58 @@ const Sidebar = ({
         e.preventDefault();
         break;
       }
+    }
+  };
+
+  // Handle drop events for drag & drop from frame items
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  };
+
+  const handleDragEnter = (e) => {
+    e.preventDefault();
+    // Add visual feedback for drop zone
+    e.currentTarget.classList.add('sidebar__drop-zone--active');
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    // Remove visual feedback only if leaving the drop zone completely
+    if (!e.currentTarget.contains(e.relatedTarget)) {
+      e.currentTarget.classList.remove('sidebar__drop-zone--active');
+    }
+  };
+
+  const handleDrop = async (e) => {
+    e.preventDefault();
+    e.currentTarget.classList.remove('sidebar__drop-zone--active');
+    
+    try {
+      const dragData = JSON.parse(e.dataTransfer.getData('application/json'));
+      
+      if (dragData.type === 'frame-image' && dragData.url) {
+        // Convert frame URL to blob and set as uploaded image
+        const response = await fetch(dragData.url);
+        const blob = await response.blob();
+        
+        // Create file object from blob
+        const file = new File([blob], `${dragData.frame.filename}.jpg`, { type: 'image/jpeg' });
+        setUploadedImageFile(file);
+        setImageRemoved(false); // Reset flag when image is dragged from frame
+        
+        // Create data URL for preview
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          setUploadedImage(e.target.result);
+        };
+        reader.readAsDataURL(blob);
+        
+        toast.success(`Image from ${dragData.frame.filename} added to query`);
+      }
+    } catch (error) {
+      console.error('Error handling dropped frame:', error);
+      toast.error('Failed to add image from frame');
     }
   };
 
@@ -1105,7 +1191,14 @@ const Sidebar = ({
         </button>
       </div>
 
-      <div className="sidebar__chat" onPaste={handlePaste}>
+      <div 
+        className="sidebar__chat sidebar__drop-zone" 
+        onPaste={handlePaste}
+        onDragOver={handleDragOver}
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
         <div className="sidebar__messages">
           {loading ? (
             <div className="sidebar__loading">
@@ -1157,7 +1250,7 @@ const Sidebar = ({
                   )}
                   
                   {/* Meta info */}
-                  <div className="sidebar__message-meta">
+                  {/* <div className="sidebar__message-meta">
                     <span className="sidebar__message-stage">Stage {query.stage}</span>
                     <span className="sidebar__message-date">
                       {(() => {
@@ -1178,7 +1271,7 @@ const Sidebar = ({
                         }
                       })()}
                     </span>
-                  </div>
+                  </div> */}
                 </div>
 
                 {/* Delete button for individual query */}

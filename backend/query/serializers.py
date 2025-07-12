@@ -77,6 +77,10 @@ class QueryUpdateSerializer(serializers.ModelSerializer):
     
     def validate_image(self, value):
         """Validate uploaded image"""
+        # Handle empty string as null (when user wants to remove image)
+        if value == '':
+            return None
+            
         if value:
             # Check file size (max 10MB)
             if value.size > 10 * 1024 * 1024:

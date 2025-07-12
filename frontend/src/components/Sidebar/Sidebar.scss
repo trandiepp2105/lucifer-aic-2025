@@ -193,7 +193,6 @@
   }
 
   &__message-image {
-    margin-bottom: 0.5rem;
     
     img {
       max-width: 100%;
@@ -214,16 +213,16 @@
   }
 
   &__image-preview {
-    padding: 0.5rem 1rem;
+    padding: 0.25rem;
     border-top: 1px solid #e9ecef;
     border-bottom: 1px solid #e9ecef;
     position: relative;
     background: #f8f9fa;
-    margin-bottom: 1rem; // Add space between image preview and OCR section
+    margin-bottom: 0.125rem; // Add space between image preview and OCR section
     
     img {
-      max-width: 150px;
-      max-height: 150px;
+      max-width: 100px;
+      max-height: 100px;
       border-radius: 8px;
       object-fit: cover;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
@@ -253,7 +252,7 @@
 
   &__input {
     border-top: 1px solid #e9ecef;
-    padding: 1rem;
+    padding: 0.5rem;
     background: #f8f9fa;
   }
 
@@ -421,13 +420,13 @@
     border: none;
     color: #6c757d;
     cursor: pointer;
-    padding: 0.25rem;
+    padding: 0.125rem;
     border-radius: 4px;
-    font-size: 0.875rem;
+    font-size: 0.75rem;
     flex-shrink: 0;
     transition: all 0.2s ease;
-    width: 28px;
-    height: 28px;
+    width: 20px;
+    height: 20px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -448,7 +447,7 @@
   }
 
   &__input-section {
-    margin-bottom: 0.75rem;
+    margin-bottom: 0.25rem;
     
     &:last-of-type {
       margin-bottom: 0;
@@ -457,7 +456,7 @@
 
   &__input-label {
     display: block;
-    font-size: 0.75rem;
+    font-size: 0.625rem;
     font-weight: 500;
     color: #495057;
     margin-bottom: 0.25rem;
@@ -496,17 +495,17 @@
       margin-right: 0.3rem;
     }
     
-    &:last-of-type {
-      margin-bottom: 0.75rem;
-    }
+    // &:last-of-type {
+    //   margin-bottom: 0.75rem;
+    // }
   }
 
   &__message-meta {
     font-size: 0.75rem;
     color: #6c757d;
     border-top: 1px solid #f1f3f4;
-    padding-top: 0.5rem;
-    margin-top: 0.5rem;
+    padding-top: 0.125rem;
+    // margin-top: 0.5rem;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -533,12 +532,12 @@
 
   &__message-image {
     padding: 0.3rem 0;
-    margin-bottom: 0.5rem;
+    // margin-bottom: 0.5rem;
   }
 
   &__query-image {
     max-width: 100%;
-    max-height: 120px;
+    max-height: 100px;
     border-radius: 6px;
     object-fit: cover;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
@@ -784,6 +783,36 @@
 
     &:hover img {
       filter: invert(0.3); // Darker red for better contrast on light background
+    }
+  }
+
+  // Drop zone styles for drag & drop functionality
+  &__drop-zone {
+    position: relative;
+    transition: all 0.2s ease;
+    
+    &--active {
+      background: rgba(40, 167, 69, 0.05);
+      border: 2px dashed #28a745;
+      border-radius: 8px;
+      
+      &::after {
+        content: "Drop frame image here";
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: rgba(40, 167, 69, 0.9);
+        color: white;
+        padding: 8px 12px;
+        border-radius: 6px;
+        font-weight: 500;
+        font-size: 0.8rem;
+        z-index: 1000;
+        pointer-events: none;
+        white-space: nowrap;
+        box-shadow: 0 2px 8px rgba(40, 167, 69, 0.3);
+      }
     }
   }
 }

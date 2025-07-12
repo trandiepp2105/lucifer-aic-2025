@@ -257,6 +257,7 @@ const DisplayListFrame = ({
             showFilename={true}
             className="display-frame__item"
             isSending={sendingFrames.has(`${frame.video_name}-${frame.frame_index}`)}
+            enableDrag={true}
           />
         ))}
       </div>
@@ -303,6 +304,7 @@ const DisplayListFrame = ({
                     showFilename={true}
                     className="display-frame__item"
                     isSending={sendingFrames.has(`${frame.video_name}-${frame.frame_index}`)}
+                    enableDrag={true}
                   />
                 ))}
               </div>

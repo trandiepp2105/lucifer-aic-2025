@@ -170,6 +170,27 @@
     color: white;
     animation: spin 1s linear infinite;
   }
+
+  // Drag & drop states
+  &--dragging {
+    opacity: 0.6;
+    transform: scale(0.95);
+    border-color: #28a745;
+    box-shadow: 0 8px 20px rgba(40, 167, 69, 0.3);
+    z-index: 1000;
+    
+    .frame-item__thumbnail img {
+      filter: brightness(1.1);
+    }
+  }
+
+  &[draggable="true"] {
+    cursor: grab;
+    
+    &:active {
+      cursor: grabbing;
+    }
+  }
 }
 
 @keyframes spin {

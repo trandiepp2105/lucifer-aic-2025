@@ -13,7 +13,8 @@ const FrameItem = ({
   className = '',
   size = 'normal', // 'normal', 'small', 'large'
   disabled = false, // Add disabled prop for Send button
-  isSending = false // Add isSending prop for loading state
+  isSending = false, // Add isSending prop for loading state
+  enableDrag = false // Add enableDrag prop for drag & drop functionality
 }) => {
   const handleClick = () => {
     if (onClick) {
@@ -39,6 +40,35 @@ const FrameItem = ({
     if (onSend && !disabled && !isSending) {
       onSend(frame);
     }
+  };
+
+  // Handle drag start for image drag & drop
+  const handleDragStart = (e) => {
+    if (!enableDrag) return;
+    
+    // Set drag data with frame image URL and metadata
+    const dragData = {
+      type: 'frame-image',
+      url: frame.url,
+      frame: {
+        video_name: frame.video_name,
+        frame_index: frame.frame_index,
+        filename: `${frame.video_name}/${frame.frame_index}`
+      }
+    };
+    
+    e.dataTransfer.setData('application/json', JSON.stringify(dragData));
+    e.dataTransfer.effectAllowed = 'copy';
+    
+    // Add dragging class for visual feedback
+    e.target.classList.add('frame-item--dragging');
+  };
+
+  const handleDragEnd = (e) => {
+    if (!enableDrag) return;
+    
+    // Remove dragging class
+    e.target.classList.remove('frame-item--dragging');
   };
 
   const getFrameClasses = () => {
@@ -74,6 +104,9 @@ const FrameItem = ({
       onClick={handleClick}
       onDoubleClick={handleDoubleClick}
       title={onDoubleClick ? "Double-click to play video" : filename}
+      draggable={enableDrag}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
     >
       <div className="frame-item__thumbnail">
         <img 

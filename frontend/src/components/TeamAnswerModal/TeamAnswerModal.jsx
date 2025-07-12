@@ -100,25 +100,34 @@ const TeamAnswerModal = ({
       if (!modalRef.current.contains(e.target)) return;
       
       if (e.key === 'Enter' && !e.shiftKey) {
-        // Prevent default behavior and stop propagation
+        console.log('🔥 TeamAnswerModal: Intercepting Enter key - BLOCKING all other handlers');
+        
+        // IMMEDIATELY stop all propagation to prevent other handlers
         e.preventDefault();
         e.stopPropagation();
+        e.stopImmediatePropagation();
         
         // Only submit if not already submitting and QA text is not empty
         if (!isSubmitting && qaText.trim()) {
           handleSubmit();
         }
+        
+        // Return false for extra safety
+        return false;
       }
     };
 
-    if (isOpen && modalRef.current) {
-      // Only add listener to the modal element, not document
-      modalRef.current.addEventListener('keydown', handleKeyDown, true);
+    if (isOpen) {
+      // Use capture phase with highest priority to intercept before other handlers
+      // Add listener first so it runs before Sidebar's listener
+      document.addEventListener('keydown', handleKeyDown, { capture: true, passive: false });
+      console.log('🟢 TeamAnswerModal: Added Enter key blocker with highest priority');
     }
 
     return () => {
-      if (modalRef.current) {
-        modalRef.current.removeEventListener('keydown', handleKeyDown, true);
+      if (isOpen) {
+        document.removeEventListener('keydown', handleKeyDown, { capture: true, passive: false });
+        console.log('🔴 TeamAnswerModal: Removed Enter key blocker');
       }
     };
   }, [isOpen, isSubmitting, qaText, handleSubmit]);
@@ -134,18 +143,6 @@ const TeamAnswerModal = ({
     }
   };
 
-  const handleModalKeyDown = (e) => {
-    // Only handle Enter key within this modal
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      e.stopPropagation();
-      
-      if (!isSubmitting && qaText.trim()) {
-        handleSubmit();
-      }
-    }
-  };
-
   if (!isOpen || !frame) {
     return null;
   }
@@ -155,7 +152,6 @@ const TeamAnswerModal = ({
       ref={modalRef}
       className="team-answer-modal" 
       onClick={handleBackdropClick} 
-      onKeyDown={handleModalKeyDown} 
       tabIndex={-1}
     >
       <div className="team-answer-modal__content" tabIndex={-1}>

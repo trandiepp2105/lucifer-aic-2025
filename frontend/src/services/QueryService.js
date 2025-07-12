@@ -299,9 +299,14 @@ class QueryServiceClass {
         formData.append('speech', queryData.speech);
       }
       
-      // Add image file if it exists
-      if (queryData.image) {
-        formData.append('image', queryData.image);
+      // Add image file if it exists, or explicitly set to null if removed
+      if (queryData.image !== undefined) {
+        if (queryData.image === null) {
+          // Explicitly set image to null to remove it
+          formData.append('image', '');
+        } else {
+          formData.append('image', queryData.image);
+        }
       }
 
       const response = await fetch(`${this.baseURL}/${queryId}/`, {

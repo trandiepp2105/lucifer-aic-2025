@@ -243,32 +243,60 @@ class AnswerBulkDeleteAPIView(APIView):
     
     @swagger_auto_schema(
         operation_summary="Bulk delete answers",
-        operation_description="Delete multiple answers by providing their IDs",
+        operation_description="Delete multiple answers by providing their IDs or by filters (query_index, round)",
+        manual_parameters=[
+            openapi.Parameter('query_index', openapi.IN_QUERY, description="Filter by query index", type=openapi.TYPE_INTEGER),
+            openapi.Parameter('round', openapi.IN_QUERY, description="Filter by round: 'prelims' or 'final'", type=openapi.TYPE_STRING),
+        ],
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
             properties={
                 'ids': openapi.Schema(
                     type=openapi.TYPE_ARRAY,
                     items=openapi.Schema(type=openapi.TYPE_INTEGER),
-                    description="Array of answer IDs to delete"
+                    description="Array of answer IDs to delete (optional if using query params)"
                 )
-            },
-            required=['ids']
+            }
         ),
         responses={
             200: openapi.Response(description="Answers deleted successfully"),
-            400: openapi.Response(description="No answer IDs provided")
+            400: openapi.Response(description="No answer IDs or filter criteria provided")
         }
     )
     def delete(self, request):
-        """Bulk delete answers"""
+        """Bulk delete answers by IDs or by filter criteria"""
+        # Get IDs from request body
         answer_ids = request.data.get('ids', [])
-        if not answer_ids:
+        
+        # Get filter criteria from query params
+        query_index = request.query_params.get('query_index')
+        round_param = request.query_params.get('round')
+        
+        # Build queryset based on available criteria
+        queryset = Answer.objects.all()
+        
+        if answer_ids:
+            # Delete by specific IDs
+            queryset = queryset.filter(id__in=answer_ids)
+        elif query_index is not None or round_param:
+            # Delete by filter criteria
+            if query_index is not None:
+                try:
+                    query_index = int(query_index)
+                    queryset = queryset.filter(query_index=query_index)
+                except ValueError:
+                    return Response({
+                        'message': 'Invalid query_index format'
+                    }, status=status.HTTP_400_BAD_REQUEST)
+            
+            if round_param:
+                queryset = queryset.filter(round=round_param)
+        else:
             return Response({
-                'message': 'No answer IDs provided'
+                'message': 'No answer IDs or filter criteria provided'
             }, status=status.HTTP_400_BAD_REQUEST)
         
-        deleted_count, _ = Answer.objects.filter(id__in=answer_ids).delete()
+        deleted_count, _ = queryset.delete()
         return Response({
             'message': f'{deleted_count} answers deleted successfully',
             'deleted_count': deleted_count
