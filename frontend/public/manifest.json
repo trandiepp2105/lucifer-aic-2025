@@ -1,0 +1,25 @@
+{
+  "short_name": "Lucifer",
+  "name": "Lucifer - Video Frame Analyzer",
+  "icons": [
+    {
+      "src": "favicon.png",
+      "sizes": "32x32",
+      "type": "image/png"
+    },
+    {
+      "src": "icon-192x192.png", 
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "assets/smiling-face.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#ffdd67",
+  "background_color": "#1a1a1a"
+}
