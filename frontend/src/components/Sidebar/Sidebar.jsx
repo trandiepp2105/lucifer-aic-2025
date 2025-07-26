@@ -40,6 +40,7 @@ const Sidebar = ({
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null); // { queryIndex, mode }
   const [isDeleting, setIsDeleting] = useState(false);
+  const [currentInputIndex, setCurrentInputIndex] = useState(-1); // Track focused input index
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
   const textareaRef = useRef(null);
@@ -48,9 +49,34 @@ const Sidebar = ({
   const hasInitialized = useRef(false);
   const hasLoadedQueries = useRef(false);
   
-  // Navigation state for input focus
-  const [currentInputIndex, setCurrentInputIndex] = useState(-1); // -1: no focus, 0: OCR, 1: Speech, 2: Text
-  const inputRefs = [ocrTextareaRef, speechTextareaRef, textareaRef]; // Order: OCR (top) -> Speech -> Text (bottom)
+  // Debounce để tránh spam translation requests
+  const debounceTimers = useRef({});
+  
+  const debouncedTranslate = useCallback((targetLang, delay = 50) => {
+    const timerId = `translate_${targetLang}`;
+    
+    // Clear previous timer
+    if (debounceTimers.current[timerId]) {
+      clearTimeout(debounceTimers.current[timerId]);
+    }
+    
+    // Set new timer
+    debounceTimers.current[timerId] = setTimeout(() => {
+      handleTranslateFocusedInput(targetLang);
+    }, delay);
+  }, [currentInputIndex]); // Add dependency
+  
+  // Input refs for navigation
+  const inputRefs = [ocrTextareaRef, speechTextareaRef, textareaRef];
+  
+  // Cleanup timers on unmount
+  useEffect(() => {
+    return () => {
+      Object.values(debounceTimers.current).forEach(timer => {
+        if (timer) clearTimeout(timer);
+      });
+    };
+  }, []);
 
   const updateUrlWithSession = (sessionId) => {
     updateUrlParams({ 
@@ -352,14 +378,14 @@ const Sidebar = ({
       // Ctrl + E: Translate focused input to English
       if (e.ctrlKey && e.key === 'e') {
         e.preventDefault();
-        handleTranslateFocusedInput('en');
+        handleTranslateFocusedInput('en'); // Direct call, no debounce
         return;
       }
       
       // Ctrl + Q: Translate focused input to Vietnamese
       if (e.ctrlKey && e.key === 'q') {
         e.preventDefault();
-        handleTranslateFocusedInput('vi');
+        handleTranslateFocusedInput('vi'); // Direct call, no debounce
         return;
       }
 
@@ -675,6 +701,7 @@ const Sidebar = ({
         toast.success('Text translated successfully!');
       }
     } catch (error) {
+      console.log('Translation error:', error);
       toast.error('Failed to translate text');
     } finally {
       setIsTranslating(false);
@@ -696,6 +723,7 @@ const Sidebar = ({
         toast.success('Text translated successfully!');
       }
     } catch (error) {
+      console.log('Translation error:', error);
       toast.error('Failed to translate text');
     } finally {
       setIsTranslating(false);
@@ -714,6 +742,7 @@ const Sidebar = ({
         toast.success(`Text translated to ${langName}!`);
       }
     } catch (error) {
+      console.log('Translation error:', error);
       toast.error('Failed to translate text');
     } finally {
       setIsTranslating(false);

@@ -11,6 +11,8 @@ import os
 from pathlib import Path
 import time
 import logging
+import requests
+from io import BytesIO
 
 # Add search module to path
 search_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'search')
@@ -79,18 +81,18 @@ class QueryListCreateAPIView(APIView):
         
         serializer = QuerySerializer(queryset, many=True, context={'request': request})
         
-        # Search frames for the latest query if it exists and has OCR data
+        # Search frames for the latest query if it exists
         frames = []
         if queryset:
             # Get the most recent query
             latest_query = queryset[0]  # Already ordered by -created_at
             
             # Perform OCR search on the latest query if it has OCR data
-            if latest_query.ocr:
+            if latest_query.ocr and latest_query.ocr.strip() and latest_query.ocr.lower() != 'null':
+                print(f"Performing OCR search for query {latest_query.id} with text: {latest_query.ocr[:50]}")
                 total_start = time.time()
                 
                 ocr_results = self._search_ocr(latest_query.ocr)
-
                 raw_frames = self.adjust_response(request, ocr_results)
                 
                 # Process frames based on viewmode
@@ -102,6 +104,42 @@ class QueryListCreateAPIView(APIView):
                 total_duration = total_end - total_start
                 
                 print(f"Total OCR process time: {total_duration:.3f} seconds")
+                
+            elif latest_query.text and latest_query.text.strip() and latest_query.text.lower() != 'null':
+                total_start = time.time()
+                
+                # Perform text search via external API
+                text_results = self._search_text(latest_query.text)
+                raw_frames = self.adjust_faiss_response(request, text_results)
+                
+                # Process frames based on viewmode
+                viewmode = request.query_params.get('viewmode', 'gallery')
+                print(f"View mode: {viewmode}")
+                frames = self._process_frames_by_viewmode(raw_frames, viewmode)
+
+                total_end = time.time()
+                total_duration = total_end - total_start
+                
+                print(f"Total text search process time: {total_duration:.3f} seconds")
+                
+            elif latest_query.image:
+                total_start = time.time()
+                
+                # Perform image search via external API
+                image_results = self._search_image(latest_query.image)
+                raw_frames = self.adjust_faiss_response(request, image_results)
+                
+                # Process frames based on viewmode
+                viewmode = request.query_params.get('viewmode', 'gallery')
+                print(f"View mode: {viewmode}")
+                frames = self._process_frames_by_viewmode(raw_frames, viewmode)
+
+                total_end = time.time()
+                total_duration = total_end - total_start
+                
+                print(f"Total image search process time: {total_duration:.3f} seconds")
+                
+                print(f"Total text search process time: {total_duration:.3f} seconds")
         
         return Response({
             'message': 'Queries retrieved successfully',
@@ -256,8 +294,128 @@ class QueryListCreateAPIView(APIView):
             # Gallery mode - return frames as flat list (1D array)
             return frames
 
-    # ...existing code...
+    def adjust_faiss_response(self, request, results: list) -> list:
+        """
+        Adjust FAISS search results to create frames array with full URLs
+        
+        Args:
+            request: Django request object
+            results: List of FAISS search results, each containing [path, score]
+                    Format: [["L06_V020/11116.jpg", 0.286108285188675], ...]
+            
+        Returns:
+            List of frames with url, video_name, frame_index
+        """
+        if not results:
+            return []
+        
+        # Get SERVER_IP from environment, fallback to request host
+        server_ip = os.environ.get('SERVER_IP')
+        if server_ip:
+            base_url = f"http://{server_ip}"
+        else:
+            # Fallback to request host
+            host = request.get_host()
+            scheme = 'https' if request.is_secure() else 'http'
+            base_url = f"{scheme}://{host}"
+        
+        frames = []
+        for result in results:
+            # FAISS results format: [path, score]
+            if len(result) >= 2:
+                path = result[0]  # e.g., "L06_V020/11116.jpg"
+                score = result[1]
+                
+                # Parse video_name and frame_index from path
+                # Path format: {video_name}/{frame_index}.jpg
+                if '/' in path:
+                    video_name, filename = path.rsplit('/', 1)
+                    frame_index = filename.replace('.jpg', '')
+                    
+                    # Build frame URL: http://{SERVER_IP}/media/frames/{video_name}/{frame_index}.jpg
+                    frame_url = f"{base_url}/media/frames/{video_name}/{frame_index}.jpg"
+                    
+                    frame_data = {
+                        'url': frame_url,
+                        'video_name': video_name,
+                        'frame_index': frame_index,
+                        'score': score
+                    }
+                    frames.append(frame_data)
+        
+        return frames
+    
+    def _search_text(self, text: str, k=10) -> list:
+        """
+        Perform text search using external search API
+        
+        Args:
+            text: Text query to search for
+            k: Number of results to return
+            
+        Returns:
+            List of search results in FAISS format or empty list if error
+        """
+        try:
+            search_url = "https://81f87828f7c6.ngrok-free.app/search"
+            params = {'text': text, 'k': k}
+            
+            response = requests.get(search_url, params=params, timeout=30)
+            
+            if response.status_code == 200:
+                response_data = response.json()
+                if response_data.get('status') == 'success':
+                    results = response_data.get('results', [])
+                    print(f"Text search returned {len(results)} results")
+                    return results
+            
+            print(f"Text search API error: {response.status_code} - {response.text}")
+            return []
+                
+        except Exception as e:
+            print(f"Text search error: {e}")
+            return []
 
+    def _search_image(self, image, k=10) -> list:
+        """
+        Perform image search using external search API
+        
+        Args:
+            image: Image file from query (Django ImageFieldFile)
+            k: Number of results to return
+            
+        Returns:
+            List of search results in FAISS format or empty list if error
+        """
+        try:
+            search_url = "https://81f87828f7c6.ngrok-free.app/search"
+            
+            # Open the image file and get its content
+            with image.open('rb') as img_file:
+                image_content = img_file.read()
+            
+            # Determine content type from file extension
+            import mimetypes
+            content_type = mimetypes.guess_type(image.name)[0] or 'image/jpeg'
+            
+            files = {'image': (image.name, image_content, content_type)}
+            data = {'k': k}
+            
+            response = requests.post(search_url, files=files, data=data, timeout=30)
+            
+            if response.status_code == 200:
+                response_data = response.json()
+                if response_data.get('status') == 'success':
+                    results = response_data.get('results', [])
+                    print(f"Image search returned {len(results)} results")
+                    return results
+            
+            print(f"Image search API error: {response.status_code} - {response.text}")
+            return []
+                
+        except Exception as e:
+            print(f"Image search error: {e}")
+            return []
 
 class QueryDetailAPIView(APIView):
     """

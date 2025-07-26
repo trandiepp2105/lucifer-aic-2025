@@ -1,13 +1,42 @@
-// Microsoft Translator API Service
+// Google Cloud Translate API Service
 class TranslatorService {
   constructor() {
     // API key từ environment variables
-    this.apiKey = process.env.REACT_APP_TRANSLATOR_API_KEY;
-    this.endpoint = 'https://api.cognitive.microsofttranslator.com';
-    this.region = process.env.REACT_APP_TRANSLATOR_REGION || 'global';
+    this.apiKey = process.env.REACT_APP_GOOGLE_CLOUD_TRANSLATE_API_KEY;
+    this.endpoint = 'https://translation.googleapis.com/language/translate/v2';
     
     // Kiểm tra xem có API key hợp lệ không
     this.hasValidApiKey = this.apiKey && this.apiKey !== 'YOUR_API_KEY_HERE' && this.apiKey.length > 10;
+    
+    // Rate limiting và caching
+    this.requestQueue = [];
+    this.isProcessing = false;
+    this.cache = new Map();
+    this.lastRequestTime = 0;
+    this.minRequestInterval = 10; // Giảm xuống 10ms giữa các requests
+  }
+
+  // Debounce function để tránh spam requests
+  debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+      const later = () => {
+        clearTimeout(timeout);
+        func(...args);
+      };
+      clearTimeout(timeout);
+      timeout = setTimeout(later, wait);
+    };
+  }
+
+  // Wait function để delay giữa các requests
+  async wait(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  // Tạo cache key cho request
+  getCacheKey(text, targetLanguage, sourceLanguage) {
+    return `${text}|${targetLanguage}|${sourceLanguage || 'auto'}`;
   }
 
   async translateText(text, targetLanguage, sourceLanguage = 'auto') {
@@ -15,82 +44,85 @@ class TranslatorService {
       return text;
     }
 
-    // Nếu không có API key hợp lệ, sử dụng fallback ngay
+    // Kiểm tra API key trước khi thực hiện
     if (!this.hasValidApiKey) {
-      return this.fallbackTranslate(text, targetLanguage);
+      throw new Error('Google Cloud Translate API key is required but not configured');
+    }
+
+    // Kiểm tra cache trước
+    const cacheKey = this.getCacheKey(text, targetLanguage, sourceLanguage);
+    if (this.cache.has(cacheKey)) {
+      return this.cache.get(cacheKey);
     }
 
     try {
-      const url = `${this.endpoint}/translate?api-version=3.0&to=${targetLanguage}`;
-      
-      const response = await fetch(url, {
+      // Rate limiting: đảm bảo có khoảng cách tối thiểu giữa các requests
+      const now = Date.now();
+      const timeSinceLastRequest = now - this.lastRequestTime;
+      if (timeSinceLastRequest < this.minRequestInterval) {
+        await this.wait(this.minRequestInterval - timeSinceLastRequest);
+      }
+
+      const params = new URLSearchParams({
+        key: this.apiKey,
+        q: text,
+        target: targetLanguage,
+        format: 'text'
+      });
+
+      // Nếu source language được chỉ định và không phải 'auto'
+      if (sourceLanguage && sourceLanguage !== 'auto') {
+        params.append('source', sourceLanguage);
+      }
+
+      this.lastRequestTime = Date.now();
+
+      const response = await fetch(`${this.endpoint}?${params}`, {
         method: 'POST',
         headers: {
-          'Ocp-Apim-Subscription-Key': this.apiKey,
-          'Ocp-Apim-Subscription-Region': this.region,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify([
-          {
-            text: text
-          }
-        ])
+          'Content-Type': 'application/x-www-form-urlencoded',
+        }
       });
 
       if (!response.ok) {
-        throw new Error(`Translation failed: ${response.status} ${response.statusText}`);
+        const errorData = await response.json().catch(() => ({}));
+        
+        // Xử lý các loại lỗi cụ thể
+        if (response.status === 400) {
+          throw new Error(`Rate limit exceeded or invalid request. Please slow down your requests.`);
+        } else if (response.status === 403) {
+          throw new Error(`API key quota exceeded or invalid permissions.`);
+        } else if (response.status === 429) {
+          throw new Error(`Too many requests. Please wait before trying again.`);
+        }
+        
+        throw new Error(`Google Cloud Translate API failed: ${response.status} ${response.statusText}. ${errorData.error?.message || ''}`);
       }
 
       const result = await response.json();
       
-      if (result && result[0] && result[0].translations && result[0].translations[0]) {
-        return result[0].translations[0].text;
-      }
-      
-      throw new Error('Invalid response format');
-    } catch (error) {
-      // Fallback: Sử dụng LibreTranslate miễn phí nếu Microsoft API fail
-      return this.fallbackTranslate(text, targetLanguage);
-    }
-  }
-
-  async fallbackTranslate(text, targetLanguage) {
-    try {
-      // Thử LibreTranslate đầu tiên
-      const response = await fetch('https://libretranslate.de/translate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          q: text,
-          source: 'auto',
-          target: targetLanguage === 'vi' ? 'vi' : 'en',
-          format: 'text'
-        })
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        if (result.translatedText) {
-          return result.translatedText;
+      if (result && result.data && result.data.translations && result.data.translations[0]) {
+        const translatedText = result.data.translations[0].translatedText;
+        
+        // Lưu vào cache
+        this.cache.set(cacheKey, translatedText);
+        
+        // Giới hạn cache size
+        if (this.cache.size > 1000) {
+          const firstKey = this.cache.keys().next().value;
+          this.cache.delete(firstKey);
         }
+        
+        return translatedText;
       }
       
-      throw new Error('LibreTranslate failed');
+      throw new Error('Invalid response format from Google Cloud Translate API');
     } catch (error) {
-      // Fallback thứ 2: Thử API khác hoặc trả về text gốc
-      try {
-        // Có thể thêm API dịch miễn phí khác ở đây
-        
-        // Ví dụ: Google Translate API miễn phí (không chính thức)
-        // Hoặc các API dịch miễn phí khác
-        
-        // Tạm thời trả về text gốc
-        return text;
-      } catch (fallbackError) {
-        return text; // Trả về text gốc nếu tất cả đều fail
+      // Nếu lỗi rate limit, thử lại sau một khoảng thời gian
+      if (error.message.includes('Rate limit') || error.message.includes('Too many requests')) {
+        console.warn('Translation rate limit hit, please slow down requests');
       }
+      throw error;
     }
   }
 
@@ -102,43 +134,74 @@ class TranslatorService {
     return this.translateText(text, 'vi');
   }
 
-  // Detect language
+  // Detect language using Google Cloud Translate API
   async detectLanguage(text) {
-    // Nếu không có API key hợp lệ, skip detection
+    // Kiểm tra API key trước khi thực hiện
     if (!this.hasValidApiKey) {
-      return 'auto';
+      throw new Error('Google Cloud Translate API key is required for language detection');
+    }
+    
+    // Kiểm tra cache trước
+    const cacheKey = `detect:${text}`;
+    if (this.cache.has(cacheKey)) {
+      return this.cache.get(cacheKey);
     }
     
     try {
-      const url = `${this.endpoint}/detect?api-version=3.0`;
-      
-      const response = await fetch(url, {
+      // Rate limiting
+      const now = Date.now();
+      const timeSinceLastRequest = now - this.lastRequestTime;
+      if (timeSinceLastRequest < this.minRequestInterval) {
+        await this.wait(this.minRequestInterval - timeSinceLastRequest);
+      }
+
+      const params = new URLSearchParams({
+        key: this.apiKey,
+        q: text
+      });
+
+      this.lastRequestTime = Date.now();
+
+      const response = await fetch(`https://translation.googleapis.com/language/translate/v2/detect?${params}`, {
         method: 'POST',
         headers: {
-          'Ocp-Apim-Subscription-Key': this.apiKey,
-          'Ocp-Apim-Subscription-Region': this.region,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify([
-          {
-            text: text
-          }
-        ])
+          'Content-Type': 'application/x-www-form-urlencoded',
+        }
       });
 
       if (!response.ok) {
-        return 'auto';
+        const errorData = await response.json().catch(() => ({}));
+        
+        // Xử lý các loại lỗi cụ thể
+        if (response.status === 400) {
+          throw new Error(`Rate limit exceeded or invalid request. Please slow down your requests.`);
+        } else if (response.status === 403) {
+          throw new Error(`API key quota exceeded or invalid permissions.`);
+        } else if (response.status === 429) {
+          throw new Error(`Too many requests. Please wait before trying again.`);
+        }
+        
+        throw new Error(`Language detection failed: ${response.status} ${response.statusText}. ${errorData.error?.message || ''}`);
       }
 
       const result = await response.json();
       
-      if (result && result[0] && result[0].language) {
-        return result[0].language;
+      if (result && result.data && result.data.detections && result.data.detections[0] && result.data.detections[0][0]) {
+        const detectedLanguage = result.data.detections[0][0].language;
+        
+        // Lưu vào cache
+        this.cache.set(cacheKey, detectedLanguage);
+        
+        return detectedLanguage;
       }
       
-      return 'auto';
+      throw new Error('Invalid response format from language detection API');
     } catch (error) {
-      return 'auto';
+      // Nếu lỗi rate limit, thử lại sau một khoảng thời gian
+      if (error.message.includes('Rate limit') || error.message.includes('Too many requests')) {
+        console.warn('Language detection rate limit hit, please slow down requests');
+      }
+      throw error;
     }
   }
 }

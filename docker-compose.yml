@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   mysql:
     image: mysql:8.0
@@ -47,17 +45,9 @@ services:
       - MEILI_DB_PATH=/meili_data
       - MEILI_MAX_INDEXING_MEMORY=4GiB
       - MEILI_MAX_INDEXING_THREADS=4
-      # Force search operations to use more memory for caching
-      - MEILI_SNAPSHOT_DIR=/meili_data/snapshots
-      - MEILI_IGNORE_MISSING_SNAPSHOT=true
-      # Keep index in memory permanently until container stops
-      - MEILI_DUMP_DIR=/meili_data/dumps
-      - MEILI_SCHEDULE_SNAPSHOT=false
-      # Disable automatic memory cleanup to keep index in RAM
-      - MEILI_MAX_MEMORY=8GiB
-    mem_limit: 8g          # Increase memory limit further
-    memswap_limit: 8g      # Increase swap limit  
-    shm_size: 4g            # Add more shared memory for faster operations
+    mem_limit: 10g          # Increase memory limit for better caching
+    memswap_limit: 10g      # Increase swap limit  
+    shm_size: 4g            # Add shared memory for faster operations
     ports:
       - "7700:7700"
     volumes:
@@ -70,21 +60,21 @@ services:
       timeout: 10s
       retries: 5
 
-  # frontend:
-  #   build: ./frontend
-  #   container_name: aic_frontend
-  #   restart: unless-stopped
-  #   expose:
-  #     - "3000"
-  #   volumes:
-  #     - ./frontend:/app
-  #     - /app/node_modules
-  #   environment:
-  #     - REACT_APP_API_ENDPOINT=/api
-  #   depends_on:
-  #     - nginx
-  #   networks:
-  #     - aic_network
+  frontend:
+    build: ./frontend
+    container_name: aic_frontend
+    restart: unless-stopped
+    expose:
+      - "3000"
+    environment:
+      - REACT_APP_API_ENDPOINT=/api
+    networks:
+      - aic_network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
 
   nginx:
     image: nginx:alpine
@@ -99,6 +89,7 @@ services:
       - ${VIDEOS_PATH}:/media/videos:ro
     depends_on:
       - backend
+      - frontend
     networks:
       - aic_network
     healthcheck:
