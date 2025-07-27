@@ -188,6 +188,7 @@
 
   &__message-content {
     padding: 0.5rem 0.75rem;
+    padding-right: 0.25rem;
     word-wrap: break-word;
     position: relative;
   }
@@ -588,8 +589,8 @@
 
   &__delete-query {
     position: absolute;
-    top: 0.5rem;
-    right: 0.5rem;
+    top: 0.125rem;
+    right: 0.125rem;
     background: none;
     border: none;
     color: #6c757d;

@@ -71,7 +71,8 @@ class QueryListCreateAPIView(APIView):
     def get(self, request):
         """Get all queries with filtering"""
         queryset = Query.objects.all()
-        search_url = "https://a2b41a2f035b.ngrok-free.app/search/"
+        # search_url = "https://a2b41a2f035b.ngrok-free.app/search/"
+        search_url = request.query_params.get('search_url', 'https://a2b41a2f035b.ngrok-free.app/search/')
         # Filter by session
         session_id = request.query_params.get('session')
         if session_id:
