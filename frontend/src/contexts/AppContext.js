@@ -10,6 +10,7 @@ const getInitialStateFromURL = () => {
     viewMode: 'gallery',  // 'gallery' hoặc 'samevideo'
     stage: 1,             // số
     section: 'chat',      // 'chat' hoặc 'history'
+    k: 50,                // top k results (1-200)
   };
 
   // Determine queryIndex based on round
@@ -58,6 +59,14 @@ const getInitialStateFromURL = () => {
     urlState.section = sectionParam;
   }
   
+  const kParam = urlParams.get('k');
+  if (kParam) {
+    const k = parseInt(kParam, 10);
+    if (k >= 1 && k <= 200) {
+      urlState.k = k;
+    }
+  }
+  
   const queryIndexParam = urlParams.get('queryindex');
   if (queryIndexParam) {
     urlState.queryIndex = parseInt(queryIndexParam, 10);
@@ -82,6 +91,7 @@ const ActionTypes = {
   SET_STAGE: 'SET_STAGE',
   SET_SECTION: 'SET_SECTION',
   SET_QUERY_INDEX: 'SET_QUERY_INDEX',
+  SET_K: 'SET_K',
   UPDATE_FROM_URL: 'UPDATE_FROM_URL',
   RESET_STATE: 'RESET_STATE',
   AUTO_DETECT_QUERY_MODE: 'AUTO_DETECT_QUERY_MODE',
@@ -108,6 +118,8 @@ const appReducer = (state, action) => {
       return { ...state, section: action.payload };
     case ActionTypes.SET_QUERY_INDEX:
       return { ...state, queryIndex: action.payload };
+    case ActionTypes.SET_K:
+      return { ...state, k: action.payload };
     case ActionTypes.AUTO_DETECT_QUERY_MODE:
       return { ...state, queryMode: action.payload };
     case ActionTypes.UPDATE_FROM_URL:
@@ -151,6 +163,9 @@ export const AppProvider = ({ children }) => {
     if (newState.queryIndex !== undefined) {
       urlParams.set('queryindex', newState.queryIndex.toString());
     }
+    if (newState.k !== undefined) {
+      urlParams.set('k', newState.k.toString());
+    }
 
     const newUrl = `${window.location.pathname}?${urlParams.toString()}`;
     window.history.replaceState(null, '', newUrl);
@@ -177,8 +192,9 @@ export const AppProvider = ({ children }) => {
       stage: state.stage,
       section: state.section,
       queryIndex: state.queryIndex,
+      k: state.k,
     });
-  }, [state.session, state.queryMode, state.round, state.viewMode, state.stage, state.section, state.queryIndex]);
+  }, [state.session, state.queryMode, state.round, state.viewMode, state.stage, state.section, state.queryIndex, state.k]);
 
   // Actions
   const actions = {
@@ -189,6 +205,7 @@ export const AppProvider = ({ children }) => {
     setStage: (stage) => dispatch({ type: ActionTypes.SET_STAGE, payload: stage }),
     setSection: (section) => dispatch({ type: ActionTypes.SET_SECTION, payload: section }),
     setQueryIndex: (index) => dispatch({ type: ActionTypes.SET_QUERY_INDEX, payload: index }),
+    setK: (k) => dispatch({ type: ActionTypes.SET_K, payload: k }),
     resetState: (keepState = {}) => dispatch({ type: ActionTypes.RESET_STATE, payload: keepState }),
   };
 

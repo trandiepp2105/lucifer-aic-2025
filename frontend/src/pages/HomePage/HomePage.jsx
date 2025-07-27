@@ -22,12 +22,14 @@ const HomePage = () => {
     stage,
     section,
     queryIndex, // Add queryIndex
+    k,
     setSession,
     setQueryMode,
     setRound,
     setViewMode,
     setStage,
     setSection,
+    setK,
   } = useApp();
 
   const toast = useToast();
@@ -371,9 +373,11 @@ const HomePage = () => {
           onRoundChange={handleRoundChange}
           onQueryModeChange={handleQueryModeChange}
           onCsvFormatChange={handleCsvFormatChange}
+          onKChange={setK}
           selectedRound={round}
           selectedQueryMode={queryMode}
           csvFilenameFormat={csvFilenameFormat}
+          selectedK={k}
         />
         {renderSidePanel()}
         <DisplayListFrame 

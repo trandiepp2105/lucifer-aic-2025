@@ -71,12 +71,19 @@ class QueryListCreateAPIView(APIView):
     def get(self, request):
         """Get all queries with filtering"""
         queryset = Query.objects.all()
-        
+        search_url = "https://66fd452b548e.ngrok-free.app/search/"
         # Filter by session
         session_id = request.query_params.get('session')
         if session_id:
             queryset = queryset.filter(session_id=session_id)
         
+        # Get k parameter and convert to int
+        k_param = request.query_params.get('k', '50')
+        try:
+            k = int(k_param)
+        except (ValueError, TypeError):
+            k = 50  # Default value if conversion fails
+            
         queryset = queryset.order_by('-created_at')
         
         serializer = QuerySerializer(queryset, many=True, context={'request': request})
@@ -92,7 +99,7 @@ class QueryListCreateAPIView(APIView):
                 print(f"Performing OCR search for query {latest_query.id} with text: {latest_query.ocr[:50]}")
                 total_start = time.time()
                 
-                ocr_results = self._search_ocr(latest_query.ocr)
+                ocr_results = self._search_ocr(ocr_text=latest_query.ocr, k=k)
                 raw_frames = self.adjust_response(request, ocr_results)
                 
                 # Process frames based on viewmode
@@ -109,7 +116,7 @@ class QueryListCreateAPIView(APIView):
                 total_start = time.time()
                 
                 # Perform text search via external API
-                text_results = self._search_text(latest_query.text)
+                text_results = self._search_text(search_url=search_url,text=latest_query.text, k=k)
                 raw_frames = self.adjust_faiss_response(request, text_results)
                 
                 # Process frames based on viewmode
@@ -126,7 +133,7 @@ class QueryListCreateAPIView(APIView):
                 total_start = time.time()
                 
                 # Perform image search via external API
-                image_results = self._search_image(latest_query.image)
+                image_results = self._search_image(search_url=search_url,image=latest_query.image, k=k)
                 raw_frames = self.adjust_faiss_response(request, image_results)
                 
                 # Process frames based on viewmode
@@ -195,19 +202,20 @@ class QueryListCreateAPIView(APIView):
             'errors': serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
     
-    def _search_ocr(self, ocr_text: str) -> list:
+    def _search_ocr(self, ocr_text: str, k: int = 50) -> list:
         """
         Perform OCR search using sync method
         
         Args:
             ocr_text: OCR text to search for
+            k: Number of results to return
             
         Returns:
             List of search results or empty list if error
         """
         try:
             # Sử dụng sync method 
-            results = search_service.search_ocr(ocr_text, size=300)
+            results = search_service.search_ocr(ocr_text, size=k)
 
             return results
             
@@ -345,7 +353,7 @@ class QueryListCreateAPIView(APIView):
         
         return frames
     
-    def _search_text(self, text: str, k=10) -> list:
+    def _search_text(self, search_url: str, text: str, k=10) -> list:
         """
         Perform text search using external search API
         
@@ -357,7 +365,6 @@ class QueryListCreateAPIView(APIView):
             List of search results in FAISS format or empty list if error
         """
         try:
-            search_url = "https://81f87828f7c6.ngrok-free.app/search"
             params = {'text': text, 'k': k}
             
             response = requests.get(search_url, params=params, timeout=30)
@@ -376,7 +383,7 @@ class QueryListCreateAPIView(APIView):
             print(f"Text search error: {e}")
             return []
 
-    def _search_image(self, image, k=10) -> list:
+    def _search_image(self, search_url: str, image, k=10) -> list:
         """
         Perform image search using external search API
         
@@ -388,7 +395,6 @@ class QueryListCreateAPIView(APIView):
             List of search results in FAISS format or empty list if error
         """
         try:
-            search_url = "https://81f87828f7c6.ngrok-free.app/search"
             
             # Open the image file and get its content
             with image.open('rb') as img_file:

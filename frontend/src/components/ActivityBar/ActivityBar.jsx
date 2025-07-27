@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import './ActivityBar.scss';
 
-const ActivityBar = ({ onSectionChange, activeSection, onRoundChange, onQueryModeChange, onCsvFormatChange, selectedRound = 'prelims', selectedQueryMode = 'kis', csvFilenameFormat = 'query-{query_index}-{type}' }) => {
+const ActivityBar = ({ onSectionChange, activeSection, onRoundChange, onQueryModeChange, onCsvFormatChange, onKChange, selectedRound = 'prelims', selectedQueryMode = 'kis', csvFilenameFormat = 'query-{query_index}-{type}', selectedK = 50 }) => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [currentRound, setCurrentRound] = useState(selectedRound);
   const [currentQueryMode, setCurrentQueryMode] = useState(selectedQueryMode);
   const [currentCsvFormat, setCurrentCsvFormat] = useState(csvFilenameFormat);
+  const [currentK, setCurrentK] = useState(selectedK);
   const settingsRef = useRef(null);
 
   // Update internal state when props change
@@ -20,6 +21,10 @@ const ActivityBar = ({ onSectionChange, activeSection, onRoundChange, onQueryMod
   useEffect(() => {
     setCurrentCsvFormat(csvFilenameFormat);
   }, [csvFilenameFormat]);
+
+  useEffect(() => {
+    setCurrentK(selectedK);
+  }, [selectedK]);
 
   const allSections = [
     { id: 'chat', icon: '/assets/chat.svg', title: 'Chat' },
@@ -92,6 +97,17 @@ const ActivityBar = ({ onSectionChange, activeSection, onRoundChange, onQueryMod
       onCsvFormatChange(format);
     }
   };
+
+  const handleKChange = (k) => {
+    setCurrentK(k);
+    // Notify parent component about k change
+    if (onKChange) {
+      onKChange(k);
+    }
+  };
+
+  // Update CSS variable for slider progress
+  const progress = ((currentK - 1) / (200 - 1)) * 100;
 
   return (
     <div className="activity-bar">
@@ -188,6 +204,30 @@ const ActivityBar = ({ onSectionChange, activeSection, onRoundChange, onQueryMod
                   />
                   <div className="activity-bar__csv-format-help">
                     Use {'{query_index}'} and {'{type}'} as placeholders
+                  </div>
+                </div>
+              </div>
+
+              <div className="activity-bar__settings-section">
+                <label className="activity-bar__settings-label" htmlFor="top-k-slider">
+                  Top K Results: {currentK}
+                </label>
+                <div className="activity-bar__top-k">
+                  <div className="activity-bar__custom-slider-track">
+                    <div className="activity-bar__custom-slider-fill" style={{ width: `${progress}%` }}></div>
+                  </div>
+                  <input
+                    id="top-k-slider"
+                    type="range"
+                    className="activity-bar__top-k-slider"
+                    min="1"
+                    max="200"
+                    value={currentK}
+                    onChange={(e) => handleKChange(parseInt(e.target.value, 10))}
+                  />
+                  <div className="activity-bar__top-k-range">
+                    <span>1</span>
+                    <span>200</span>
                   </div>
                 </div>
               </div>

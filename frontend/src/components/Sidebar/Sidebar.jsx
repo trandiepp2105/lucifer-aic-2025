@@ -22,7 +22,7 @@ const Sidebar = ({
   allAnswers = [], // All answers data for export
   csvFilenameFormat = 'query-{query_index}-{type}' // Custom CSV filename format
 }) => {
-  const { stage, viewMode, round, queryIndex, setStage, setViewMode, setQueryIndex } = useApp();
+  const { stage, viewMode, round, queryIndex, k, setStage, setViewMode, setQueryIndex } = useApp();
   const toast = useToast();
   
   const [queries, setQueries] = useState([]);
@@ -175,6 +175,7 @@ const Sidebar = ({
       const response = await QueryService.getQueries({
         session: targetSessionId,
         viewmode: viewMode,
+        k: k,
       });
 
       if (response.success) {
@@ -196,7 +197,7 @@ const Sidebar = ({
     } finally {
       setLoading(false);
     }
-  }, [currentSession, viewMode, onFramesUpdate, toast, mode]);
+  }, [currentSession, viewMode, k, onFramesUpdate, toast, mode]);
 
   useEffect(() => {
     // Initialize session when component mounts
@@ -251,12 +252,12 @@ const Sidebar = ({
     }
   }, [stage, viewMode, currentSession]);
 
-  // Reload queries when viewMode changes
+  // Reload queries when viewMode or k changes
   useEffect(() => {
     if (currentSession && mode === 'chat' && hasLoadedQueries.current) {
       loadQueries(currentSession.id);
     }
-  }, [viewMode, currentSession, loadQueries, mode]);
+  }, [viewMode, k, currentSession, loadQueries, mode]);
 
   // Auto-resize textarea
   const adjustTextareaHeight = () => {
