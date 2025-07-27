@@ -1,0 +1,2 @@
+ssh-keygen -t rsa -b 4096 -C "your_email@example.com" -f $env:USERPROFILE\.ssh\key_name
+ssh [username]@[external-ip] -i [đường_dẫn_private_key]

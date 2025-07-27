@@ -22,7 +22,7 @@ const Sidebar = ({
   allAnswers = [], // All answers data for export
   csvFilenameFormat = 'query-{query_index}-{type}' // Custom CSV filename format
 }) => {
-  const { stage, viewMode, round, queryIndex, k, setStage, setViewMode, setQueryIndex } = useApp();
+  const { stage, viewMode, round, queryIndex, k, searchUrl, setStage, setViewMode, setQueryIndex } = useApp();
   const toast = useToast();
   
   const [queries, setQueries] = useState([]);
@@ -176,6 +176,7 @@ const Sidebar = ({
         session: targetSessionId,
         viewmode: viewMode,
         k: k,
+        search_url: searchUrl, // Add search URL to params
       });
 
       if (response.success) {
@@ -197,7 +198,7 @@ const Sidebar = ({
     } finally {
       setLoading(false);
     }
-  }, [currentSession, viewMode, k, onFramesUpdate, toast, mode]);
+  }, [currentSession, viewMode, k, searchUrl, onFramesUpdate, toast, mode]);
 
   useEffect(() => {
     // Initialize session when component mounts
@@ -260,13 +261,34 @@ const Sidebar = ({
   }, [viewMode, k, currentSession, loadQueries, mode]);
 
   // Auto-resize textarea
-  const adjustTextareaHeight = () => {
+  const adjustTextareaHeight = useCallback(() => {
     const textarea = textareaRef.current;
     if (textarea) {
+      // Reset height to calculate scrollHeight properly
       textarea.style.height = 'auto';
-      textarea.style.height = Math.min(textarea.scrollHeight, 150) + 'px';
+      textarea.style.minHeight = '20px';
+      
+      // Calculate new height
+      const newHeight = Math.min(textarea.scrollHeight, 150);
+      
+      // Debug logging
+      console.log('Adjusting textarea height:', {
+        scrollHeight: textarea.scrollHeight,
+        newHeight: newHeight,
+        currentHeight: textarea.offsetHeight
+      });
+      
+      // Set the new height with important to override CSS
+      textarea.style.setProperty('height', newHeight + 'px', 'important');
+      
+      // Also adjust container height if needed
+      const container = textarea.closest('.sidebar__main-input-container');
+      if (container) {
+        container.style.minHeight = 'auto';
+        container.style.height = 'auto';
+      }
     }
-  };
+  }, []);
 
   // Auto-resize OCR textarea
   const adjustOcrTextareaHeight = () => {
@@ -288,7 +310,7 @@ const Sidebar = ({
 
   useEffect(() => {
     adjustTextareaHeight();
-  }, [inputMessage]);
+  }, [inputMessage, adjustTextareaHeight]);
 
   useEffect(() => {
     adjustOcrTextareaHeight();
@@ -297,6 +319,13 @@ const Sidebar = ({
   useEffect(() => {
     adjustSpeechTextareaHeight();
   }, [speechText]);
+
+  // Initial resize on mount
+  useEffect(() => {
+    adjustTextareaHeight();
+    adjustOcrTextareaHeight();
+    adjustSpeechTextareaHeight();
+  }, [adjustTextareaHeight]);
 
   // Load query content when stage changes (for edit mode)
   useEffect(() => {
@@ -1429,11 +1458,19 @@ const Sidebar = ({
           </div>
 
           {/* Main Chat Input - Text input with Send and Mic only */}
-          <div className="sidebar__input-container">
+          <div className="sidebar__input-container sidebar__main-input-container">
             <textarea
               ref={textareaRef}
               value={inputMessage}
-              onChange={(e) => setInputMessage(e.target.value)}
+              onChange={(e) => {
+                setInputMessage(e.target.value);
+                // Trigger resize on next tick to ensure DOM is updated
+                setTimeout(() => adjustTextareaHeight(), 0);
+              }}
+              onInput={() => {
+                // Also trigger on input event for better responsiveness
+                setTimeout(() => adjustTextareaHeight(), 0);
+              }}
               onKeyPress={handleKeyPress}
               placeholder="Type your query here..."
               className="sidebar__input-field"
@@ -1441,8 +1478,8 @@ const Sidebar = ({
               onFocus={() => handleInputFocus(2)}
               onBlur={handleInputBlur}
             />
-            
-            <button
+            <div className="sidebar__input-actions">
+              <button
               onClick={handleMicrophoneClick}
               className={`sidebar__mic-btn ${isRecording ? 'recording' : ''}`}
               title={isRecording ? "Stop recording" : "Start recording"}
@@ -1459,6 +1496,8 @@ const Sidebar = ({
             >
               <img src="/assets/send-alt-1-svgrepo-com.svg" alt="Send" />
             </button>
+            </div>
+            
           </div>
         </div>
       </div>

@@ -71,7 +71,7 @@ class QueryListCreateAPIView(APIView):
     def get(self, request):
         """Get all queries with filtering"""
         queryset = Query.objects.all()
-        search_url = "https://66fd452b548e.ngrok-free.app/search/"
+        search_url = "https://a2b41a2f035b.ngrok-free.app/search/"
         # Filter by session
         session_id = request.query_params.get('session')
         if session_id:
@@ -136,7 +136,7 @@ class QueryListCreateAPIView(APIView):
                 image_results = self._search_image(search_url=search_url,image=latest_query.image, k=k)
                 raw_frames = self.adjust_faiss_response(request, image_results)
                 
-                # Process frames based on viewmode
+                # Process frames based on viewmode samevideo
                 viewmode = request.query_params.get('viewmode', 'gallery')
                 print(f"View mode: {viewmode}")
                 frames = self._process_frames_by_viewmode(raw_frames, viewmode)

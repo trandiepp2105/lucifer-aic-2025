@@ -11,6 +11,7 @@ const getInitialStateFromURL = () => {
     stage: 1,             // số
     section: 'chat',      // 'chat' hoặc 'history'
     k: 50,                // top k results (1-200)
+    searchUrl: '',        // search server endpoint
   };
 
   // Determine queryIndex based on round
@@ -67,6 +68,11 @@ const getInitialStateFromURL = () => {
     }
   }
   
+  const searchUrlParam = urlParams.get('searchurl');
+  if (searchUrlParam) {
+    urlState.searchUrl = decodeURIComponent(searchUrlParam);
+  }
+  
   const queryIndexParam = urlParams.get('queryindex');
   if (queryIndexParam) {
     urlState.queryIndex = parseInt(queryIndexParam, 10);
@@ -92,6 +98,7 @@ const ActionTypes = {
   SET_SECTION: 'SET_SECTION',
   SET_QUERY_INDEX: 'SET_QUERY_INDEX',
   SET_K: 'SET_K',
+  SET_SEARCH_URL: 'SET_SEARCH_URL',
   UPDATE_FROM_URL: 'UPDATE_FROM_URL',
   RESET_STATE: 'RESET_STATE',
   AUTO_DETECT_QUERY_MODE: 'AUTO_DETECT_QUERY_MODE',
@@ -120,6 +127,8 @@ const appReducer = (state, action) => {
       return { ...state, queryIndex: action.payload };
     case ActionTypes.SET_K:
       return { ...state, k: action.payload };
+    case ActionTypes.SET_SEARCH_URL:
+      return { ...state, searchUrl: action.payload };
     case ActionTypes.AUTO_DETECT_QUERY_MODE:
       return { ...state, queryMode: action.payload };
     case ActionTypes.UPDATE_FROM_URL:
@@ -166,6 +175,11 @@ export const AppProvider = ({ children }) => {
     if (newState.k !== undefined) {
       urlParams.set('k', newState.k.toString());
     }
+    if (newState.searchUrl !== undefined && newState.searchUrl !== '') {
+      urlParams.set('searchurl', encodeURIComponent(newState.searchUrl));
+    } else {
+      urlParams.delete('searchurl');
+    }
 
     const newUrl = `${window.location.pathname}?${urlParams.toString()}`;
     window.history.replaceState(null, '', newUrl);
@@ -193,8 +207,9 @@ export const AppProvider = ({ children }) => {
       section: state.section,
       queryIndex: state.queryIndex,
       k: state.k,
+      searchUrl: state.searchUrl,
     });
-  }, [state.session, state.queryMode, state.round, state.viewMode, state.stage, state.section, state.queryIndex, state.k]);
+  }, [state.session, state.queryMode, state.round, state.viewMode, state.stage, state.section, state.queryIndex, state.k, state.searchUrl]);
 
   // Actions
   const actions = {
@@ -206,6 +221,7 @@ export const AppProvider = ({ children }) => {
     setSection: (section) => dispatch({ type: ActionTypes.SET_SECTION, payload: section }),
     setQueryIndex: (index) => dispatch({ type: ActionTypes.SET_QUERY_INDEX, payload: index }),
     setK: (k) => dispatch({ type: ActionTypes.SET_K, payload: k }),
+    setSearchUrl: (url) => dispatch({ type: ActionTypes.SET_SEARCH_URL, payload: url }),
     resetState: (keepState = {}) => dispatch({ type: ActionTypes.RESET_STATE, payload: keepState }),
   };
 

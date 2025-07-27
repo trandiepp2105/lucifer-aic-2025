@@ -286,6 +286,22 @@
     }
   }
 
+  &__main-input-container {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    padding-bottom: 0.125rem;
+    gap: 0;
+    min-height: auto !important;
+    height: auto !important;
+    
+    // Ensure textarea can expand
+    .sidebar__input-field {
+      flex-grow: 1;
+      flex-shrink: 0;
+      flex-basis: auto;
+    }
+  }
+
   &__upload-btn {
     background: none;
     border: none;
@@ -303,19 +319,30 @@
   }
 
   &__input-field {
+    width: 100%;
     flex: 1;
     background: none;
     border: none;
     color: #333;
     font-size: 0.9rem;
     resize: none;
-    min-height: 20px;
-    max-height: 150px;
+    
+    height: auto !important; // Allow inline style to override
+    min-height: 20px !important;
+    max-height: 150px !important;
     outline: none;
     font-family: inherit;
     overflow-y: auto;
     transition: height 0.1s ease, opacity 0.2s ease;
     line-height: 1.4;
+
+    // Specific rule for main input container textarea
+    .sidebar__main-input-container & {
+      height: auto !important;
+      min-height: 20px !important;
+      max-height: 150px !important;
+      flex-shrink: 0;
+    }
 
     &::placeholder {
       color: #6c757d;
@@ -331,7 +358,17 @@
       }
     }
   }
-
+  &__input-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-shrink: 0;
+    
+    .sidebar__main-input-container & {
+      justify-content: flex-end;
+      padding-top: 0.25rem;
+    }
+  }
   &__send-btn {
     background: none;
     border: none;

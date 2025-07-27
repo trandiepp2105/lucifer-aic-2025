@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useApp } from '../../contexts/AppContext';
 import './ActivityBar.scss';
 
 const ActivityBar = ({ onSectionChange, activeSection, onRoundChange, onQueryModeChange, onCsvFormatChange, onKChange, selectedRound = 'prelims', selectedQueryMode = 'kis', csvFilenameFormat = 'query-{query_index}-{type}', selectedK = 50 }) => {
@@ -8,6 +9,9 @@ const ActivityBar = ({ onSectionChange, activeSection, onRoundChange, onQueryMod
   const [currentCsvFormat, setCurrentCsvFormat] = useState(csvFilenameFormat);
   const [currentK, setCurrentK] = useState(selectedK);
   const settingsRef = useRef(null);
+  
+  // Use AppContext for search URL
+  const { searchUrl, setSearchUrl } = useApp();
 
   // Update internal state when props change
   useEffect(() => {
@@ -104,6 +108,10 @@ const ActivityBar = ({ onSectionChange, activeSection, onRoundChange, onQueryMod
     if (onKChange) {
       onKChange(k);
     }
+  };
+
+  const handleSearchUrlChange = (url) => {
+    setSearchUrl(url);
   };
 
   // Update CSS variable for slider progress
@@ -204,6 +212,25 @@ const ActivityBar = ({ onSectionChange, activeSection, onRoundChange, onQueryMod
                   />
                   <div className="activity-bar__csv-format-help">
                     Use {'{query_index}'} and {'{type}'} as placeholders
+                  </div>
+                </div>
+              </div>
+
+              <div className="activity-bar__settings-section">
+                <label className="activity-bar__settings-label" htmlFor="search-url-input">
+                  Search URL
+                </label>
+                <div className="activity-bar__search-url">
+                  <textarea
+                    id="search-url-input"
+                    className="activity-bar__search-url-input"
+                    value={searchUrl}
+                    onChange={(e) => handleSearchUrlChange(e.target.value)}
+                    placeholder="Enter search server endpoint URL..."
+                    rows={3}
+                  />
+                  <div className="activity-bar__search-url-help">
+                    URL endpoint for search server
                   </div>
                 </div>
               </div>
