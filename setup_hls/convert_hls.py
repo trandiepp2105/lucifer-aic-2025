@@ -132,7 +132,7 @@ if __name__ == "__main__":
         
         processor.process_videos_in_batches(
             batch_size=BATCH_SIZE,
-            segment_duration=30,
+            segment_duration=10,
             file_extension='.mp4'
         )
 
