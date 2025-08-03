@@ -87,6 +87,7 @@ services:
       - ./backend/staticfiles:/backend/staticfiles:ro
       - ${FRAMES_PATH}:/media/frames:ro
       - ${VIDEOS_PATH}:/media/videos:ro
+      - ${VIDEOS_HLS_PATH}:/media/videos_hls:ro
     depends_on:
       - backend
       - frontend

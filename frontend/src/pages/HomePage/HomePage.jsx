@@ -443,7 +443,7 @@ const HomePage = () => {
         )}
       </div>
 
-      <VideoPlayer
+      {/* <VideoPlayer
         isOpen={isVideoPlayerOpen}
         onClose={closeVideoPlayer}
         currentFrame={selectedFrame}
@@ -451,7 +451,7 @@ const HomePage = () => {
         onSubmit={handleSubmitFrame}
         queryMode={queryMode}
         sendingFrames={sendingFrames}
-      />
+      /> */}
 
       <SubmissionModal
         isOpen={isSubmissionModalOpen}

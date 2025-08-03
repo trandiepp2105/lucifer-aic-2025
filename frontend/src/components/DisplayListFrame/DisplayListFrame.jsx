@@ -6,6 +6,7 @@ import TeamAnswerModal from '../TeamAnswerModal/TeamAnswerModal';
 import ImageZoomModal from '../ImageZoomModal/ImageZoomModal';
 import { useApp } from '../../contexts/AppContext';
 import { useToast } from '../Toast/ToastProvider';
+import { useFrameActions } from '../../hooks/useFrameActions';
 import { TeamAnswerService } from '../../services/TeamAnswerService';
 import './DisplayListFrame.scss';
 
@@ -24,11 +25,21 @@ const DisplayListFrame = ({
   allTeamAnswers = [] // Add allTeamAnswers prop for validation
 }) => {
   const [isVideoPlayerOpen, setIsVideoPlayerOpen] = useState(false);
-  const [isSubmissionModalOpen, setIsSubmissionModalOpen] = useState(false);
-  const [isTeamAnswerModalOpen, setIsTeamAnswerModalOpen] = useState(false);
   const [isImageZoomOpen, setIsImageZoomOpen] = useState(false);
-  const [frameToSubmit, setFrameToSubmit] = useState(null);
   const [frameToZoom, setFrameToZoom] = useState(null);
+  
+  // Use the shared frame actions hook
+  const {
+    isSubmissionModalOpen,
+    isTeamAnswerModalOpen,
+    frameToSubmit,
+    handleSendFrame: hookHandleSendFrame,
+    handleSubmitFrame,
+    handleTeamAnswerModalClose,
+    handleTeamAnswerComplete,
+    handleSubmissionModalClose,
+    handleSubmissionComplete
+  } = useFrameActions(queryMode, allTeamAnswers);
   
   // Debug modal states
   useEffect(() => {
@@ -80,124 +91,14 @@ const DisplayListFrame = ({
     setFrameToZoom(null);
   };
 
-  const handleSubmitFrame = (frame) => {
-    setFrameToSubmit(frame);
-    setIsSubmissionModalOpen(true);
-  };
-
   const handleSendFrame = (frame) => {
-    // Use onSend prop if available, otherwise use internal implementation
+    // Use onSend prop if available, otherwise use hook implementation
     if (onSend) {
       onSend(frame);
     } else {
-      // Fallback to internal implementation for backward compatibility
-      handleSendFrameInternal(frame);
+      // Use hook implementation for backward compatibility
+      hookHandleSendFrame(frame);
     }
-  };
-
-  const handleSendFrameInternal = async (frame) => {
-    const frameId = `${frame.video_name}-${frame.frame_index}`;
-    
-    // If queryMode is 'qa', open TeamAnswerModal for QA input
-    if (queryMode === 'qa') {
-      setFrameToSubmit(frame);
-      setIsTeamAnswerModalOpen(true);
-      return;
-    }
-    
-    // Validate queryMode consistency before sending
-    const validation = validateQueryModeConsistency(allTeamAnswers, queryIndex, round, 'kis');
-    if (!validation.valid) {
-      const modeText = validation.existingMode === 'qa' ? 'Q&A' : 'KIS';
-      toast.error(`Query index ${queryIndex} already has ${modeText} answers. Cannot create KIS answer.`, 2000);
-      return;
-    }
-    
-    // For 'kis' mode, send directly without QA text
-    try {
-      // Prepare team answer data
-      const teamAnswerData = {
-        video_name: frame.video_name,
-        frame_index: frame.frame_index,
-        url: frame.url,
-        round: round,
-        query_index: queryIndex // Use queryIndex directly from AppContext
-      };
-
-      // Call API to create team answer
-      const result = await TeamAnswerService.createTeamAnswer(teamAnswerData);
-      
-      if (result.success) {
-        toast.success('Frame sent successfully!', 500);
-      } else {
-        // Handle different error types
-        if (result.error && result.error.includes('already exists')) {
-          toast.warning('This frame has already been sent for this query', 3000);
-        } else {
-          toast.error(result.error || 'Failed to send frame', 4000);
-        }
-      }
-    } catch (error) {
-      console.error('Error sending frame:', error);
-      toast.error('An error occurred while sending frame', 4000);
-    }
-  };
-
-  const handleTeamAnswerModalClose = () => {
-    setIsTeamAnswerModalOpen(false);
-    setFrameToSubmit(null);
-  };
-
-  const handleTeamAnswerComplete = async (qaData) => {
-    if (!frameToSubmit) return;
-    
-    // Validate queryMode consistency before proceeding
-    const qaValidation = validateQueryModeConsistency(allTeamAnswers, queryIndex, round, 'qa');
-    if (!qaValidation.valid) {
-      const modeText = qaValidation.existingMode === 'qa' ? 'Q&A' : 'KIS';
-      toast.error(`Query index ${queryIndex} already has ${modeText} answers. Cannot create Q&A answer.`, 2000);
-      return;
-    }
-    
-    try {
-      // Prepare team answer data with QA text
-      const teamAnswerData = {
-        video_name: frameToSubmit.video_name,
-        frame_index: frameToSubmit.frame_index,
-        url: frameToSubmit.url,
-        round: round,
-        query_index: queryIndex,
-        qa: qaData.qaText // Add QA text from modal
-      };
-
-      // Call API to create team answer
-      const result = await TeamAnswerService.createTeamAnswer(teamAnswerData);
-      
-      if (result.success) {
-        toast.success('Frame sent successfully!', 500);
-        handleTeamAnswerModalClose();
-      } else {
-        // Handle different error types
-        if (result.error && result.error.includes('already exists')) {
-          toast.warning('This frame has already been sent for this query', 3000);
-        } else {
-          toast.error(result.error || 'Failed to send frame', 4000);
-        }
-      }
-    } catch (error) {
-      console.error('Error sending frame with QA:', error);
-      toast.error('An error occurred while sending frame', 4000);
-    }
-  };
-
-  const handleSubmissionModalClose = () => {
-    setIsSubmissionModalOpen(false);
-    setFrameToSubmit(null);
-  };
-
-  const handleSubmissionComplete = (submissionData) => {
-    // TODO: Handle submission logic here
-    // You can add API calls or other submission logic
   };
 
   const handleStageChange = (newStage) => {
@@ -378,12 +279,18 @@ const DisplayListFrame = ({
         {viewMode === 'timeline' && renderTimelineView()}
       </div>
 
-      <VideoPlayer
-        isOpen={isVideoPlayerOpen}
-        onClose={handleCloseVideoPlayer}
-        currentFrame={selectedFrame}
-        onFrameSelect={onFrameSelect}
-      />
+      {isVideoPlayerOpen && (
+        <VideoPlayer
+          isOpen={isVideoPlayerOpen}
+          onClose={handleCloseVideoPlayer}
+          currentFrame={selectedFrame}
+          onFrameSelect={onFrameSelect}
+          onSubmit={handleSubmitFrame}
+          onSend={handleSendFrame}
+          sendingFrames={sendingFrames}
+          allTeamAnswers={allTeamAnswers}
+        />
+      )}
 
       <SubmissionModal
         isOpen={isSubmissionModalOpen}

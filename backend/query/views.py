@@ -13,6 +13,12 @@ import time
 import logging
 import requests
 from io import BytesIO
+import json
+from typing import List, Tuple
+import urllib3
+
+# Disable SSL warnings for ngrok URLs
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Add search module to path
 search_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'search')
@@ -35,12 +41,41 @@ class QueryListCreateAPIView(APIView):
     """
     parser_classes = [MultiPartParser, FormParser, JSONParser]
 
+    def _create_request_session(self, url: str) -> requests.Session:
+        """
+        Create a requests session with appropriate configuration for the URL
+        
+        Args:
+            url: The URL to make requests to
+            
+        Returns:
+            Configured requests session
+        """
+        session = requests.Session()
+        
+        # Special configuration for ngrok URLs
+        if 'ngrok' in url.lower():
+            # Disable SSL verification for ngrok URLs to avoid SSL errors
+            session.verify = False
+            # Add headers to bypass ngrok warning page and identify our client
+            session.headers.update({
+                'ngrok-skip-browser-warning': 'true',
+                'User-Agent': 'Backend-API-Client/1.0'
+            })
+        
+        return session
+
     @swagger_auto_schema(
         operation_summary="List all queries",
         operation_description="Get all queries with optional filtering",
         manual_parameters=[
             openapi.Parameter('session', openapi.IN_QUERY, description="Filter by session ID", type=openapi.TYPE_INTEGER),
             openapi.Parameter('viewmode', openapi.IN_QUERY, description="View mode for frames: 'gallery' (flat list) or 'samevideo' (grouped by video)", type=openapi.TYPE_STRING),
+            openapi.Parameter('search_url', openapi.IN_QUERY, description="URL of the search server (without /search endpoint)", type=openapi.TYPE_STRING),
+            openapi.Parameter('k', openapi.IN_QUERY, description="Number of results to return (default: 10)", type=openapi.TYPE_INTEGER),
+            openapi.Parameter('text_weight', openapi.IN_QUERY, description="Weight for text search (default: 0.45)", type=openapi.TYPE_NUMBER),
+            openapi.Parameter('ocr_weight', openapi.IN_QUERY, description="Weight for OCR search (default: 0.35)", type=openapi.TYPE_NUMBER),
+            openapi.Parameter('image_weight', openapi.IN_QUERY, description="Weight for image search (default: 0.20)", type=openapi.TYPE_NUMBER),
         ],
         responses={
             200: openapi.Response(
@@ -69,91 +104,197 @@ class QueryListCreateAPIView(APIView):
         }
     )
     def get(self, request):
-        """Get all queries with filtering"""
+        """Get all queries, execute temporal search, and return frames."""
+        # --- Phần 1: Lấy và lọc QuerySet ---
         queryset = Query.objects.all()
-        # search_url = "https://a2b41a2f035b.ngrok-free.app/search/"
-        search_url = request.query_params.get('search_url', 'https://a2b41a2f035b.ngrok-free.app/search/')
-        # Filter by session
         session_id = request.query_params.get('session')
-        if session_id:
-            queryset = queryset.filter(session_id=session_id)
         
-        # Get k parameter and convert to int
-        k_param = request.query_params.get('k', '50')
-        try:
-            k = int(k_param)
-        except (ValueError, TypeError):
-            k = 50  # Default value if conversion fails
-            
-        queryset = queryset.order_by('-created_at')
+        if not session_id:
+            return Response({"error": "Session ID is required."}, status=status.HTTP_400_BAD_REQUEST)
         
+        queryset = queryset.filter(session_id=session_id)
         serializer = QuerySerializer(queryset, many=True, context={'request': request})
+        if not queryset.exists():
+            return Response({
+                'message': 'Temporal search executed successfully',
+                'frames': [],
+                'data': serializer.data,
+            }, status=status.HTTP_200_OK)
+
+        search_url = request.query_params.get('search_url')
+        k_param = request.query_params.get('k', '10')
+        viewmode = request.query_params.get('viewmode', 'gallery')
         
-        # Search frames for the latest query if it exists
-        frames = []
-        if queryset:
-            # Get the most recent query
-            latest_query = queryset[0]  # Already ordered by -created_at
-            
-            # Perform OCR search on the latest query if it has OCR data
-            if latest_query.ocr and latest_query.ocr.strip() and latest_query.ocr.lower() != 'null':
-                print(f"Performing OCR search for query {latest_query.id} with text: {latest_query.ocr[:50]}")
-                total_start = time.time()
-                
-                ocr_results = self._search_ocr(ocr_text=latest_query.ocr, k=k)
+        # Sắp xếp queries theo stage
+        sorted_queries = queryset.order_by('stage')
+        sorted_queries_serializer = QuerySerializer(sorted_queries, many=True, context={'request': request})        
+        # Nếu không có search_url, fallback về OCR search với query có stage lớn nhất
+        if not search_url:
+            last_query = sorted_queries.last()
+            if last_query and last_query.ocr and last_query.ocr.strip() and last_query.ocr.lower() != 'null':
+                ocr_results = self._search_ocr(ocr_text=last_query.ocr, k=int(k_param))
                 raw_frames = self.adjust_response(request, ocr_results)
-                
-                # Process frames based on viewmode
-                viewmode = request.query_params.get('viewmode', 'gallery')
-                print(f"View mode: {viewmode}")
                 frames = self._process_frames_by_viewmode(raw_frames, viewmode)
-
-                total_end = time.time()
-                total_duration = total_end - total_start
-                
-                print(f"Total OCR process time: {total_duration:.3f} seconds")
-                
-            elif latest_query.text and latest_query.text.strip() and latest_query.text.lower() != 'null':
-                total_start = time.time()
-                
-                # Perform text search via external API
-                text_results = self._search_text(search_url=search_url,text=latest_query.text, k=k)
-                raw_frames = self.adjust_faiss_response(request, text_results)
-                
-                # Process frames based on viewmode
-                viewmode = request.query_params.get('viewmode', 'gallery')
-                print(f"View mode: {viewmode}")
-                frames = self._process_frames_by_viewmode(raw_frames, viewmode)
-
-                total_end = time.time()
-                total_duration = total_end - total_start
-                
-                print(f"Total text search process time: {total_duration:.3f} seconds")
-                
-            elif latest_query.image:
-                total_start = time.time()
-                
-                # Perform image search via external API
-                image_results = self._search_image(search_url=search_url,image=latest_query.image, k=k)
-                raw_frames = self.adjust_faiss_response(request, image_results)
-                
-                # Process frames based on viewmode samevideo
-                viewmode = request.query_params.get('viewmode', 'gallery')
-                print(f"View mode: {viewmode}")
-                frames = self._process_frames_by_viewmode(raw_frames, viewmode)
-
-                total_end = time.time()
-                total_duration = total_end - total_start
-                
-                print(f"Total image search process time: {total_duration:.3f} seconds")
-                
-                print(f"Total text search process time: {total_duration:.3f} seconds")
+                return Response({
+                    'message': 'OCR search executed successfully',
+                    'frames': frames,
+                    'data': serializer.data,
+                }, status=status.HTTP_200_OK)
+            else:
+                return Response({
+                    'message': 'No valid ocr',
+                    'frames': [],
+                    'data': serializer.data,
+                }, status=status.HTTP_200_OK)
         
-        return Response({
-            'message': 'Queries retrieved successfully',
-            'data': serializer.data,
-            'frames': frames,  # Add frames to response
-        }, status=status.HTTP_200_OK)
+        # --- Phần 2: Chuẩn bị queries_structure và image_files ---
+        queries_structure = []
+        image_files_to_open = []
+        image_counter = 0
+        
+        for query_data in sorted_queries_serializer.data:
+            query_item = {}
+            
+            # Thêm text nếu có và không rỗng
+            if query_data.get('text') and query_data['text'].strip():
+                query_item['text'] = query_data['text']
+                
+            # Thêm ocr nếu có và không rỗng
+            if query_data.get('ocr') and query_data['ocr'].strip() and query_data['ocr'].lower() != 'null':
+                query_item['ocr'] = query_data['ocr']
+            
+            # Xử lý image nếu có
+            if query_data.get('image'):
+                # Tìm query object tương ứng để lấy file path
+                query_obj = sorted_queries.get(id=query_data['id'])
+                if query_obj.image and hasattr(query_obj.image, 'path'):
+                    image_path = query_obj.image.path
+                    image_name = os.path.basename(image_path)
+                    
+                    # Sử dụng tên file thực tế làm image_ref thay vì tạo reference
+                    query_item['image_ref'] = image_name
+                    image_files_to_open.append((image_name, image_path, image_name))
+                    image_counter += 1
+            
+            # Chỉ thêm vào queries_structure nếu có ít nhất một field
+            if query_item:
+                queries_structure.append(query_item)
+        
+        if not queries_structure:
+            print("No valid queries with text, ocr, or image content found.")
+            return Response({
+                'message': 'No valid queries with text, ocr, or image content found.',
+                'frames': [],
+                'data': serializer.data,
+            }, status=status.HTTP_200_OK)
+
+        # Chuẩn bị payload
+        queries_structure_str = json.dumps(queries_structure)
+        
+        # Default weights - có thể được override bởi request params
+        default_weights = {'text': 0.6, 'ocr': 0.2, 'image': 0.2}
+        
+        # Cho phép client gửi custom weights qua query params
+        weights = {}
+        if request.query_params.get('text_weight'):
+            weights['text'] = float(request.query_params.get('text_weight'))
+        if request.query_params.get('ocr_weight'):
+            weights['ocr'] = float(request.query_params.get('ocr_weight'))
+        if request.query_params.get('image_weight'):
+            weights['image'] = float(request.query_params.get('image_weight'))
+        
+        # default vector models config
+        vector_models_config = [
+            {
+                "model_name": "ViT-H-14-378-quickgelu",
+                "weight": 5.5
+            },
+            {
+                "model_name": "ViT-H-14-quickgelu",
+                "weight": 4.5
+            }
+        ]
+
+        # Sử dụng default weights nếu không có custom weights
+        final_weights = {**default_weights, **weights}
+        weights_str = json.dumps(final_weights)
+        
+        payload = {
+            'k': int(k_param),
+            'queries_structure': queries_structure_str,
+            'weights': weights_str,
+            'vector_models_config': json.dumps(vector_models_config),
+        }
+
+        # --- Phần 3: Gửi Request và Xử lý Lỗi ---
+        files_to_send = []
+        opened_files = []
+        
+        try:
+            # Mở các file ảnh cần thiết
+            for image_name, path, filename in image_files_to_open:
+                f = open(path, 'rb')
+                opened_files.append(f)
+                # Sử dụng filename thực tế để server có thể match với image_ref
+                files_to_send.append(('image_files', (filename, f, 'image/jpeg')))
+
+            # Gửi request POST tới search_url/search
+            search_endpoint = f"{search_url.rstrip('/')}/search"
+            
+            # Use helper method to create configured session
+            session = self._create_request_session(search_url)
+            
+            response = session.post(search_endpoint, data=payload, files=files_to_send, timeout=60)
+            response.raise_for_status()
+            
+            search_data = response.json()
+            temporal_results = search_data.get('results', [])
+            # Xử lý kết quả tương tự như trước
+            results = self.adjust_faiss_response(request, temporal_results)
+            # flattened_results = self._flatten_temporal_results(temporal_results)
+            frames = self._process_frames_by_viewmode(results, viewmode)
+            
+            return Response({
+                'message': 'Temporal search executed successfully',
+                'frames': frames,
+                'data': serializer.data,
+                'search_server_response': search_data
+            }, status=status.HTTP_200_OK)
+
+        except requests.exceptions.RequestException as e:
+            print(f"ERROR: Request to search server failed - {e}")
+            # Trả về data queries dù có lỗi search
+            return Response({
+                'message': 'Queries retrieved successfully, but search server failed',
+                'data': serializer.data,
+                'frames': [],
+                'error': 'Failed to communicate with the search server'
+            }, status=status.HTTP_200_OK)
+
+        except FileNotFoundError as e:
+            print(f"ERROR: Image file not found - {e}")
+            # Trả về data queries dù có lỗi file
+            return Response({
+                'message': 'Queries retrieved successfully, but image file not found', 
+                'data': serializer.data,
+                'frames': [],
+                'error': 'An image file required for the query was not found'
+            }, status=status.HTTP_200_OK)
+
+        except Exception as e:
+            print(f"ERROR: An unexpected error occurred - {e}")
+            # Trả về data queries dù có lỗi khác
+            return Response({
+                'message': 'Queries retrieved successfully, but search failed',
+                'data': serializer.data,
+                'frames': [],
+                'error': 'An unexpected error occurred during search'
+            }, status=status.HTTP_200_OK)
+
+        finally:
+            # Đảm bảo đóng tất cả các file đã mở
+            for f in opened_files:
+                f.close()    
 
     @swagger_auto_schema(
         operation_summary="Create a new query",
@@ -202,7 +343,25 @@ class QueryListCreateAPIView(APIView):
             'message': 'Failed to create query',
             'errors': serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
-    
+
+    def _flatten_temporal_results(
+        self, temporal_results: List[List[Tuple[str, float]]],
+    ) -> List[Tuple[str, float]]:
+        """
+        Làm phẳng một danh sách các chuỗi kết quả từ temporal_search thành một danh sách duy nhất.
+
+        Args:
+            temporal_results (List[List[Tuple[str, float]]]): 
+                Đầu ra từ hàm `temporal_search`, ví dụ: [[chain1], [chain2], ...].
+
+        Returns:
+            List[Tuple[str, float]]: Một danh sách phẳng chứa tất cả các khung hình.
+        """
+        flattened_list = []
+        for chain in temporal_results:
+            flattened_list.extend(chain)
+            
+        return flattened_list    
     def _search_ocr(self, ocr_text: str, k: int = 50) -> list:
         """
         Perform OCR search using sync method
@@ -265,55 +424,20 @@ class QueryListCreateAPIView(APIView):
             frames.append(frame_data)
         
         return frames
-    
-    def _process_frames_by_viewmode(self, frames: list, viewmode: str) -> list:
-        """
-        Process frames based on viewmode
-        
-        Args:
-            frames: List of frame data
-            viewmode: 'gallery' or 'samevideo'
-            
-        Returns:
-            Processed frames based on viewmode:
-            - 'gallery': Returns a flat array (1D) of frames
-            - 'samevideo': Returns a 2D array where each element is an array of frames from the same video
-        """
-        if viewmode == 'samevideo':
-            # Group frames by video_name
-            video_groups = {}
-            for frame in frames:
-                video_name = frame.get('video_name', '')
-                if video_name not in video_groups:
-                    video_groups[video_name] = []
-                video_groups[video_name].append(frame)
-            
-            # Convert to 2D array - each element is an array of frames from the same video
-            result = []
-            for video_name, video_frames in video_groups.items():
-                # Sort frames by frame_index within each video
-                sorted_frames = sorted(video_frames, key=lambda x: int(x.get('frame_index', 0)))
-                result.append(sorted_frames)
-            
-            # Sort video groups by the first frame's video name for consistency
-            result.sort(key=lambda x: x[0].get('video_name', '') if x else '')
-            
-            return result
-        else:
-            # Gallery mode - return frames as flat list (1D array)
-            return frames
 
-    def adjust_faiss_response(self, request, results: list) -> list:
+    def adjust_faiss_response(self, request, results) -> list:
         """
-        Adjust FAISS search results to create frames array with full URLs
+        Adjust FAISS search results to create frames array with full URLs.
+        Handles both single list of tuples and list of lists of tuples.
         
         Args:
             request: Django request object
-            results: List of FAISS search results, each containing [path, score]
-                    Format: [["L06_V020/11116.jpg", 0.286108285188675], ...]
+            results: Either:
+                - List of tuples: [('L06_V005/14497.jpg', 0.222), ...]
+                - List of lists of tuples: [[('L06_V005/14497.jpg', 0.222), ...], ...]
             
         Returns:
-            List of frames with url, video_name, frame_index
+            Same structure as input but with frame data dictionaries instead of tuples
         """
         if not results:
             return []
@@ -328,102 +452,170 @@ class QueryListCreateAPIView(APIView):
             scheme = 'https' if request.is_secure() else 'http'
             base_url = f"{scheme}://{host}"
         
-        frames = []
-        for result in results:
-            # FAISS results format: [path, score]
-            if len(result) >= 2:
-                path = result[0]  # e.g., "L06_V020/11116.jpg"
-                score = result[1]
+        def convert_tuple_to_frame(result_tuple):
+            """Convert single tuple to frame data"""
+            # Check if result_tuple is actually a tuple/list and has length
+            if not isinstance(result_tuple, (tuple, list)) or len(result_tuple) < 2:
+                return None
                 
-                # Parse video_name and frame_index from path
-                # Path format: {video_name}/{frame_index}.jpg
-                if '/' in path:
-                    video_name, filename = path.rsplit('/', 1)
-                    frame_index = filename.replace('.jpg', '')
-                    
-                    # Build frame URL: http://{SERVER_IP}/media/frames/{video_name}/{frame_index}.jpg
-                    frame_url = f"{base_url}/media/frames/{video_name}/{frame_index}.jpg"
-                    
-                    frame_data = {
-                        'url': frame_url,
-                        'video_name': video_name,
-                        'frame_index': frame_index,
-                        'score': score
-                    }
-                    frames.append(frame_data)
+            path = result_tuple[0]  # e.g., "L06_V005/14497.jpg"
+            score = result_tuple[1]
+            
+            # Parse video_name and frame_index from path
+            if '/' in path:
+                video_name, filename = path.rsplit('/', 1)
+                frame_index = filename.replace('.jpg', '')
+                
+                # Build frame URL
+                frame_url = f"{base_url}/media/frames/{video_name}/{frame_index}.jpg"
+                
+                frame_data = {
+                    'url': frame_url,
+                    'video_name': video_name,
+                    'frame_index': frame_index,
+                    'score': score
+                }
+                return frame_data
+            return None
         
-        return frames
+        # Check if results is a list of lists (2D) or just a list of tuples (1D)
+        if results and len(results) > 0 and isinstance(results[0], list):
+            # Check if it's 2D (list of lists of tuples) or 1D (list of tuples as lists)
+            first_element = results[0]
+            if len(first_element) > 0 and isinstance(first_element[0], list) and len(first_element[0]) == 2:
+                # 2D format: [[['path1', score1], ['path2', score2]], [...]]
+                processed_results = []
+                for result_list in results:
+                    if isinstance(result_list, list):
+                        processed_sublist = []
+                        for result_tuple in result_list:
+                            frame_data = convert_tuple_to_frame(result_tuple)
+                            if frame_data:
+                                processed_sublist.append(frame_data)
+                        processed_results.append(processed_sublist)
+                return processed_results
+            elif len(first_element) == 2 and isinstance(first_element[0], str):
+                # 1D format: [['path1', score1], ['path2', score2], ...]
+                processed_results = []
+                for result_tuple in results:
+                    frame_data = convert_tuple_to_frame(result_tuple)
+                    if frame_data:
+                        processed_results.append(frame_data)
+                return processed_results
+            else:
+                # Unknown format, treating as 1D
+                processed_results = []
+                for result_tuple in results:
+                    frame_data = convert_tuple_to_frame(result_tuple)
+                    if frame_data:
+                        processed_results.append(frame_data)
+                return processed_results
+        else:
+            # Check if it's a flat array with path and score pairs
+            # Format: ['L08_V023/16268.jpg', 0.199, 'L08_V024/16269.jpg', 0.188, ...]
+            if len(results) >= 2 and isinstance(results[0], str) and isinstance(results[1], (int, float)):
+                frames = []
+                # Process pairs of (path, score)
+                for i in range(0, len(results), 2):
+                    if i + 1 < len(results):
+                        path = results[i]
+                        score = results[i + 1]
+                        frame_data = convert_tuple_to_frame((path, score))
+                        if frame_data:
+                            frames.append(frame_data)
+                return frames
+            else:
+                # Single list of tuples
+                frames = []
+                for result_tuple in results:
+                    frame_data = convert_tuple_to_frame(result_tuple)
+                    if frame_data:
+                        frames.append(frame_data)
+                return frames
+
+    def flatten_frames(self, frames):
+        """
+        Flatten frames array if it's a list of lists, otherwise return as is.
+        
+        Args:
+            frames: Either flat list of frames or list of lists of frames
+            
+        Returns:
+            Flat list of frames
+        """
+        if not frames:
+            return []
+        
+        # Check if it's a list of lists by examining the first element
+        if frames and len(frames) > 0 and isinstance(frames[0], list):
+            # It's a list of lists, flatten it
+            flattened = []
+            for frame_list in frames:
+                if isinstance(frame_list, list):
+                    flattened.extend(frame_list)
+            return flattened
+        else:
+            # It's already flat, return as is
+            return frames
+
+    def _process_frames_by_viewmode(self, results, view_mode):
+        """
+        Process frames based on view mode requirements.
+        
+        Args:
+            results: Results from adjust_faiss_response
+            view_mode: Either 'gallery' or 'samevideo'
+            
+        Returns:
+            Processed frames according to view mode
+        """
+        if not results:
+            return []
+        
+        if view_mode == 'gallery':
+            # Gallery mode needs flat array
+            if results and len(results) > 0 and isinstance(results[0], list):
+                # It's a list of lists, flatten it
+                return self.flatten_frames(results)
+            else:
+                # Already flat, return as is
+                return results
+                
+        elif view_mode == 'samevideo':
+            # Same video mode needs list of lists grouped by video
+            if results and len(results) > 0 and isinstance(results[0], list):
+                # Already list of lists, return as is
+                return results
+            else:
+                # Flat array, need to group by video while preserving rank
+                if not results:
+                    return []
+                
+                # Group frames by video_name while preserving original order
+                video_groups = {}
+                video_order = []
+                
+                for i, frame in enumerate(results):
+                    if isinstance(frame, dict):  # Make sure frame is a dictionary
+                        video_name = frame.get('video_name')
+                        if video_name not in video_groups:
+                            video_groups[video_name] = []
+                            video_order.append((video_name, i))  # Store video name with first occurrence index
+                        video_groups[video_name].append(frame)
+                
+                # Sort by first occurrence index to maintain rank order
+                video_order.sort(key=lambda x: x[1])
+                
+                # Build result as list of lists
+                grouped_results = []
+                for video_name, _ in video_order:
+                    grouped_results.append(video_groups[video_name])
+                
+                return grouped_results
+        
+        # Default: return as is
+        return results
     
-    def _search_text(self, search_url: str, text: str, k=10) -> list:
-        """
-        Perform text search using external search API
-        
-        Args:
-            text: Text query to search for
-            k: Number of results to return
-            
-        Returns:
-            List of search results in FAISS format or empty list if error
-        """
-        try:
-            params = {'text': text, 'k': k}
-            
-            response = requests.get(search_url, params=params, timeout=30)
-            
-            if response.status_code == 200:
-                response_data = response.json()
-                if response_data.get('status') == 'success':
-                    results = response_data.get('results', [])
-                    print(f"Text search returned {len(results)} results")
-                    return results
-            
-            print(f"Text search API error: {response.status_code} - {response.text}")
-            return []
-                
-        except Exception as e:
-            print(f"Text search error: {e}")
-            return []
-
-    def _search_image(self, search_url: str, image, k=10) -> list:
-        """
-        Perform image search using external search API
-        
-        Args:
-            image: Image file from query (Django ImageFieldFile)
-            k: Number of results to return
-            
-        Returns:
-            List of search results in FAISS format or empty list if error
-        """
-        try:
-            
-            # Open the image file and get its content
-            with image.open('rb') as img_file:
-                image_content = img_file.read()
-            
-            # Determine content type from file extension
-            import mimetypes
-            content_type = mimetypes.guess_type(image.name)[0] or 'image/jpeg'
-            
-            files = {'image': (image.name, image_content, content_type)}
-            data = {'k': k}
-            
-            response = requests.post(search_url, files=files, data=data, timeout=30)
-            
-            if response.status_code == 200:
-                response_data = response.json()
-                if response_data.get('status') == 'success':
-                    results = response_data.get('results', [])
-                    print(f"Image search returned {len(results)} results")
-                    return results
-            
-            print(f"Image search API error: {response.status_code} - {response.text}")
-            return []
-                
-        except Exception as e:
-            print(f"Image search error: {e}")
-            return []
-
 class QueryDetailAPIView(APIView):
     """
     API endpoint for retrieving, updating and deleting a specific query

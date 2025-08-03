@@ -271,13 +271,6 @@ const Sidebar = ({
       // Calculate new height
       const newHeight = Math.min(textarea.scrollHeight, 150);
       
-      // Debug logging
-      console.log('Adjusting textarea height:', {
-        scrollHeight: textarea.scrollHeight,
-        newHeight: newHeight,
-        currentHeight: textarea.offsetHeight
-      });
-      
       // Set the new height with important to override CSS
       textarea.style.setProperty('height', newHeight + 'px', 'important');
       

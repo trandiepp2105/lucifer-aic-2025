@@ -227,16 +227,16 @@
 
 .video-player__progress {
   width: 100%;
-  height: 4px;
+  height: 6px;
   background: rgba(255, 255, 255, 0.3);
-  border-radius: 2px;
+  border-radius: 3px;
   cursor: pointer;
   margin-bottom: 0.75rem;
   position: relative;
-  overflow: hidden;
+  overflow: visible;
 
   &:hover {
-    height: 6px;
+    height: 8px;
     margin-bottom: calc(0.75rem - 1px);
   }
 }
@@ -382,6 +382,119 @@
   }
 }
 
+.video-player__progress-handle {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 14px;
+  height: 14px;
+  background: #007acc;
+  border: 2px solid white;
+  border-radius: 50%;
+  cursor: grab;
+  opacity: 0;
+  transition: opacity 0.2s ease, transform 0.1s ease;
+  z-index: 10;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+
+  &:hover {
+    cursor: grab;
+    transform: translate(-50%, -50%) scale(1.1);
+  }
+
+  &:active {
+    cursor: grabbing;
+    transform: translate(-50%, -50%) scale(1.2);
+  }
+}
+
+.video-player__progress:hover .video-player__progress-handle {
+  opacity: 1;
+}
+
+.video-player__progress-handle.dragging {
+  opacity: 1 !important;
+}
+
+.video-player__time-preview {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  border-radius: 8px;
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 100;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+  width: 160px; // Fixed width
+  transform: translateX(-50%);
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 6px solid transparent;
+    border-top-color: rgba(0, 0, 0, 0.7);
+  }
+}
+
+.video-player__preview-thumbnail {
+  width: 160px;
+  // height: 90px;
+  object-fit: cover;
+  display: block;
+  background: #333;
+  flex-shrink: 0; // Prevent shrinking
+  border-radius: 8px;
+}
+
+.video-player__preview-info {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.8));
+  padding: 20px 8px 8px 8px;
+  border-radius: 0 0 8px 8px;
+  color: white;
+}
+
+.video-player__preview-time {
+  font-weight: 600;
+  margin-bottom: 2px;
+  text-align: center;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.video-player__preview-frame {
+  font-size: 11px;
+  opacity: 0.9;
+  text-align: center;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.video-player__preview-loading {
+  width: 160px;
+  height: 90px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #333;
+  color: #888;
+  flex-shrink: 0; // Prevent shrinking
+}
+
+.video-player__loading-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top: 2px solid #007acc;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
 // Gallery section styles
 .video-player__gallery-section {
   flex: 2;
@@ -444,10 +557,32 @@
   .video-player__frame {
     width: 100%;
     transition: all 0.2s ease;
+    border: 2px solid transparent;
+    border-radius: 4px;
+    overflow: hidden;
     
     &:hover {
       transform: translateY(-2px);
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      border-color: #0066cc;
+    }
+    
+    // Center frame gets orange border
+    &.center {
+      border-color: #ff8800;
+      box-shadow: 0 0 6px rgba(255, 136, 0, 0.4);
+    }
+    
+    // Current frame gets red border
+    &.current {
+      border-color: #ff4444;
+      box-shadow: 0 0 8px rgba(255, 68, 68, 0.5);
+    }
+    
+    // Current frame takes priority over center frame
+    &.current.center {
+      border-color: #ff4444;
+      box-shadow: 0 0 8px rgba(255, 68, 68, 0.5);
     }
   }
   
@@ -585,19 +720,17 @@
   }
 }
 
-.video-player__fallback-notice {
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  background: rgba(255, 193, 7, 0.9);
-  color: #000;
-  padding: 8px 12px;
-  border-radius: 4px;
-  font-size: 0.85rem;
-  z-index: 10;
-  
-  p {
-    margin: 0;
-    font-weight: 500;
+.video-player__preview-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #555;
+  border-top-color: #007acc;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
   }
 }

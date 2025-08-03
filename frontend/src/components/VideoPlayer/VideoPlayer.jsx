@@ -1,15 +1,78 @@
-import React, { useState, useRef, useEffect } from 'react';
+/*
+ * INDEPENDENT VIDEO PLAYER AND GALLERY ARCHITECTURE
+ * ================================================
+ * 
+ * This VideoPlayer component implements an independent architecture where:
+ * 
+ * 1. VIDEO PLAYER SECTION (video-player__video):
+ *    - Plays video independently from gallery
+ *    - Starts from initial currentFrame position on load
+ *    - Continues playing without being affected by gallery updates
+ *    - Only seeks when user manually clicks a frame
+ * 
+ * 2. GALLERY SECTION (video-player__gallery):
+ *    - Shows frames around a "centerFrame" (30 before, 30 after)
+ *    - centerFrame updates based on current video time (every 7 frames)
+ *    - Display is independent of video playback
+ *    - When user clicks a frame: both currentFrame and centerFrame update
+ * 
+ * 3. TWO FRAME STATES:
+ *    - internalCurrentFrame: The selected/clicked frame (highlighted in gallery)
+ *    - centerFrame: The frame around which gallery is displayed
+ *    - These can be different - centerFrame follows video time, currentFrame tracks selection
+ * 
+ * 4. USER INTERACTION:
+ *    - Click frame → video seeks to that frame + both states update
+ *    - Video plays normally → only centerFrame updates (gallery shifts)
+ *    - No interference between video playback and gallery display
+ * 
+ * This ensures smooth video playback with dynamic gallery updates.
+ */
+
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import ReactPlayer from 'react-player';
+import Hls from 'hls.js';
 import FrameItem from '../FrameItem/FrameItem';
 import SubmissionModal from '../SubmissionModal/SubmissionModal';
+import TeamAnswerModal from '../TeamAnswerModal/TeamAnswerModal';
 import ImageZoomModal from '../ImageZoomModal/ImageZoomModal';
 import { useApp } from '../../contexts/AppContext';
+import { useFrameActions } from '../../hooks/useFrameActions';
 import './VideoPlayer.scss';
 
-const VideoPlayer = ({ isOpen, onClose, currentFrame, onFrameSelect, onSubmit, onSend, sendingFrames = new Set() }) => {
+const VideoPlayer = ({ isOpen, onClose, currentFrame, onFrameSelect, onSubmit, onSend, sendingFrames = new Set(), allTeamAnswers = [] }) => {
   const { queryMode } = useApp();
-  const playerRef = useRef(null);
+  
+  // Use the shared frame actions hook
+  const {
+    isSubmissionModalOpen,
+    isTeamAnswerModalOpen,
+    frameToSubmit,
+    handleSendFrame,
+    handleSubmitFrame,
+    handleTeamAnswerModalClose,
+    handleTeamAnswerComplete,
+    handleSubmissionModalClose,
+    handleSubmissionComplete
+  } = useFrameActions(queryMode, allTeamAnswers);
+  
+  // Log currentFrame when VideoPlayer is first initialized/opened
+  useEffect(() => {
+    if (isOpen && currentFrame) {
+      console.log('🎬 VideoPlayer opened with currentFrame:', {
+        id: currentFrame.id,
+        video_name: currentFrame.video_name,
+        frame_index: currentFrame.frame_index,
+        filename: currentFrame.filename,
+        url: currentFrame.url || currentFrame.thumbnail,
+        isCenter: currentFrame.isCenter,
+        fullFrame: currentFrame
+      });
+    }
+  }, [isOpen]); // Track when VideoPlayer opens or frame changes
+
+  const videoRef = useRef(null);
+  const hlsRef = useRef(null);
   const progressRef = useRef(null);
   const galleryRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -21,46 +84,57 @@ const VideoPlayer = ({ isOpen, onClose, currentFrame, onFrameSelect, onSubmit, o
   const [isLoading, setIsLoading] = useState(true);
   const [videoInfo, setVideoInfo] = useState(null);
   const [videoSrc, setVideoSrc] = useState('');
-  const [internalCurrentFrame, setInternalCurrentFrame] = useState(currentFrame);
-  const [hasInitialSeeked, setHasInitialSeeked] = useState(false);
+  
+  // Separate currentFrame (selected) and centerFrame (gallery center) management
+  const [internalCurrentFrame, setInternalCurrentFrame] = useState(currentFrame); // Selected frame
+  const [centerFrame, setCenterFrame] = useState(currentFrame); // Gallery center frame
+  
+  const [hasInitialSeeked, setHasInitialSeeked] = useState(''); // Store frame key instead of boolean
   const [isReady, setIsReady] = useState(false);
   const [videoError, setVideoError] = useState(null);
   const [isVideoAccessible, setIsVideoAccessible] = useState(true);
   const [isUserSeeking, setIsUserSeeking] = useState(false);
-  const [useNativeVideo, setUseNativeVideo] = useState(false);
-  const [isSubmissionModalOpen, setIsSubmissionModalOpen] = useState(false);
   const [isImageZoomOpen, setIsImageZoomOpen] = useState(false);
-  const [frameToSubmit, setFrameToSubmit] = useState(null);
   const [frameToZoom, setFrameToZoom] = useState(null);
-  const nativeVideoRef = useRef(null);
+  const [showTimePreview, setShowTimePreview] = useState(false);
+  const [previewTime, setPreviewTime] = useState(0);
+  const [previewPosition, setPreviewPosition] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStartTime, setDragStartTime] = useState(0);
+  const [previewImageUrl, setPreviewImageUrl] = useState('');
+  const imageUpdateTimeoutRef = useRef(null);
   const seekTimeoutRef = useRef(null);
   const loadingTimeoutRef = useRef(null);
 
-  // Generate video URL from frame URL
+  // Generate video URL from frame URL - only HLS
   const generateVideoUrl = (frameUrl, videoName) => {
     if (!frameUrl || !videoName) return '';
     // Extract context (base URL) and construct video path
-    // "http://127.0.0.1/media/frames/L09_V025/9590.jpg" -> "http://127.0.0.1/media/videos/L09_V025.mp4"
+    // "http://127.0.0.1/media/frames/L09_V025/9590.jpg" -> "http://127.0.0.1/media/videos_hls/L09_V025/playlist.m3u8"
     const urlParts = frameUrl.split('/');
     const context = urlParts.slice(0, 3).join('/'); // "http://127.0.0.1"
-    return `${context}/media/videos/${videoName}.mp4`;
+    
+    // Only use HLS, no fallback to MP4
+    const hlsUrl = `${context}/media/videos_hls/${videoName}/playlist.m3u8`;
+    
+    return hlsUrl;
   };
 
-  // Generate info URL from frame URL
-  const generateInfoUrl = (frameUrl) => {
+  // Generate metadata URL from frame URL
+  const generateMetadataUrl = (frameUrl) => {
     if (!frameUrl) return '';
-    // Extract base path and add /info
-    // "http://127.0.0.1/media/frames/L09_V025/9590.jpg" -> "http://127.0.0.1/media/frames/L09_V025/info"
+    // Extract base path and add /metadata.json
+    // "http://127.0.0.1/media/frames/L09_V025/9590.jpg" -> "http://127.0.0.1/media/frames/L09_V025/metadata.json"
     const basePath = frameUrl.substring(0, frameUrl.lastIndexOf('/'));
-    return `${basePath}/info.json`;
+    return `${basePath}/metadata.json`;
   };
 
-  // Generate neighboring frames (30 before and after current frame)
-  const generateNeighboringFrames = (centerFrame) => {
-    if (!centerFrame) return [];
+  // Generate neighboring frames based on centerFrame for gallery display
+  const generateNeighboringFrames = (baseCenterFrame) => {
+    if (!baseCenterFrame) return [];
     
     const frames = [];
-    const centerFrameIndex = parseInt(centerFrame.frame_index);
+    const centerFrameIndex = parseInt(baseCenterFrame.frame_index);
     
     // Generate 30 frames before and after (only frame_index divisible by 7)
     for (let i = -30; i <= 30; i++) {
@@ -72,31 +146,31 @@ const VideoPlayer = ({ isOpen, onClose, currentFrame, onFrameSelect, onSubmit, o
       let frameData;
       
       if (i === 0) {
-        // This is the center frame (current frame) - ensure all fields are present
+        // This is the center frame - ensure all fields are present
         frameData = {
-          id: centerFrame.id || `${centerFrame.video_name}-${centerFrame.frame_index}`,
-          filename: centerFrame.filename || `${centerFrame.video_name}/${centerFrame.frame_index}`,
-          thumbnail: centerFrame.thumbnail || centerFrame.url,
-          url: centerFrame.url || centerFrame.thumbnail,
-          video_name: centerFrame.video_name,
-          frame_index: centerFrame.frame_index,
+          id: baseCenterFrame.id || `${baseCenterFrame.video_name}-${baseCenterFrame.frame_index}`,
+          filename: baseCenterFrame.filename || `${baseCenterFrame.video_name}/${baseCenterFrame.frame_index}`,
+          thumbnail: baseCenterFrame.thumbnail || baseCenterFrame.url,
+          url: baseCenterFrame.url || baseCenterFrame.thumbnail,
+          video_name: baseCenterFrame.video_name,
+          frame_index: baseCenterFrame.frame_index,
           isCenter: true,
           offset: 0
         };
       } else {
         // Create new frame URL by replacing frame_index in the original URL
-        const baseUrl = centerFrame.thumbnail || centerFrame.url;
+        const baseUrl = baseCenterFrame.thumbnail || baseCenterFrame.url;
         const newUrl = baseUrl.replace(
           `/${centerFrameIndex}.jpg`, 
           `/${targetFrameIndex}.jpg`
         );
         
         frameData = {
-          id: `${centerFrame.video_name}-${targetFrameIndex}`,
-          filename: `${centerFrame.video_name}/${targetFrameIndex}`,
+          id: `${baseCenterFrame.video_name}-${targetFrameIndex}`,
+          filename: `${baseCenterFrame.video_name}/${targetFrameIndex}`,
           thumbnail: newUrl,
           url: newUrl,
-          video_name: centerFrame.video_name,
+          video_name: baseCenterFrame.video_name,
           frame_index: targetFrameIndex,
           isCenter: false,
           offset: i
@@ -109,8 +183,8 @@ const VideoPlayer = ({ isOpen, onClose, currentFrame, onFrameSelect, onSubmit, o
     return frames;
   };
 
-  // Get current video frames
-  const videoFrames = generateNeighboringFrames(internalCurrentFrame);
+  // Get current video frames based on centerFrame
+  const videoFrames = generateNeighboringFrames(centerFrame);
 
   // Calculate frame index from current time and FPS
   const calculateFrameFromTime = (time, fps) => {
@@ -124,21 +198,7 @@ const VideoPlayer = ({ isOpen, onClose, currentFrame, onFrameSelect, onSubmit, o
     return frameIndex / fps;
   };
 
-  // Check if video file is accessible
-  const checkVideoAccessibility = async (videoUrl) => {
-    try {
-      const response = await fetch(videoUrl, { 
-        method: 'HEAD',
-        mode: 'cors',
-        credentials: 'omit'
-      });
-      return response.ok;
-    } catch (error) {
-      return false;
-    }
-  };
-
-  // Load video info when currentFrame changes
+  // Load video info only when video name changes (not on every frame change)
   useEffect(() => {
     if (!currentFrame || !isOpen) return;
 
@@ -146,46 +206,67 @@ const VideoPlayer = ({ isOpen, onClose, currentFrame, onFrameSelect, onSubmit, o
       try {
         const videoUrl = generateVideoUrl(currentFrame.thumbnail || currentFrame.url, currentFrame.video_name);
         
-        // Check if video file is accessible
-        const accessible = await checkVideoAccessibility(videoUrl);
+        // Check if HLS file is accessible
+        let accessible = false;
+        
+        try {
+          const hlsResponse = await fetch(videoUrl, { 
+            method: 'HEAD',
+            mode: 'cors',
+            credentials: 'omit'
+          });
+          accessible = hlsResponse.ok;
+        } catch (error) {
+          console.log('HLS not available:', error);
+        }
+        
         setIsVideoAccessible(accessible);
         
         if (!accessible) {
-          setVideoError('Video file is not accessible. This may be due to CORS restrictions or the video file being unavailable.');
+          setVideoError('HLS video file is not accessible. This may be due to CORS restrictions or the video file being unavailable.');
+          return;
         } else {
           setVideoError(null);
         }
         
-        const infoUrl = generateInfoUrl(currentFrame.thumbnail || currentFrame.url);
-        let response;
-        let info;
+        const metadataUrl = generateMetadataUrl(currentFrame.thumbnail || currentFrame.url);
+        let metadata;
         
         try {
-          // Try to fetch specific video info
-          response = await fetch(infoUrl, { 
+          // Try to fetch video metadata
+          const response = await fetch(metadataUrl, { 
             method: 'GET',
             mode: 'cors',
             credentials: 'omit'
           });
-          if (!response.ok) throw new Error(`Video info not found: ${response.status}`);
-          info = await response.json();
-        } catch (error) {
-          // Fallback to default info if specific info not found
+          if (!response.ok) throw new Error(`Metadata not found: ${response.status}`);
+          metadata = await response.json();
           
-          // For any error, use hardcoded default values immediately
-          // This avoids additional network requests that might also fail
-          info = { fps: 25, duration: 21.06 };
+          // Validate metadata structure
+          if (!metadata.fps || !metadata.duration) {
+            throw new Error('Invalid metadata structure');
+          }
+        } catch (error) {
+          console.log('Metadata not available, using defaults:', error);
+          // Fallback to default values if metadata not found - use fps=25 as default
+          metadata = { fps: 25, duration: 21.06 };
         }
         
-        setVideoInfo(info);
+        setVideoInfo(metadata);
         setVideoSrc(videoUrl);
         
-        // Update internal current frame and reset state
+        // Initialize both frames when video opens
+        const isDifferentVideo = internalCurrentFrame?.video_name !== currentFrame.video_name;
         setInternalCurrentFrame(currentFrame);
-        setHasInitialSeeked(false);
+        setCenterFrame(currentFrame); // Set initial center frame
+        
+        // Only reset hasInitialSeeked if it's a different video
+        if (isDifferentVideo) {
+          setHasInitialSeeked('');
+          setIsLoading(true); // Only set loading for different video
+        }
+        
         setIsReady(false);
-        setIsLoading(true);
-        setUseNativeVideo(false); // Reset to try ReactPlayer first
         
         // Set a timeout to clear loading state if video doesn't load
         if (loadingTimeoutRef.current) {
@@ -193,42 +274,50 @@ const VideoPlayer = ({ isOpen, onClose, currentFrame, onFrameSelect, onSubmit, o
         }
         loadingTimeoutRef.current = setTimeout(() => {
           setIsLoading(false);
-          if (!isReady) {
-            setUseNativeVideo(true);
-          }
-        }, 5000); // 5 second timeout to try native video
+        }, 5000); // 5 second timeout
       } catch (error) {
         setVideoError('Failed to load video information. Using default values.');
         // Set hardcoded default values if all else fails
         const hardcodedInfo = { fps: 25, duration: 21.06 };
         setVideoInfo(hardcodedInfo);
-        setVideoSrc(generateVideoUrl(currentFrame.thumbnail || currentFrame.url, currentFrame.video_name));
+        const videoUrl = generateVideoUrl(currentFrame.thumbnail || currentFrame.url, currentFrame.video_name);
+        setVideoSrc(videoUrl);
+        
+        // Only reset hasInitialSeeked if it's a different video
+        const isDifferentVideo = internalCurrentFrame?.video_name !== currentFrame.video_name;
         setInternalCurrentFrame(currentFrame);
-        setHasInitialSeeked(false);
+        setCenterFrame(currentFrame);
+        
+        if (isDifferentVideo) {
+          setHasInitialSeeked('');
+          setIsLoading(true); // Only set loading for different video
+        }
+        
         setIsReady(false);
-        setIsLoading(true);
       }
     };
 
     loadVideoInfo();
-  }, [currentFrame?.id, isOpen]);
+  }, [currentFrame?.video_name, isOpen]);
 
-  // Update current frame based on video time
+  // Update centerFrame based on video current time (for gallery display)
   useEffect(() => {
     if (!videoInfo || !internalCurrentFrame || isUserSeeking) return;
 
     const newFrameIndex = calculateFrameFromTime(currentTime, videoInfo.fps);
-    const baseUrl = (internalCurrentFrame.thumbnail || internalCurrentFrame.url);
-    const baseFrameIndex = parseInt(internalCurrentFrame.frame_index);
+    const currentCenterFrameIndex = parseInt(centerFrame?.frame_index || 0);
     
-    // Only update if frame index changed significantly
-    if (Math.abs(newFrameIndex - baseFrameIndex) >= 7) {
+    // Only update centerFrame if frame index changed significantly (for gallery)
+    if (Math.abs(newFrameIndex - currentCenterFrameIndex) >= 7) {
+      const baseUrl = (internalCurrentFrame.thumbnail || internalCurrentFrame.url);
+      const baseFrameIndex = parseInt(internalCurrentFrame.frame_index);
+      
       const newUrl = baseUrl.replace(
         `/${baseFrameIndex}.jpg`, 
         `/${newFrameIndex}.jpg`
       );
       
-      const newFrame = {
+      const newCenterFrame = {
         id: `${internalCurrentFrame.video_name}-${newFrameIndex}`,
         filename: `${internalCurrentFrame.video_name}/${newFrameIndex}`,
         thumbnail: newUrl,
@@ -237,14 +326,144 @@ const VideoPlayer = ({ isOpen, onClose, currentFrame, onFrameSelect, onSubmit, o
         frame_index: newFrameIndex
       };
       
-      setInternalCurrentFrame(newFrame);
-      
-      // Notify parent component
-      if (onFrameSelect) {
-        onFrameSelect(newFrame);
-      }
+      console.log('🖼️ Updating centerFrame for gallery:', newFrameIndex);
+      setCenterFrame(newCenterFrame);
     }
   }, [currentTime, videoInfo, isUserSeeking]);
+
+  // HLS initialization effect
+  useEffect(() => {
+    const video = videoRef.current;
+    
+    if (!video || !videoSrc || !isOpen) return;
+
+    // Clean up existing HLS instance
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+      hlsRef.current = null;
+    }
+
+    if (Hls.isSupported()) {
+      // Initialize HLS
+      const hls = new Hls({
+        enableWorker: false,
+        lowLatencyMode: true,
+        backBufferLength: 90
+      });
+      hlsRef.current = hls;
+
+      hls.loadSource(videoSrc);
+      hls.attachMedia(video);
+
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        console.log('HLS manifest loaded successfully');
+        setIsLoading(false);
+        setIsReady(true);
+        setVideoError(null);
+        
+        // Clear loading timeout
+        if (loadingTimeoutRef.current) {
+          clearTimeout(loadingTimeoutRef.current);
+          loadingTimeoutRef.current = null;
+        }
+      });
+
+      hls.on(Hls.Events.ERROR, (event, data) => {
+        console.error('HLS error:', data);
+        if (data.fatal) {
+          switch (data.type) {
+            case Hls.ErrorTypes.NETWORK_ERROR:
+              console.log('Fatal network error encountered, try to recover');
+              hls.startLoad();
+              break;
+            case Hls.ErrorTypes.MEDIA_ERROR:
+              console.log('Fatal media error encountered, try to recover');
+              hls.recoverMediaError();
+              break;
+            default:
+              console.log('Fatal error, destroying HLS instance');
+              setVideoError('HLS playback error occurred. The video stream may be corrupted or unavailable.');
+              setIsLoading(false);
+              hls.destroy();
+              break;
+          }
+        }
+      });
+
+      hls.on(Hls.Events.LEVEL_LOADED, () => {
+        setDuration(video.duration || 0);
+      });
+
+    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+      // Fallback for Safari (native HLS support)
+      video.src = videoSrc;
+      
+      const handleLoadedMetadata = () => {
+        console.log('Video metadata loaded (Safari native HLS)');
+        setIsLoading(false);
+        setIsReady(true);
+        setDuration(video.duration);
+        setVideoError(null);
+        
+        // Clear loading timeout
+        if (loadingTimeoutRef.current) {
+          clearTimeout(loadingTimeoutRef.current);
+          loadingTimeoutRef.current = null;
+        }
+      };
+      
+      const handleError = (error) => {
+        console.error('Video error:', error);
+        setVideoError('HLS video playback failed. The video may not be supported or accessible.');
+        setIsLoading(false);
+      };
+      
+      video.addEventListener('loadedmetadata', handleLoadedMetadata);
+      video.addEventListener('error', handleError);
+      
+      return () => {
+        video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+        video.removeEventListener('error', handleError);
+      };
+    } else {
+      console.error('HLS is not supported in this browser');
+      setVideoError('HLS is not supported in this browser');
+      setIsLoading(false);
+    }
+
+    return () => {
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
+    };
+  }, [videoSrc, isOpen]);
+
+  // Separate effect for initial seek when video is ready - only seek to start frame once
+  useEffect(() => {
+    const video = videoRef.current;
+    
+    if (!video || !videoInfo || !currentFrame || !isReady) return;
+    
+    // Create unique frame key to track if we've seeked to this specific frame
+    const frameKey = `${currentFrame.video_name}-${currentFrame.frame_index}`;
+    
+    // Only seek if we haven't seeked to this specific frame yet
+    if (hasInitialSeeked === frameKey) return;
+    
+    console.log('🎯 Initial seek to start frame:', {
+      frameKey,
+      currentFrame: currentFrame,
+      hasInitialSeeked: hasInitialSeeked
+    });
+    
+    const initialTime = calculateTimeFromFrame(parseInt(currentFrame.frame_index), videoInfo.fps);
+    console.log('Initial seek to:', initialTime, 'for frame:', currentFrame.frame_index);
+    
+    video.currentTime = initialTime;
+    setCurrentTime(initialTime);
+    setHasInitialSeeked(frameKey); // Store the frame key we've seeked to
+  }, [isReady, videoInfo, currentFrame?.video_name, currentFrame?.frame_index, hasInitialSeeked]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -254,11 +473,16 @@ const VideoPlayer = ({ isOpen, onClose, currentFrame, onFrameSelect, onSubmit, o
       setVideoInfo(null);
       setVideoSrc('');
       setIsReady(false);
-      setHasInitialSeeked(false);
+      setHasInitialSeeked('');
       setVideoError(null);
       setIsVideoAccessible(true);
       setIsUserSeeking(false);
-      setUseNativeVideo(false);
+      
+      // Clean up HLS
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
       
       // Clear any pending timeouts
       if (seekTimeoutRef.current) {
@@ -272,173 +496,46 @@ const VideoPlayer = ({ isOpen, onClose, currentFrame, onFrameSelect, onSubmit, o
     }
   }, [isOpen]);
 
-  // Safe seeking function with better error handling
-  const safeSeekTo = (time, type = 'seconds') => {
-    if (useNativeVideo && nativeVideoRef.current) {
-      try {
-        nativeVideoRef.current.currentTime = time;
-        return true;
-      } catch (error) {
-        return false;
-      }
-    }
-    
-    if (!playerRef.current) {
-      return false;
-    }
-    
-    try {
-      // Check if ReactPlayer is properly initialized
-      if (playerRef.current && typeof playerRef.current.seekTo === 'function') {
-        playerRef.current.seekTo(time, type);
-        return true;
-      } else {
-        // Try fallback to native video if ReactPlayer is not working
-        if (!useNativeVideo) {
-          setUseNativeVideo(true);
-        }
-        return false;
-      }
-    } catch (error) {
-      return false;
+  // Video event handlers
+  const handleVideoTimeUpdate = () => {
+    if (videoRef.current) {
+      setCurrentTime(videoRef.current.currentTime);
     }
   };
 
-  // ReactPlayer event handlers
-  const handleReady = () => {
-    setIsReady(true);
-    setIsLoading(false);
-    
-    // Clear loading timeout
-    if (loadingTimeoutRef.current) {
-      clearTimeout(loadingTimeoutRef.current);
-      loadingTimeoutRef.current = null;
-    }
-    
-    // Clear any existing video errors when player is ready
-    if (videoError) {
-      setVideoError(null);
-    }
-    
-    // Log player info for debugging
-    if (playerRef.current) {
-      console.log('Player internal player type:', playerRef.current.getInternalPlayer()?.constructor?.name);
-      console.log('Player duration:', playerRef.current.getDuration());
-      console.log('Player ref methods:', Object.keys(playerRef.current));
-    }
-    
-    // Add a small delay to ensure player is fully ready
-    setTimeout(() => {
-      // Seek to initial frame time when player is ready
-      if (videoInfo && currentFrame && !hasInitialSeeked) {
-        const initialTime = calculateTimeFromFrame(parseInt(currentFrame.frame_index), videoInfo.fps);
-        console.log('Seeking to initial time:', initialTime, 'for frame:', currentFrame.frame_index);
-        if (safeSeekTo(initialTime, 'seconds')) {
-          setCurrentTime(initialTime);
-          setHasInitialSeeked(true);
-        } else {
-          console.error('Failed to seek to initial time');
-          setHasInitialSeeked(true); // Prevent infinite attempts
-        }
-      }
-    }, 500); // Increased delay to ensure player is ready
-  };
-
-  // Initial seek effect when player is ready
-  useEffect(() => {
-    if (isReady && videoInfo && currentFrame && !hasInitialSeeked) {
-      const initialTime = calculateTimeFromFrame(parseInt(currentFrame.frame_index), videoInfo.fps);
-      console.log('Seeking to initial time (useEffect):', initialTime, 'for frame:', currentFrame.frame_index);
-      if (safeSeekTo(initialTime, 'seconds')) {
-        setCurrentTime(initialTime);
-        setHasInitialSeeked(true);
-      } else {
-        console.error('Failed to seek to initial time in useEffect');
-        setHasInitialSeeked(true); // Prevent infinite attempts
-      }
-    }
-  }, [isReady, videoInfo, currentFrame?.frame_index, hasInitialSeeked]);
-
-  const handleDuration = (duration) => {
-    console.log('Duration loaded:', duration);
-    setDuration(duration);
-  };
-
-  const handleProgress = (progress) => {
-    setCurrentTime(progress.playedSeconds);
-  };
-
-  const handlePlay = () => {
+  const handleVideoPlay = () => {
     setIsPlaying(true);
+    // Clear loading when video actually starts playing
+    setIsLoading(false);
   };
 
-  const handlePause = () => {
+  const handleVideoPause = () => {
     setIsPlaying(false);
   };
 
-  const handleError = (error) => {
-    console.error('ReactPlayer error:', error);
-    console.error('Error details:', {
-      message: error?.message,
-      name: error?.name,
-      stack: error?.stack,
-      target: error?.target,
-      type: error?.type
-    });
+  const handleVideoLoadedMetadata = () => {
+    if (videoRef.current) {
+      setDuration(videoRef.current.duration);
+    }
+  };
+
+  const handleVideoCanPlay = () => {
+    // Clear loading when video can start playing
     setIsLoading(false);
-    
-    // Try native video player as fallback
-    if (!useNativeVideo) {
-      console.log('ReactPlayer failed, trying native HTML5 video');
-      setUseNativeVideo(true);
-      return;
-    }
-    
-    // If native video also fails, show error
-    if (error && (error.message?.includes('CORS') || error.message?.includes('Failed to fetch') || 
-                  error.name === 'TypeError' || error.message?.includes('blocked by CORS') ||
-                  error.message?.includes('NetworkError') || error.message?.includes('net::ERR_FAILED'))) {
-      setVideoError('Video cannot be played due to CORS or network restrictions. Please check server configuration.');
-      setIsVideoAccessible(false);
-    } else if (error?.target?.error?.code) {
-      // Media error codes
-      const errorCode = error.target.error.code;
-      const errorMessages = {
-        1: 'Video loading aborted',
-        2: 'Network error occurred while loading video',
-        3: 'Video decoding failed',
-        4: 'Video format not supported'
-      };
-      setVideoError(errorMessages[errorCode] || 'Video playback error occurred');
-    } else {
-      setVideoError('Video playback error. The video file may be corrupted or unavailable.');
-    }
   };
 
-  const handleSubmitFrame = (frame) => {
-    // For VideoPlayer, open internal SubmissionModal instead of calling parent onSubmit
-    setFrameToSubmit(frame);
-    setIsSubmissionModalOpen(true);
-  };
-
-  const handleSendFrame = (frame) => {
-    if (onSend) {
-      onSend(frame);
+  // Safe seeking function
+  const safeSeekTo = (time) => {
+    if (videoRef.current) {
+      try {
+        videoRef.current.currentTime = time;
+        return true;
+      } catch (error) {
+        console.error('Seek failed:', error);
+        return false;
+      }
     }
-  };
-
-  const handleSubmissionModalClose = () => {
-    setIsSubmissionModalOpen(false);
-    setFrameToSubmit(null);
-  };
-
-  const handleSubmissionComplete = (submissionData) => {
-    // Call parent onSend if available
-    if (onSend) {
-      onSend(submissionData);
-    }
-    // Close modal
-    handleSubmissionModalClose();
+    return false;
   };
 
   const handleFrameZoom = (frame) => {
@@ -468,32 +565,22 @@ const VideoPlayer = ({ isOpen, onClose, currentFrame, onFrameSelect, onSubmit, o
   }, [isPlaying, showControls]);
 
   const togglePlayPause = () => {
-    if (useNativeVideo && nativeVideoRef.current) {
-      const video = nativeVideoRef.current;
-      
-      if (isPlaying) {
-        video.pause();
-      } else {
-        const playPromise = video.play();
-        if (playPromise !== undefined) {
-          playPromise.catch(error => {
-            console.error('Native video play failed:', error);
-            // Don't set error state for play interruption
-            if (!error.message.includes('interrupted')) {
-              setVideoError('Failed to play video: ' + error.message);
-            }
-          });
-        }
-      }
-      return;
-    }
+    const video = videoRef.current;
+    if (!video) return;
     
-    if (!playerRef.current) return;
-
-    try {
-      setIsPlaying(!isPlaying);
-    } catch (error) {
-      console.error('Error toggling play/pause:', error);
+    if (isPlaying) {
+      video.pause();
+    } else {
+      const playPromise = video.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(error => {
+          console.error('Video play failed:', error);
+          // Don't set error state for play interruption
+          if (!error.message.includes('interrupted')) {
+            setVideoError('Failed to play video: ' + error.message);
+          }
+        });
+      }
     }
   };
 
@@ -505,11 +592,23 @@ const VideoPlayer = ({ isOpen, onClose, currentFrame, onFrameSelect, onSubmit, o
     const clickX = e.clientX - rect.left;
     const newTime = (clickX / rect.width) * duration;
     
+    // Store playing state before seeking
+    const wasPlaying = isPlaying;
+    
     // Set user seeking flag
     setIsUserSeeking(true);
     
-    if (safeSeekTo(newTime, 'seconds')) {
+    if (safeSeekTo(newTime)) {
       setCurrentTime(newTime);
+      
+      // Resume playing if it was playing before seek
+      if (wasPlaying && videoRef.current) {
+        setTimeout(() => {
+          videoRef.current.play().catch(error => {
+            console.log('Resume play after progress seek failed:', error);
+          });
+        }, 100);
+      }
     }
     
     // Clear user seeking flag after a delay
@@ -525,20 +624,32 @@ const VideoPlayer = ({ isOpen, onClose, currentFrame, onFrameSelect, onSubmit, o
     const newVolume = parseFloat(e.target.value);
     setVolume(newVolume);
     
-    // Update native video volume
-    if (useNativeVideo && nativeVideoRef.current) {
-      nativeVideoRef.current.volume = newVolume;
+    // Update video volume
+    if (videoRef.current) {
+      videoRef.current.volume = newVolume;
     }
   };
 
   const skip = (seconds) => {
     const newTime = Math.max(0, Math.min(duration, currentTime + seconds));
     
+    // Store playing state before seeking
+    const wasPlaying = isPlaying;
+    
     // Set user seeking flag
     setIsUserSeeking(true);
     
-    if (safeSeekTo(newTime, 'seconds')) {
+    if (safeSeekTo(newTime)) {
       setCurrentTime(newTime);
+      
+      // Resume playing if it was playing before seek
+      if (wasPlaying && videoRef.current) {
+        setTimeout(() => {
+          videoRef.current.play().catch(error => {
+            console.log('Resume play after skip failed:', error);
+          });
+        }, 100);
+      }
     }
     
     // Clear user seeking flag after a delay
@@ -608,48 +719,10 @@ const VideoPlayer = ({ isOpen, onClose, currentFrame, onFrameSelect, onSubmit, o
     setShowControls(true);
   };
 
-  // Native video event handlers
-  const handleNativeVideoLoadedMetadata = () => {
-    console.log('Native video metadata loaded');
-    setIsLoading(false);
-    setIsReady(true);
-    if (nativeVideoRef.current) {
-      setDuration(nativeVideoRef.current.duration);
-      console.log('Native video duration:', nativeVideoRef.current.duration);
-      
-      // Seek to initial frame time for native video
-      if (videoInfo && currentFrame && !hasInitialSeeked) {
-        const initialTime = calculateTimeFromFrame(parseInt(currentFrame.frame_index), videoInfo.fps);
-        console.log('Seeking native video to initial time:', initialTime, 'for frame:', currentFrame.frame_index);
-        nativeVideoRef.current.currentTime = initialTime;
-        setCurrentTime(initialTime);
-        setHasInitialSeeked(true);
-      }
-    }
-  };
-
-  const handleNativeVideoTimeUpdate = () => {
-    if (nativeVideoRef.current) {
-      setCurrentTime(nativeVideoRef.current.currentTime);
-    }
-  };
-
-  const handleNativeVideoPlay = () => {
-    setIsPlaying(true);
-  };
-
-  const handleNativeVideoPause = () => {
-    setIsPlaying(false);
-  };
-
-  const handleNativeVideoError = (error) => {
-    console.error('Native video error:', error);
-    setVideoError('Native video playback failed. The video may not be supported or accessible.');
-    setIsLoading(false);
-  };
-
   const handleFrameClick = (frame) => {
     if (!videoInfo) return;
+    
+    console.log('🎯 User clicked frame:', frame.frame_index);
     
     // Calculate time for the selected frame
     const frameTime = calculateTimeFromFrame(parseInt(frame.frame_index), videoInfo.fps);
@@ -657,13 +730,14 @@ const VideoPlayer = ({ isOpen, onClose, currentFrame, onFrameSelect, onSubmit, o
     // Set user seeking flag
     setIsUserSeeking(true);
     
-    // Update video time
-    if (safeSeekTo(frameTime, 'seconds')) {
+    // Update video time (seek to selected frame) but don't auto-play
+    if (safeSeekTo(frameTime)) {
       setCurrentTime(frameTime);
     }
     
-    // Update current frame
+    // Update current frame (selected frame) and center frame (for gallery)
     setInternalCurrentFrame(frame);
+    setCenterFrame(frame); // Update gallery center to clicked frame
     
     // Notify parent component
     if (onFrameSelect) {
@@ -679,15 +753,32 @@ const VideoPlayer = ({ isOpen, onClose, currentFrame, onFrameSelect, onSubmit, o
     }, 1000);
   };
 
-  // Scroll to selected frame in gallery when internalCurrentFrame changes
-  useEffect(() => {
-    if (internalCurrentFrame && galleryRef.current && videoFrames.length > 0) {
-      const frameElement = galleryRef.current.querySelector(`[data-frame-id="${internalCurrentFrame.id}"]`);
+  // Scroll to center frame in gallery to keep it centered
+  const scrollToCenterFrame = useCallback(() => {
+    if (centerFrame && galleryRef.current && videoFrames.length > 0) {
+      const frameElement = galleryRef.current.querySelector(`[data-frame-id="${centerFrame.id}"]`);
       if (frameElement) {
         frameElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
     }
-  }, [internalCurrentFrame?.id, videoFrames.length]);
+  }, [centerFrame?.id, videoFrames.length]);
+
+  // Scroll to center frame when it changes or when frames are loaded
+  useEffect(() => {
+    scrollToCenterFrame();
+  }, [scrollToCenterFrame]);
+
+  // Scroll to center frame on initial render and when VideoPlayer opens
+  useEffect(() => {
+    if (isOpen && centerFrame && videoFrames.length > 0) {
+      // Use a small delay to ensure DOM is ready
+      const timeoutId = setTimeout(() => {
+        scrollToCenterFrame();
+      }, 100);
+      
+      return () => clearTimeout(timeoutId);
+    }
+  }, [isOpen, centerFrame?.id, videoFrames.length, scrollToCenterFrame]);
 
   // Cleanup effect
   useEffect(() => {
@@ -698,8 +789,139 @@ const VideoPlayer = ({ isOpen, onClose, currentFrame, onFrameSelect, onSubmit, o
       if (loadingTimeoutRef.current) {
         clearTimeout(loadingTimeoutRef.current);
       }
+      if (imageUpdateTimeoutRef.current) {
+        clearTimeout(imageUpdateTimeoutRef.current);
+      }
     };
   }, []);
+
+  const handleProgressMouseMove = (e) => {
+    const progressBar = progressRef.current;
+    if (!progressBar || !duration) return;
+
+    const rect = progressBar.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const hoverTime = Math.max(0, Math.min(duration, (mouseX / rect.width) * duration));
+    
+    setPreviewTime(hoverTime);
+    
+    // Calculate tooltip position with bounds checking
+    const tooltipWidth = 160; // Width of tooltip
+    const minX = tooltipWidth / 2; // Minimum distance from left edge
+    const maxX = rect.width - tooltipWidth / 2; // Maximum distance from right edge
+    
+    // Clamp mouseX to prevent overflow
+    const clampedMouseX = Math.max(minX, Math.min(maxX, mouseX));
+    setPreviewPosition(clampedMouseX);
+    
+    setShowTimePreview(true);
+
+    // Throttle image URL updates to avoid too many requests
+    if (imageUpdateTimeoutRef.current) {
+      clearTimeout(imageUpdateTimeoutRef.current);
+    }
+    
+    imageUpdateTimeoutRef.current = setTimeout(() => {
+      const imageUrl = getFrameUrlFromTime(hoverTime);
+      setPreviewImageUrl(imageUrl);
+    }, 100); // 100ms throttle
+  };
+
+  // Handler for starting drag on slider handle
+  const handleSliderMouseDown = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+    setDragStartTime(currentTime);
+    setShowTimePreview(true);
+    
+    const progressBar = progressRef.current;
+    if (!progressBar || !duration) return;
+
+    const rect = progressBar.getBoundingClientRect();
+    
+    const handleMouseMove = (e) => {
+      const mouseX = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+      const newTime = (mouseX / rect.width) * duration;
+      
+      setPreviewTime(newTime);
+      setPreviewPosition(mouseX);
+      
+      // Update video time during drag for smooth preview
+      if (videoRef.current && !videoRef.current.seeking) {
+        videoRef.current.currentTime = newTime;
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsDragging(false);
+      
+      // Final seek to the desired time
+      safeSeekTo(previewTime);
+      
+      setTimeout(() => {
+        setShowTimePreview(false);
+      }, 1000);
+      
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  };
+
+  // Helper function to get frame index from time
+  const getFrameFromTime = (time) => {
+    if (!videoInfo?.fps) return 0;
+    return Math.floor(time * videoInfo.fps);
+  };
+
+  // Helper function to get rounded frame index (divisible by 7) from time
+  const getRoundedFrameFromTime = (time) => {
+    if (!videoInfo?.fps) return 0;
+    const frameIndex = Math.floor(time * videoInfo.fps);
+    // Round to nearest frame divisible by 7
+    return Math.round(frameIndex / 7) * 7;
+  };
+
+  // Helper function to get frame URL from time
+  const getFrameUrlFromTime = (time) => {
+    if (!videoInfo?.fps || !currentFrame?.url) return null;
+    
+    // Get rounded frame index (divisible by 7) for thumbnail
+    const frameIndex = getRoundedFrameFromTime(time);
+    
+    // Extract the base URL pattern from current frame URL
+    // Handle different URL patterns like:
+    // http://ip/path/frame_123.jpg -> http://ip/path/frame_{frameIndex}.jpg
+    // http://ip/path/123.jpg -> http://ip/path/{frameIndex}.jpg
+    const url = currentFrame.url;
+    
+    if (url.includes('/frame_')) {
+      // Pattern: /frame_123.jpg
+      return url.replace(/\/frame_\d+\.jpg$/, `/frame_${frameIndex}.jpg`);
+    } else {
+      // Pattern: /123.jpg
+      return url.replace(/\/\d+\.jpg$/, `/${frameIndex}.jpg`);
+    }
+  };
+
+  const handleProgressMouseEnter = () => {
+    if (duration > 0) {
+      setShowTimePreview(true);
+    }
+  };
+
+  const handleProgressMouseLeave = () => {
+    setShowTimePreview(false);
+    setPreviewImageUrl(''); // Reset image URL
+    
+    // Clear any pending image updates
+    if (imageUpdateTimeoutRef.current) {
+      clearTimeout(imageUpdateTimeoutRef.current);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -747,89 +969,74 @@ const VideoPlayer = ({ isOpen, onClose, currentFrame, onFrameSelect, onSubmit, o
                 </div>
               )}
               
-              {useNativeVideo && (
-                <div className="video-player__fallback-notice">
-                  <p>🔧 Using native HTML5 video player (ReactPlayer fallback)</p>
-                </div>
-              )}
-              
-              {!useNativeVideo ? (
-                <ReactPlayer
-                  ref={playerRef}
-                  className="video-player__video"
-                  url={videoSrc}
-                  playing={isPlaying}
-                  volume={volume}
-                  onReady={handleReady}
-                  onDuration={handleDuration}
-                  onProgress={handleProgress}
-                  onPlay={handlePlay}
-                  onPause={handlePause}
-                  onError={handleError}
-                  onClick={handleVideoClick}
-                  width="100%"
-                  height="100%"
-                  controls={false}
-                  config={{
-                    file: {
-                      attributes: {
-                        preload: 'metadata',
-                        crossOrigin: 'anonymous'
-                      },
-                      forceHLS: false,
-                      forceDASH: false,
-                      forceVideo: true
-                    }
-                  }}
-                  onBuffer={() => {
-                    console.log('Video buffering...');
-                    setIsLoading(true);
-                  }}
-                  onBufferEnd={() => {
-                    console.log('Video buffer ended');
-                    setIsLoading(false);
-                  }}
-                  onSeek={(seconds) => console.log('Video seeked to:', seconds)}
-                  onLoadStart={() => {
-                    console.log('Video load started');
-                    setIsLoading(true);
-                  }}
-                  onCanPlay={() => {
-                    console.log('Video can play');
-                    setIsLoading(false);
-                  }}
-                  onCanPlayThrough={() => {
-                    console.log('Video can play through');
-                    setIsLoading(false);
-                  }}
-                />
-              ) : (
-                <video
-                  ref={nativeVideoRef}
-                  className="video-player__video"
-                  src={videoSrc}
-                  onLoadedMetadata={handleNativeVideoLoadedMetadata}
-                  onTimeUpdate={handleNativeVideoTimeUpdate}
-                  onPlay={handleNativeVideoPlay}
-                  onPause={handleNativeVideoPause}
-                  onError={handleNativeVideoError}
-                  onClick={handleVideoClick}
-                  preload="metadata"
-                  crossOrigin="anonymous"
-                  style={{ width: '100%', height: '100%' }}
-                />
-              )}
+              <video
+                ref={videoRef}
+                className="video-player__video"
+                onTimeUpdate={handleVideoTimeUpdate}
+                onPlay={handleVideoPlay}
+                onPause={handleVideoPause}
+                onLoadedMetadata={handleVideoLoadedMetadata}
+                onCanPlay={handleVideoCanPlay}
+                onClick={handleVideoClick}
+                playsInline
+                muted={false}
+                style={{ width: '100%', height: '100%' }}
+              >
+                Your browser does not support the video tag.
+              </video>
               
               <div className={`video-player__controls ${showControls ? 'visible' : ''}`}>
                 <div 
                   className="video-player__progress"
                   ref={progressRef}
                   onClick={handleProgressClick}
+                  onMouseMove={handleProgressMouseMove}
+                  onMouseEnter={handleProgressMouseEnter}
+                  onMouseLeave={handleProgressMouseLeave}
                 >
                   <div 
                     className="video-player__progress-filled"
                     style={{ width: `${(currentTime / duration) * 100}%` }}
                   ></div>
+                  
+                  {/* Slider handle (nucleus) */}
+                  <div 
+                    className={`video-player__progress-handle ${isDragging ? 'dragging' : ''}`}
+                    style={{ left: `${isDragging ? (previewPosition / progressRef.current?.getBoundingClientRect().width * 100) : (currentTime / duration) * 100}%` }}
+                    onMouseDown={handleSliderMouseDown}
+                  ></div>
+                  
+                  {/* Time preview tooltip */}
+                  {showTimePreview && (
+                    <div 
+                      className="video-player__time-preview"
+                      style={{ 
+                        left: `${previewPosition}px`
+                      }}
+                    >
+                      {/* Frame thumbnail */}
+                      {getFrameUrlFromTime(previewTime) ? (
+                        <img 
+                          className="video-player__preview-thumbnail"
+                          src={getFrameUrlFromTime(previewTime)} 
+                          alt={`Frame ${getRoundedFrameFromTime(previewTime)}`}
+                          onError={(e) => {
+                            // Hide image if failed to load
+                            e.target.style.display = 'none';
+                          }}
+                        />
+                      ) : (
+                        <div className="video-player__preview-loading">
+                          <div className="video-player__preview-spinner"></div>
+                        </div>
+                      )}
+                      
+                      <div className="video-player__preview-info">
+                        <div className="video-player__preview-time">{formatTime(previewTime)}</div>
+                        <div className="video-player__preview-frame">Frame {getRoundedFrameFromTime(previewTime)}</div>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 
                 <div className="video-player__controls-row">
@@ -900,6 +1107,19 @@ const VideoPlayer = ({ isOpen, onClose, currentFrame, onFrameSelect, onSubmit, o
 
           {/* Right side - Frame Gallery */}
           <div className="video-player__gallery-section">
+            {/* Debug info */}
+            {/* <div className="video-player__debug-info" style={{ 
+              padding: '8px', 
+              fontSize: '12px', 
+              background: '#f5f5f5', 
+              marginBottom: '8px',
+              borderRadius: '4px'
+            }}>
+              <div><strong>Current Frame (Selected):</strong> {internalCurrentFrame?.frame_index || 'N/A'}</div>
+              <div><strong>Center Frame (Gallery):</strong> {centerFrame?.frame_index || 'N/A'}</div>
+              <div><strong>Video Time:</strong> {formatTime(currentTime)}</div>
+              <div><strong>Video Playing:</strong> {isPlaying ? 'Yes' : 'No'}</div>
+            </div> */}
             
             <div className="video-player__gallery" ref={galleryRef}>
               {videoFrames.length > 0 ? (
@@ -918,7 +1138,11 @@ const VideoPlayer = ({ isOpen, onClose, currentFrame, onFrameSelect, onSubmit, o
                       onZoom={handleFrameZoom}
                       showFilename={true}
                       size="small"
-                      className="video-player__frame"
+                      className={`video-player__frame ${
+                        internalCurrentFrame?.id === frame.id ? 'current' : ''
+                      } ${
+                        frame.isCenter ? 'center' : ''
+                      }`}
                       isSending={sendingFrames.has(`${frame.video_name}-${frame.frame_index}`)}
                     />
                   </div>
@@ -941,6 +1165,17 @@ const VideoPlayer = ({ isOpen, onClose, currentFrame, onFrameSelect, onSubmit, o
           onSubmit={handleSubmissionComplete}
           frame={frameToSubmit}
           queryMode={queryMode}
+        />,
+        document.body
+      )}
+
+      {/* TeamAnswerModal overlay within VideoPlayer - render at body level */}
+      {isTeamAnswerModalOpen && frameToSubmit && createPortal(
+        <TeamAnswerModal
+          isOpen={isTeamAnswerModalOpen}
+          onClose={handleTeamAnswerModalClose}
+          onSubmit={handleTeamAnswerComplete}
+          frame={frameToSubmit}
         />,
         document.body
       )}

@@ -60,9 +60,6 @@ class Command(BaseCommand):
                 # Index all datasets
                 self._index_all_datasets(service, options['reset'])
             
-            # Step 3: Show stats
-            self._show_stats(service)
-            
             # Step 4: Pre-warm cache
             if not options.get('skip_warmup', False):
                 self._warmup_cache(service)
