@@ -22,6 +22,7 @@ import FrameItem from '../FrameItem/FrameItem';
 import ConfirmationModal from '../ConfirmationModal';
 import TeamAnswerModal from '../TeamAnswerModal/TeamAnswerModal';
 import ImageZoomModal from '../ImageZoomModal/ImageZoomModal';
+import VideoPlayer from '../VideoPlayer/VideoPlayer';
 import { useApp } from '../../contexts/AppContext';
 import { useToast } from '../Toast/ToastProvider';
 import { TeamAnswerService } from '../../services';
@@ -54,6 +55,9 @@ const TeamAnswer = ({
   const [zoomImageAlt, setZoomImageAlt] = useState('');
   const [zoomFrame, setZoomFrame] = useState(null);
   const [isImageZoomOpen, setIsImageZoomOpen] = useState(false);
+  
+  // VideoPlayer state
+  const [isVideoPlayerOpen, setIsVideoPlayerOpen] = useState(false);
   
   // Drag & Drop state
   const [sortingItems, setSortingItems] = useState(new Set());
@@ -294,6 +298,26 @@ const TeamAnswer = ({
     setEditingItem(null);
   };
 
+  // Handle VideoPlayer open/close
+  const handleFrameDoubleClickInternal = (frame) => {
+    setIsVideoPlayerOpen(true);
+    // Also call the parent's onFrameDoubleClick if provided
+    if (onFrameDoubleClick) {
+      onFrameDoubleClick(frame);
+    }
+  };
+
+  const handleCloseVideoPlayer = () => {
+    setIsVideoPlayerOpen(false);
+  };
+
+  // Handle send frame (delegate to onSubmit if available)
+  const handleSendFrame = (frame) => {
+    if (onSubmit) {
+      onSubmit(frame);
+    }
+  };
+
   // Handle edit modal submit
   const handleEditModalSubmit = async (qaData) => {
     if (!editingItem) return;
@@ -337,6 +361,15 @@ const TeamAnswer = ({
     setZoomImageUrl('');
     setZoomImageAlt('');
     setZoomFrame(null);
+  };
+
+  // Handle video play
+  const handleVideoPlay = (frame) => {
+    if (frame && frame.url) {
+      setVideoPlayerUrl(frame.url);
+      setVideoPlayerFrame(frame);
+      setIsVideoPlayerOpen(true);
+    }
   };
 
   // DnD Kit drag handlers
@@ -543,7 +576,7 @@ const TeamAnswer = ({
                         isSelected={isSelected}
                         selectedFrameRef={isSelected ? selectedFrameRef : null}
                         onFrameSelect={onFrameSelect}
-                        onFrameDoubleClick={onFrameDoubleClick}
+                        onFrameDoubleClick={handleFrameDoubleClickInternal}
                         onSubmit={onSubmit}
                         queryMode={queryMode}
                         handleEditTeamAnswer={handleEditTeamAnswer}
@@ -579,6 +612,20 @@ const TeamAnswer = ({
         imageAlt={zoomImageAlt}
         frame={zoomFrame}
       />
+
+      {/* Video Player Modal */}
+      {isVideoPlayerOpen && (
+        <VideoPlayer
+          isOpen={isVideoPlayerOpen}
+          onClose={handleCloseVideoPlayer}
+          currentFrame={selectedFrame}
+          onFrameSelect={onFrameSelect}
+          onSubmit={onSubmit}
+          onSend={handleSendFrame}
+          sendingFrames={new Set()} // TeamAnswer doesn't track sending frames
+          allTeamAnswers={allTeamAnswers}
+        />
+      )}
     </div>
   );
 };
@@ -595,6 +642,7 @@ const SortableTeamAnswerItem = ({
   handleEditTeamAnswer,
   handleDeleteTeamAnswer,
   handleFrameZoom,
+  handleVideoPlay,
   deletingFrames,
   sortingItems
 }) => {

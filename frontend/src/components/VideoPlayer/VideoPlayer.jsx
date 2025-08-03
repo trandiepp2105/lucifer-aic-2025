@@ -1,34 +1,3 @@
-/*
- * INDEPENDENT VIDEO PLAYER AND GALLERY ARCHITECTURE
- * ================================================
- * 
- * This VideoPlayer component implements an independent architecture where:
- * 
- * 1. VIDEO PLAYER SECTION (video-player__video):
- *    - Plays video independently from gallery
- *    - Starts from initial currentFrame position on load
- *    - Continues playing without being affected by gallery updates
- *    - Only seeks when user manually clicks a frame
- * 
- * 2. GALLERY SECTION (video-player__gallery):
- *    - Shows frames around a "centerFrame" (30 before, 30 after)
- *    - centerFrame updates based on current video time (every 7 frames)
- *    - Display is independent of video playback
- *    - When user clicks a frame: both currentFrame and centerFrame update
- * 
- * 3. TWO FRAME STATES:
- *    - internalCurrentFrame: The selected/clicked frame (highlighted in gallery)
- *    - centerFrame: The frame around which gallery is displayed
- *    - These can be different - centerFrame follows video time, currentFrame tracks selection
- * 
- * 4. USER INTERACTION:
- *    - Click frame → video seeks to that frame + both states update
- *    - Video plays normally → only centerFrame updates (gallery shifts)
- *    - No interference between video playback and gallery display
- * 
- * This ensures smooth video playback with dynamic gallery updates.
- */
-
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import Hls from 'hls.js';
@@ -56,21 +25,6 @@ const VideoPlayer = ({ isOpen, onClose, currentFrame, onFrameSelect, onSubmit, o
     handleSubmissionComplete
   } = useFrameActions(queryMode, allTeamAnswers);
   
-  // Log currentFrame when VideoPlayer is first initialized/opened
-  useEffect(() => {
-    if (isOpen && currentFrame) {
-      console.log('🎬 VideoPlayer opened with currentFrame:', {
-        id: currentFrame.id,
-        video_name: currentFrame.video_name,
-        frame_index: currentFrame.frame_index,
-        filename: currentFrame.filename,
-        url: currentFrame.url || currentFrame.thumbnail,
-        isCenter: currentFrame.isCenter,
-        fullFrame: currentFrame
-      });
-    }
-  }, [isOpen]); // Track when VideoPlayer opens or frame changes
-
   const videoRef = useRef(null);
   const hlsRef = useRef(null);
   const progressRef = useRef(null);
@@ -326,7 +280,6 @@ const VideoPlayer = ({ isOpen, onClose, currentFrame, onFrameSelect, onSubmit, o
         frame_index: newFrameIndex
       };
       
-      console.log('🖼️ Updating centerFrame for gallery:', newFrameIndex);
       setCenterFrame(newCenterFrame);
     }
   }, [currentTime, videoInfo, isUserSeeking]);
@@ -356,7 +309,6 @@ const VideoPlayer = ({ isOpen, onClose, currentFrame, onFrameSelect, onSubmit, o
       hls.attachMedia(video);
 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        console.log('HLS manifest loaded successfully');
         setIsLoading(false);
         setIsReady(true);
         setVideoError(null);
@@ -426,7 +378,6 @@ const VideoPlayer = ({ isOpen, onClose, currentFrame, onFrameSelect, onSubmit, o
         video.removeEventListener('error', handleError);
       };
     } else {
-      console.error('HLS is not supported in this browser');
       setVideoError('HLS is not supported in this browser');
       setIsLoading(false);
     }
@@ -451,14 +402,7 @@ const VideoPlayer = ({ isOpen, onClose, currentFrame, onFrameSelect, onSubmit, o
     // Only seek if we haven't seeked to this specific frame yet
     if (hasInitialSeeked === frameKey) return;
     
-    console.log('🎯 Initial seek to start frame:', {
-      frameKey,
-      currentFrame: currentFrame,
-      hasInitialSeeked: hasInitialSeeked
-    });
-    
     const initialTime = calculateTimeFromFrame(parseInt(currentFrame.frame_index), videoInfo.fps);
-    console.log('Initial seek to:', initialTime, 'for frame:', currentFrame.frame_index);
     
     video.currentTime = initialTime;
     setCurrentTime(initialTime);
@@ -720,10 +664,7 @@ const VideoPlayer = ({ isOpen, onClose, currentFrame, onFrameSelect, onSubmit, o
   };
 
   const handleFrameClick = (frame) => {
-    if (!videoInfo) return;
-    
-    console.log('🎯 User clicked frame:', frame.frame_index);
-    
+    if (!videoInfo) return;    
     // Calculate time for the selected frame
     const frameTime = calculateTimeFromFrame(parseInt(frame.frame_index), videoInfo.fps);
     
