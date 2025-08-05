@@ -5,8 +5,8 @@ import cv2
 from pathlib import Path
 
 # Configuration
-INPUT_PATH = "/home/trandiep/storage/videos"  # Path containing MP4 files
-OUTPUT_PATH = "/home/trandiep/storage/frames"  # Path to save metadata
+INPUT_PATH = "/media/hkduy/ssd_duy_deptrai/storage/videos"  # Path to input videos
+OUTPUT_PATH = "/media/hkduy/ssd_duy_deptrai/storage/frames"  # Path to save metadata
 
 def extract_video_metadata(video_path):
     """Extract metadata from a video file"""
