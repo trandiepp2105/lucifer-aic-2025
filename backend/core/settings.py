@@ -59,7 +59,7 @@ INSTALLED_APPS = [
     'drf_yasg',
     'query',  # Query management app
     'answer',  # Answer management app
-    'search',  # OCR Search service (no views, just service)
+    # 'search',  # OCR Search service (no views, just service)
 ]
 
 MIDDLEWARE = [

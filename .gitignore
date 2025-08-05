@@ -1,3 +1,11 @@
 node_modules
 staticfiles
 venv/
+
+media
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python  

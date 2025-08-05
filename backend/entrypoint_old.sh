@@ -12,6 +12,18 @@ done
 
 echo "MySQL is up - continuing..."
 
+# Wait for Meilisearch to be ready
+echo "Waiting for Meilisearch to be ready..."
+MEILI_HOST=${MEILISEARCH_HOST:-localhost}
+MEILI_PORT=${MEILISEARCH_PORT:-7700}
+
+until curl -s "http://$MEILI_HOST:$MEILI_PORT/health" > /dev/null 2>&1; do
+  echo "Meilisearch is unavailable - sleeping"
+  sleep 3
+done
+
+echo "Meilisearch is up - continuing..."
+
 echo "Collecting static files..."
 python manage.py collectstatic --noinput
 
@@ -31,6 +43,10 @@ if not User.objects.filter(username='admin').exists():
 else:
     print('Superuser already exists')
 "
+
+# Setup Meilisearch indices and index OCR data
+echo "Setting up Meilisearch..."
+python manage.py setup_meilisearch
 
 # Choose server type based on environment variable
 SERVER_TYPE=${SERVER_TYPE:-"uvicorn"}

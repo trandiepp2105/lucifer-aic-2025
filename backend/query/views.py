@@ -20,14 +20,14 @@ import urllib3
 # Disable SSL warnings for ngrok URLs
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# Add search module to path
-search_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'search')
-if search_path not in sys.path:
-    sys.path.append(search_path)
+# # Add search module to path
+# search_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'search')
+# if search_path not in sys.path:
+#     sys.path.append(search_path)
 
-# Import Meilisearch service
-from search.meili_search_service import meili_search_service as search_service
-SEARCH_ENGINE = "Meilisearch"
+# # Import Meilisearch service
+# from search.meili_search_service import meili_search_service as search_service
+# SEARCH_ENGINE = "Meilisearch"
 
 from .models import Query, QuerySession
 from .serializers import (
@@ -129,23 +129,23 @@ class QueryListCreateAPIView(APIView):
         sorted_queries = queryset.order_by('stage')
         sorted_queries_serializer = QuerySerializer(sorted_queries, many=True, context={'request': request})        
         # Nếu không có search_url, fallback về OCR search với query có stage lớn nhất
-        if not search_url:
-            last_query = sorted_queries.last()
-            if last_query and last_query.ocr and last_query.ocr.strip() and last_query.ocr.lower() != 'null':
-                ocr_results = self._search_ocr(ocr_text=last_query.ocr, k=int(k_param))
-                raw_frames = self.adjust_response(request, ocr_results)
-                frames = self._process_frames_by_viewmode(raw_frames, viewmode)
-                return Response({
-                    'message': 'OCR search executed successfully',
-                    'frames': frames,
-                    'data': serializer.data,
-                }, status=status.HTTP_200_OK)
-            else:
-                return Response({
-                    'message': 'No valid ocr',
-                    'frames': [],
-                    'data': serializer.data,
-                }, status=status.HTTP_200_OK)
+        # if not search_url:
+        #     last_query = sorted_queries.last()
+        #     if last_query and last_query.ocr and last_query.ocr.strip() and last_query.ocr.lower() != 'null':
+        #         ocr_results = self._search_ocr(ocr_text=last_query.ocr, k=int(k_param))
+        #         raw_frames = self.adjust_response(request, ocr_results)
+        #         frames = self._process_frames_by_viewmode(raw_frames, viewmode)
+        #         return Response({
+        #             'message': 'OCR search executed successfully',
+        #             'frames': frames,
+        #             'data': serializer.data,
+        #         }, status=status.HTTP_200_OK)
+        #     else:
+        #         return Response({
+        #             'message': 'No valid ocr',
+        #             'frames': [],
+        #             'data': serializer.data,
+        #         }, status=status.HTTP_200_OK)
         
         # --- Phần 2: Chuẩn bị queries_structure và image_files ---
         queries_structure = []

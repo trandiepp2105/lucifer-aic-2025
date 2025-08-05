@@ -90,7 +90,7 @@ class VideoProcess:
                 output_dir_for_video = self.output_path / video_path.with_suffix('').name
                 tasks.append((video_path, output_dir_for_video, segment_duration))
 
-            with Pool(cpu_count()) as p:
+            with Pool(cpu_count()-1) as p:
                 iterator = p.imap_unordered(self._convert_to_hls_worker, tasks)
                 batch_results = list(tqdm(iterator, total=len(current_batch_videos), desc=f"Lô {i+1}/{num_batches}"))
                 all_results.extend(batch_results)
@@ -116,8 +116,8 @@ class VideoProcess:
 
 
 # Cấu hình chính
-INPUT_DATASET_PATH = '/home/trandiep/storage/videos'  # Thư mục chứa video đầu vào
-OUTPUT_HLS_PATH = '/home/trandiep/storage/videos_hls'  # Thư mục đầu ra cho HLS
+INPUT_DATASET_PATH = '/media/hkduy/ssd_duy_deptrai/storage/videos'  # Thư mục chứa video đầu vào
+OUTPUT_HLS_PATH = '/media/hkduy/ssd_duy_deptrai/storage/videos_hls'  # Thư mục đầu ra cho HLS
 BATCH_SIZE = 25  # Xử lý 25 video mỗi lô
 
 # Thiết lập logging

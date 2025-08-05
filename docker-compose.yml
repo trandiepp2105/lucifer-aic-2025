@@ -33,32 +33,32 @@ services:
       timeout: 20s
       retries: 10
 
-  meilisearch:
-    image: getmeili/meilisearch:v1.5
-    container_name: aic_meilisearch
-    restart: unless-stopped
-    environment:
-      - MEILI_MASTER_KEY=${MEILI_MASTER_KEY:-masterKey}
-      - MEILI_NO_ANALYTICS=true
-      - MEILI_ENV=production
-      - MEILI_LOG_LEVEL=INFO
-      - MEILI_DB_PATH=/meili_data
-      - MEILI_MAX_INDEXING_MEMORY=4GiB
-      - MEILI_MAX_INDEXING_THREADS=4
-    mem_limit: 10g          # Increase memory limit for better caching
-    memswap_limit: 10g      # Increase swap limit  
-    shm_size: 4g            # Add shared memory for faster operations
-    ports:
-      - "7700:7700"
-    volumes:
-      - meilisearch_data:/meili_data
-    networks:
-      - aic_network
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:7700/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
+  # meilisearch:
+  #   image: getmeili/meilisearch:v1.5
+  #   container_name: aic_meilisearch
+  #   restart: unless-stopped
+  #   environment:
+  #     - MEILI_MASTER_KEY=${MEILI_MASTER_KEY:-masterKey}
+  #     - MEILI_NO_ANALYTICS=true
+  #     - MEILI_ENV=production
+  #     - MEILI_LOG_LEVEL=INFO
+  #     - MEILI_DB_PATH=/meili_data
+  #     - MEILI_MAX_INDEXING_MEMORY=4GiB
+  #     - MEILI_MAX_INDEXING_THREADS=4
+  #   mem_limit: 10g          # Increase memory limit for better caching
+  #   memswap_limit: 10g      # Increase swap limit  
+  #   shm_size: 4g            # Add shared memory for faster operations
+  #   ports:
+  #     - "7700:7700"
+  #   volumes:
+  #     - meilisearch_data:/meili_data
+  #   networks:
+  #     - aic_network
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "curl -f http://localhost:7700/health || exit 1"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 5
 
   frontend:
     build: ./frontend
@@ -107,7 +107,6 @@ services:
       - "8000"
     volumes:
       - ./backend:/backend
-      - ${HOST_INDEX_DIR}:${CONTAINER_INDEX_DIR}:rw
     environment:
       - DB_NAME=${MYSQL_DATABASE}
       - DB_USER=${MYSQL_USER}
@@ -124,15 +123,14 @@ services:
       - DEBUG=${DEBUG}
       - ALLOWED_HOSTS=${ALLOWED_HOSTS}
       - SERVER_TYPE=django
-      - CONTAINER_INDEX_DIR=${CONTAINER_INDEX_DIR}
       - HOST=${HOST}
     depends_on:
       mysql:
         condition: service_healthy
       redis:
         condition: service_healthy
-      meilisearch:
-        condition: service_healthy
+      # meilisearch:
+      #   condition: service_healthy
     networks:
       - aic_network
 
