@@ -1,0 +1,287 @@
+Bản thiết kế Kỹ thuật: Agent Truy xuất và Xác thực Video với Gemini
+Phiên bản: 2.0 (Bản thiết kế Chi tiết)
+Ngày cập nhật: 27/07/2025
+Trạng thái: Sẵn sàng triển khai
+
+1. Giới thiệu và Mục tiêu
+1.1. Tóm tắt Dự án
+Tài liệu này trình bày bản thiết kế chi tiết để xây dựng một Agent Thông minh tự động hóa quy trình truy xuất video. Agent sử dụng mô hình ngôn ngữ lớn Google Gemini làm bộ não trung tâm để điều phối một chuỗi các công cụ (tools), từ việc hiểu yêu cầu của người dùng, tìm kiếm, cho đến xác thực nội dung đa phương thức, nhằm mục đích cuối cùng là trả về một đoạn video khớp chính xác với mô tả.
+
+1.2. Mục tiêu Nghiệp vụ
+Tự động hóa: Giảm thiểu tối đa sự can thiệp của con người trong việc tìm kiếm và sàng lọc nội dung media.
+
+Tăng độ chính xác: Tận dụng khả năng hiểu ngữ cảnh sâu sắc của Gemini để trả về kết quả phù hợp hơn so với các hệ thống tìm kiếm dựa trên từ khóa truyền thống.
+
+Nâng cao trải nghiệm người dùng: Cho phép người dùng tìm kiếm media bằng ngôn ngữ tự nhiên, linh hoạt và trực quan.
+
+1.3. Phạm vi và Giới hạn
+Trong phạm vi (In-Scope):
+
+Agent tiếp nhận đầu vào là một chuỗi văn bản (tiếng Việt hoặc tiếng Anh).
+
+Agent có khả năng gọi các API được định nghĩa trước để tìm kiếm và lấy media.
+
+Agent sử dụng Gemini để xác thực sự phù hợp giữa video và mô tả.
+
+Hệ thống được triển khai dưới dạng một API endpoint (sử dụng FastAPI).
+
+Ngoài phạm vi (Out-of-Scope):
+
+Xây dựng giao diện người dùng (UI).
+
+Xây dựng và duy trì các hệ thống cơ sở dữ liệu/API cho việc tìm kiếm (search_frames) và lưu trữ media (get_media). Tài liệu này giả định các hệ thống này đã tồn tại và sẵn sàng để được gọi.
+
+Fine-tuning mô hình Gemini.
+
+2. Kiến trúc Tổng thể
+Hệ thống tuân thủ kiến trúc Agent-Tool được điều phối bởi LangChain, một framework tiêu chuẩn để xây dựng các ứng dụng dựa trên LLM.
+
+Web API Layer (FastAPI): Lớp giao tiếp ngoài cùng, tiếp nhận các yêu cầu HTTP từ client. Nó chịu trách nhiệm xác thực request, gọi đến lớp Agent và định dạng response trả về.
+
+Agent Orchestration Layer (LangChain): Đây là trái tim của hệ thống.
+
+Agent Executor: Vòng lặp chính điều khiển luồng hoạt động. Nó nhận input, gọi đến LLM để quyết định hành động (chọn tool), thực thi tool, nhận kết quả từ tool, và lặp lại cho đến khi hoàn thành nhiệm vụ.
+
+LLM (Gemini): "Bộ não" đưa ra quyết định. LangChain sẽ gửi các prompt chứa lịch sử hội thoại, mô tả các tool có sẵn, và yêu cầu hiện tại đến Gemini để nhận về quyết định chọn tool nào.
+
+Tooling Layer: Tập hợp các hàm Python độc lập, được "bọc" lại thành các tool cho Agent. Mỗi tool thực hiện một nhiệm vụ nguyên tử và giao tiếp với các dịch vụ bên ngoài.
+
+External Services: Các dịch vụ độc lập mà hệ thống phụ thuộc vào, bao gồm API tìm kiếm, API media và Google Gemini API.
+
+<center>Hình 1: Sơ đồ kiến trúc chi tiết với LangChain làm trung tâm điều phối.</center>
+
+graph TD
+    subgraph "Client"
+        A[Người dùng qua HTTP]
+    end
+
+    subgraph "Hạ tầng Triển khai (Python Application)"
+        B(FastAPI Endpoint: POST /find-video)
+        subgraph "Agent Orchestration Layer (LangChain)"
+            C{Agent Executor}
+            D(LLM: Google Gemini)
+        end
+        subgraph "Tooling Layer"
+            T1[Tool: search_frames]
+            T2[Tool: get_media]
+            T3[Tool: validate_content]
+        end
+    end
+
+    subgraph "Dịch vụ Bên ngoài"
+        E(API Tìm kiếm Vector có sẵn)
+        F(API Media Storage có sẵn)
+        G([Google Cloud / Gemini API])
+    end
+
+    A --> B
+    B --> C
+    C <--> D
+    C --> T1
+    C --> T2
+    C --> T3
+    T1 --> E
+    T2 --> F
+    T3 --> G
+
+3. Luồng hoạt động và Xử lý lỗi
+Luồng hoạt động dưới đây mô tả chi tiết các bước "suy nghĩ" của Agent và cách xử lý các tình huống lỗi tiềm tàng.
+
+[Input] Endpoint /find-video nhận yêu cầu với description.
+
+[Agent Init] Agent Executor được kích hoạt.
+
+[Reasoning & Action] Agent gọi Gemini với prompt đầu tiên.
+
+Suy nghĩ: "Tôi cần tìm video cho mô tả này. Bước đầu tiên là dùng search_frames."
+
+Hành động: Gọi search_frames(query=...).
+
+[Tool Execution & Observation]
+
+Thành công: Tool trả về danh sách các frame. Agent nhận kết quả này làm "Observation".
+
+Thất bại: Nếu API tìm kiếm lỗi, tool trả về một chuỗi thông báo lỗi (ví dụ: "Lỗi API: 500 Internal Server Error"). Agent sẽ nhận thông báo lỗi này và quyết định bước tiếp theo (có thể thử lại hoặc báo lỗi cho người dùng).
+
+[Loop] Agent lặp lại chu trình Reasoning -> Action -> Observation cho từng frame tiềm năng:
+
+Reasoning: "Tôi sẽ xử lý frame có điểm cao nhất. Tôi cần dùng get_media."
+
+Action: Gọi get_media(frame_id=...).
+
+Observation (Thành công): Nhận về URL của video.
+
+Observation (Thất bại): Nhận về thông báo lỗi, Agent sẽ bỏ qua frame này và chuyển sang frame tiếp theo.
+
+Reasoning: "Đã có video, giờ tôi cần xác thực bằng validate_content_with_gemini."
+
+Action: Gọi validate_content_with_gemini(...).
+
+Observation (Match): Tool trả về is_match: true.
+
+Final Reasoning: "Đã tìm thấy video phù hợp. Nhiệm vụ hoàn thành."
+
+[Output] Agent Executor dừng lại và trả về kết quả cuối cùng.
+
+Observation (Mismatch): Tool trả về is_match: false.
+
+Reasoning: "Không khớp. Tôi sẽ thử frame tiếp theo trong danh sách."
+
+Agent tiếp tục vòng lặp.
+
+[End Condition]
+
+Tìm thấy: Agent trả về kết quả thành công.
+
+Không tìm thấy: Sau khi thử hết các ứng viên mà không có kết quả, Agent sẽ trả về một thông báo cuối cùng cho biết không tìm thấy video phù hợp.
+
+Lỗi nghiêm trọng: Nếu một lỗi nghiêm trọng xảy ra (ví dụ: hết hạn ngạch API Gemini), Agent sẽ dừng lại và trả về thông báo lỗi.
+
+4. Đặc tả Chi tiết các Tools
+Mỗi tool được định nghĩa bởi schema, logic triển khai, và ví dụ request/response.
+
+4.1. Tool: search_frames
+Mô tả: Tìm kiếm các frame liên quan nhất bằng cách gọi đến API tìm kiếm vector có sẵn.
+
+Schema (Pydantic Input Model):
+
+class SearchFramesInput(BaseModel):
+    query: str = Field(description="Chuỗi truy vấn tìm kiếm, chứa các từ khóa chính.")
+
+Logic triển khai:
+
+Nhận query từ Agent.
+
+Tạo một HTTP GET request đến SEARCH_API_URL.
+
+Truyền query như một URL parameter (ví dụ: https://api.example.com/search?q=...).
+
+Sử dụng khối try...except để bắt các lỗi requests.exceptions.RequestException.
+
+Nếu thành công (status code 200), trả về nội dung JSON của response.
+
+Nếu thất bại, trả về một chuỗi mô tả lỗi để Agent có thể hiểu.
+
+Ví dụ Response (Thành công):
+
+[
+  {"frame_id": "f_dog_001", "score": 0.95, "video_id": "v_dog_run"},
+  {"frame_id": "f_dog_002", "score": 0.87, "video_id": "v_dog_sleep"}
+]
+
+4.2. Tool: get_media
+Mô tả: Lấy thông tin media (đặc biệt là URL) cho một frame_id cụ thể.
+
+Schema (Pydantic Input Model):
+
+class GetMediaInput(BaseModel):
+    frame_id: str = Field(description="ID định danh của khung hình cần truy xuất video.")
+
+Logic triển khai:
+
+Nhận frame_id từ Agent.
+
+Tạo một HTTP GET request đến MEDIA_API_URL/{frame_id}.
+
+Xử lý lỗi và response tương tự như search_frames.
+
+Ví dụ Response (Thành công):
+
+{
+  "media_id": "v_dog_run",
+  "media_url": "https://data.example.com/videos/dog_running.mp4",
+  "duration_seconds": 15
+}
+
+4.3. Tool: validate_content_with_gemini
+Mô tả: Tool quan trọng nhất, sử dụng khả năng đa phương thức của Gemini để xác thực nội dung.
+
+Schema (Pydantic Input Model):
+
+class ValidateContentInput(BaseModel):
+    description: str = Field(description="Mô tả gốc bằng ngôn ngữ tự nhiên của người dùng.")
+    media_url: str = Field(description="URL công khai của video cần được xác thực.")
+
+Logic triển khai:
+
+Nhận description và media_url từ Agent.
+
+Quan trọng: Vì Gemini Pro Vision hiện tại xử lý video bằng cách phân tích các frame mẫu, logic này cần tải về một vài frame từ media_url (ví dụ: ở giây thứ 1, 5, 10) hoặc sử dụng một thư viện như opencv-python để làm điều này.
+
+Tạo một lời nhắc (prompt) chuyên biệt cho Gemini, bao gồm cả văn bản mô tả và các frame hình ảnh đã trích xuất.
+
+Yêu cầu Gemini trả về kết quả dưới dạng một chuỗi JSON có cấu trúc định trước.
+
+Parse chuỗi JSON này để trả về một đối tượng Python cho Agent.
+
+Prompt Template cho Gemini Vision (bên trong tool):
+
+SYSTEM: Bạn là một chuyên gia phân tích media cực kỳ tỉ mỉ. Nhiệm vụ của bạn là so sánh mô tả văn bản với một chuỗi các khung hình từ một video và đưa ra kết luận chính xác.
+Chỉ trả lời bằng một đối tượng JSON duy nhất, không có bất kỳ văn bản nào khác.
+
+USER:
+Mô tả: "{description}"
+
+Các khung hình từ video:
+[image_frame_1]
+[image_frame_2]
+[image_frame_3]
+
+Phân tích và trả về kết quả theo cấu trúc JSON sau:
+{{
+    "is_match": boolean,
+    "confidence_score": float (từ 0.0 đến 1.0, thể hiện mức độ tự tin của bạn),
+    "reasoning": "string (giải thích ngắn gọn, chi tiết lý do tại sao bạn kết luận như vậy)"
+}}
+
+Ví dụ Response (Thành công):
+
+{
+    "is_match": true,
+    "confidence_score": 0.98,
+    "reasoning": "Video cho thấy một người phụ nữ trong tư thế yoga 'chiến binh' trên bãi biển. Ánh sáng màu cam và mặt trời ở gần đường chân trời xác nhận đây là cảnh hoàng hôn. Hoàn toàn khớp."
+}
+
+5. Cấu trúc Dự án và Triển khai
+5.1. Cấu trúc thư mục đề xuất
+/retrieval-agent
+|
+├── /app
+|   ├── __init__.py
+|   ├── main.py             # FastAPI application
+|   ├── agent_core.py       # Khởi tạo Agent và Executor
+|   ├── tools.py            # Định nghĩa các hàm tool
+|   ├── schemas.py          # Pydantic models cho API request/response
+|   └── config.py           # Quản lý cấu hình (API keys, URLs)
+|
+├── /tests
+|   ├── test_tools.py       # Unit test cho các tool
+|   └── test_api.py         # Integration test cho FastAPI endpoint
+|
+├── .env                    # Lưu trữ các biến môi trường (API keys)
+├── requirements.txt        # Danh sách các thư viện Python
+└── README.md               # Hướng dẫn cài đặt và sử dụng
+
+5.2. Luồng triển khai
+Thiết lập: Tạo môi trường ảo, cài đặt các thư viện từ requirements.txt. Tạo file .env và điền các API key.
+
+Phát triển Tools (tools.py): Implement các hàm tool, kết nối đến API có sẵn. Viết unit test để đảm bảo chúng hoạt động đúng.
+
+Xây dựng Agent (agent_core.py): Import các tool, định nghĩa System Prompt, và tạo AgentExecutor.
+
+Tạo API (main.py): Xây dựng ứng dụng FastAPI, import AgentExecutor và tạo endpoint /find-video.
+
+Kiểm thử tích hợp: Chạy ứng dụng và dùng pytest để chạy các test trong tests/test_api.py, đảm bảo toàn bộ luồng hoạt động trơn tru.
+
+Đóng gói và Triển khai: Sử dụng Docker để đóng gói ứng dụng và triển khai lên một nền tảng cloud (ví dụ: Google Cloud Run, AWS Fargate).
+
+6. Phụ lục: Ví dụ cURL Request
+Sau khi triển khai, bạn có thể kiểm thử endpoint bằng lệnh cURL sau:
+
+curl -X 'POST' \
+  'http://127.0.0.1:8000/find-video' \
+  -H 'accept: application/json' \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "description": "Một chú chó Corgi đang chạy trên bãi cỏ xanh vào một ngày nắng đẹp"
+}'

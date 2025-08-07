@@ -207,14 +207,17 @@ class QueryListCreateAPIView(APIView):
         vector_models_config = [
             {
                 "model_name": "ViT-H-14-378-quickgelu",
-                "weight": 5.5
+                "weight": 0.55  
             },
+            # {
+            #     "model_name": "ViT-H-14-quickgelu",   
+            #     "weight": 1
+            # },
             {
-                "model_name": "ViT-H-14-quickgelu",
-                "weight": 4.5
+                "model_name": "ViT-gopt-16-SigLIP2-384",
+                "weight": 0.45
             }
         ]
-
         # Sử dụng default weights nếu không có custom weights
         final_weights = {**default_weights, **weights}
         weights_str = json.dumps(final_weights)
@@ -248,6 +251,7 @@ class QueryListCreateAPIView(APIView):
             response.raise_for_status()
             
             search_data = response.json()
+            print(f"Search server response: {search_data.get('query_details')}")
             temporal_results = search_data.get('results', [])
             # Xử lý kết quả tương tự như trước
             results = self.adjust_faiss_response(request, temporal_results)

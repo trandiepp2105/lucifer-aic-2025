@@ -1,0 +1,30 @@
+# Core dependencies
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+pydantic==2.5.0
+
+# LangChain and AI
+langchain==0.1.0
+langchain-google-genai==0.0.6
+google-generativeai==0.3.2
+
+# HTTP and Media processing
+httpx==0.25.2
+requests==2.31.0
+opencv-python==4.8.1.78
+pillow==10.1.0
+
+# Environment and configuration
+python-dotenv==1.0.0
+
+# Testing
+pytest==7.4.3
+pytest-asyncio==0.21.1
+
+# Streamlit for UI and Monitoring
+streamlit==1.29.0
+plotly==5.17.0
+pandas==2.1.4
+
+# Optional for production
+gunicorn==21.2.0
