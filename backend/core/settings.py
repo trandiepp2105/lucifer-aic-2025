@@ -59,6 +59,7 @@ INSTALLED_APPS = [
     'drf_yasg',
     'query',  # Query management app
     'answer',  # Answer management app
+    'media',  # Media management app
     # 'search',  # OCR Search service (no views, just service)
 ]
 

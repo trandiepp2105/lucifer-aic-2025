@@ -11,8 +11,10 @@ import json
 import logging
 import os
 import base64
-
+import re
 import asyncio
+import time
+import tempfile
 
 from .config import config
 from .constants import JSON_OUTPUT_FORMATS
@@ -25,12 +27,16 @@ from .tool_utils import (
     create_grid_from_images,
     create_separate_grids,
     create_combined_grid,
-    create_enhanced_prompt
+    create_enhanced_prompt,
+    get_frames_wrapper,
+    grid_search_legacy,
+    grid_search_enhanced
 )
 from .schemas import GetFrameInput, GetVideoInput, TemporalSearchInput, GridSearchInput, ValidFrameQueryInput, ValidVideoQueryInput, SynthesisInput, SearchFramesInput
 from .utils import robust_json_parse, strip_markdown_code_fences
 import requests
 import google.generativeai as genai
+from PIL import Image
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -38,71 +44,6 @@ logger = logging.getLogger(__name__)
 
 # Configure Gemini
 genai.configure(api_key=config.GOOGLE_API_KEY)
-
-
-# def search_frames(input_params: str) -> str:
-#     """
-#     Tool: Thực hiện tìm kiếm đa phương thức (text, OCR, hình ảnh) và theo trình tự thời gian
-#     bằng cách gọi đến API tìm kiếm vector.
-#     Đây là công cụ tìm kiếm chính, hỗ trợ các truy vấn phức tạp với cấu trúc và trọng số tùy chỉnh.
-
-#     Args:
-#         input_params (str): JSON string chứa các tham số:
-#             - k (int): Số lượng chuỗi kết quả cuối cùng cần trả về, mặc định là 10.
-#             - queries_structure (List[Dict]): Một danh sách các đối tượng mô tả các stage truy vấn.
-#               Mỗi stage có thể chứa 'text' (str), 'ocr' (str), hoặc 'image_ref' (str - tên file ảnh).
-#             - images_data (Optional[Dict[str, str]]): Một đối tượng ánh xạ tên file ảnh (image_ref)
-#               tới dữ liệu ảnh base64. Chỉ cần thiết nếu queries_structure chứa 'image_ref'.
-#             - weights (Optional[Dict[str, float]]): Một đối tượng JSON chứa các trọng số
-#               cho các loại truy vấn (ví dụ: {"text": 0.5, "ocr": 0.3, "image": 0.2}).
-
-#     Returns:
-#         str: JSON string chứa danh sách kết quả tìm kiếm hoặc thông báo lỗi.
-#     """
-#     try:
-#         # Strip markdown code fences if present
-#         clean_input = strip_markdown_code_fences(input_params)
-#         parsed_input = SearchFramesInput.parse_raw(clean_input)
-#         k = parsed_input.k
-#         queries_structure = parsed_input.queries_structure
-#         images_data = parsed_input.images_data
-#         weights = parsed_input.weights
-
-#         logger.info(f"Searching frames with k={k}, queries_structure={queries_structure}, weights={weights}")
-
-#         # Prepare form-data and files for the API request
-#         form_data = {
-#             "k": str(k),
-#             "queries_structure": json.dumps([stage.dict(exclude_unset=True) for stage in queries_structure]),
-#         }
-
-#         if weights:
-#             form_data["weights"] = json.dumps(weights)
-
-#         files = []
-#         if images_data:
-#             for filename, base64_data in images_data.items():
-#                 try:
-#                     img_bytes = base64.b64decode(base64_data)
-#                     mime_type = "image/png"  # Default, could be improved by inferring from filename
-#                     files.append(("image_files", (filename, img_bytes, mime_type)))
-#                 except Exception as e:
-#                     logger.warning(f"Could not decode base64 image for {filename}: {e}")
-#                     return f"Lỗi: Không thể giải mã ảnh base64 cho '{filename}': {e}"
-
-#         # Use helper function for API request
-#         api_result = make_search_api_request(form_data, files)
-        
-#         if api_result["success"]:
-#             return json.dumps(api_result["data"])
-#         else:
-#             return json.dumps({"error": api_result["error"]})
-
-#     except Exception as e:
-#         error_msg = f"Unexpected error in search_frames: {str(e)}"
-#         logger.error(error_msg)
-#         return json.dumps({"error": f"Lỗi không xác định: {error_msg}"})
-
 
 def temporal_frame_search_topk(input_params: str) -> str:
     """
@@ -162,7 +103,7 @@ def temporal_frame_search_topk(input_params: str) -> str:
         # Add vector_models_config to form_data
         form_data["vector_models_config"] = json.dumps([
             {"model_name": "ViT-H-14-378-quickgelu", "weight": 0.55},
-            {"model_name": "ViT-H-14-quickgelu", "weight": 0.45}
+            {"model_name": "ViT-gopt-16-SigLIP2-384", "weight": 0.45}
         ])
 
         # Use helper function for API request
@@ -186,122 +127,314 @@ def get_frames(frame_urls):
     """
     Wrapper function for backward compatibility.
     """
-    return get_frames_from_urls(frame_urls)
+    return get_frames_wrapper(frame_urls)
 
 
 def get_video(input_params: str) -> str:
     """
-    Tool: Trích xuất một đoạn video ngắn từ một video dài hơn trên server, dựa vào frame bắt đầu và thời lượng.
-    Chỉ sử dụng tool này sau khi bạn đã xác định được một frame bắt đầu tiềm năng (ví dụ: từ temporal_frame_search_topk)
-    và cần lấy cả đoạn video xung quanh nó để xác thực toàn diện hơn.
+    Tool: Trích xuất một đoạn video ngắn từ một video dài hơn trên server, dựa vào frame range.
+    
+    🎯 WORKFLOW SEQUENCE:
+    1. Validate Input → 2. Call API → 3. Validate Response → 4. Format Output
+    
+    Tool này được tối ưu hóa theo Sequence Thinking để đảm bảo:
+    - Validation đầu vào tuần tự và đầy đủ
+    - Xử lý API call robust với error handling
+    - Verification response để đảm bảo video clip accessible
+    - Output format tối ưu cho valid_video_query tool
 
     Args:
-        start_frame_id (str): ID của frame bắt đầu cho đoạn video.
-        duration_seconds (int): Thời lượng của đoạn video cần trích xuất (tính bằng giây).
+        input_params (str): JSON string chứa các tham số:
+            - video_name (str): Tên video theo format L##_V### (ví dụ: L01_V001)
+            - start_frame (int): Frame bắt đầu (số nguyên dương)
+            - end_frame (int): Frame kết thúc (phải > start_frame)
 
     Returns:
-        str: JSON string chứa URL của đoạn video clip đã trích xuất hoặc thông báo lỗi.
+        str: JSON string chứa thông tin video clip đã tạo hoặc lỗi chi tiết.
+        
+    Response Format:
+        Success: {
+            "success": true,
+            "clip_url": "/media/video_clips/L01_V001_f100-150.mp4",
+            "full_url": "http://server/media/video_clips/L01_V001_f100-150.mp4",
+            "duration": 2.0,
+            "frame_range": "100-150",
+            "video_name": "L01_V001",
+            "cached": false,
+            "ready_for_validation": true
+        }
+        Error: {
+            "success": false,
+            "error": "Chi tiết lỗi",
+            "suggestion": "Gợi ý khắc phục"
+        }
     """
     try:
-        # Strip markdown code fences if present
-        clean_input = strip_markdown_code_fences(input_params)
-        parsed_input = GetVideoInput.parse_raw(clean_input)
-        start_frame_id = parsed_input.start_frame_id
-        duration_seconds = parsed_input.duration_seconds
-
-        logger.info(f"Getting video clip from start_frame_id: {start_frame_id} with duration: {duration_seconds}s")
+        # ===== BƯỚC 1: INPUT VALIDATION TUẦN TỰ =====
+        logger.info("Bước 1: Validating input parameters...")
         
-        # Assuming a dedicated endpoint for video clipping
-        clip_api_url = f"{config.MEDIA_API_URL}/video/clip"
+        # Parse input với error handling
+        try:
+            clean_input = strip_markdown_code_fences(input_params)
+            parsed_input = GetVideoInput.parse_raw(clean_input)
+        except Exception as e:
+            return json.dumps({
+                "success": False,
+                "error": f"Lỗi parse input parameters: {str(e)}",
+                "suggestion": "Kiểm tra format JSON input và đảm bảo có đủ các field bắt buộc"
+            })
+        
+        video_name = parsed_input.video_name
+        start_frame = parsed_input.start_frame
+        end_frame = parsed_input.end_frame
+
+        # Validate video_name format
+        import re
+        if not re.match(r'^L\d{2}_V\d{3}$', video_name):
+            return json.dumps({
+                "success": False,
+                "error": f"Video name '{video_name}' không đúng format",
+                "suggestion": "Video name phải theo format L##_V### (ví dụ: L01_V001, L05_V010)"
+            })
+
+        # Validate frame numbers
+        if start_frame < 0 or end_frame < 0:
+            return json.dumps({
+                "success": False,
+                "error": "Frame numbers phải là số nguyên dương",
+                "suggestion": "Sử dụng start_frame >= 0 và end_frame >= 0"
+            })
+
+        # Ensure logical frame range
+        if end_frame <= start_frame:
+            logger.info(f"Adjusting end_frame from {end_frame} to {start_frame + 1} for single frame clip")
+            end_frame = start_frame + 1
+
+        # Validate reasonable frame range (không quá dài)
+        frame_count = end_frame - start_frame
+        if frame_count > 1800:  # ~1 minute at 30fps
+            return json.dumps({
+                "success": False,
+                "error": f"Frame range quá dài ({frame_count} frames)",
+                "suggestion": "Giới hạn video clip dưới 1 phút (≤1800 frames) để tránh file quá lớn"
+            })
+
+        logger.info(f"✅ Input validation passed: {video_name}, frames {start_frame}-{end_frame} ({frame_count} frames)")
+
+        # ===== BƯỚC 2: API CALL PROCESSING =====
+        logger.info("Bước 2: Calling video clip API...")
+        
+        clip_api_url = f"{config.VIDEO_API_URL}/api/video/clip/"
         
         payload = {
-            "start_frame_id": start_frame_id,
-            "duration_seconds": duration_seconds
+            "video_name": video_name,
+            "start_frame": start_frame,
+            "end_frame": end_frame
         }
+        
+        logger.info(f"API URL: {clip_api_url}")
+        logger.info(f"Payload: {payload}")
         
         response = requests.post(
             clip_api_url,
             json=payload,
             timeout=config.API_REQUEST_TIMEOUT
         )
-        response.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx)
         
-        result = response.json()
-        logger.info(f"Video clip result: {result}")
-        return json.dumps(result)
+        # Detailed HTTP error handling
+        if response.status_code == 404:
+            return json.dumps({
+                "success": False,
+                "error": "Video clip API endpoint không tồn tại",
+                "suggestion": "Kiểm tra API server có đang chạy và URL có đúng không"
+            })
+        elif response.status_code == 400:
+            return json.dumps({
+                "success": False,
+                "error": "Request không hợp lệ (400 Bad Request)",
+                "suggestion": "Kiểm tra video_name có tồn tại và frame range có hợp lệ không"
+            })
+        elif response.status_code >= 500:
+            return json.dumps({
+                "success": False,
+                "error": f"Server error ({response.status_code})",
+                "suggestion": "Lỗi server tạm thời, thử lại sau vài giây"
+            })
+        
+        response.raise_for_status()
+        
+        # ===== BƯỚC 3: RESPONSE VALIDATION =====
+        logger.info("Bước 3: Validating API response...")
+        
+        try:
+            api_result = response.json()
+        except json.JSONDecodeError:
+            return json.dumps({
+                "success": False,
+                "error": "API response không phải JSON hợp lệ",
+                "suggestion": "Server có thể đang gặp sự cố, thử lại sau"
+            })
 
+        # Check API response structure
+        if not isinstance(api_result, dict):
+            return json.dumps({
+                "success": False,
+                "error": "API response format không đúng",
+                "suggestion": "Server response không phải dict object"
+            })
+
+        # Validate required fields in response
+        if "success" not in api_result:
+            return json.dumps({
+                "success": False,
+                "error": "API response thiếu field 'success'",
+                "suggestion": "Server response format không đúng chuẩn"
+            })
+
+        if not api_result.get("success", False):
+            api_error = api_result.get("error", "Unknown error from API")
+            return json.dumps({
+                "success": False,
+                "error": f"API failed: {api_error}",
+                "suggestion": "Kiểm tra video file có tồn tại và frame range có hợp lệ không"
+            })
+
+        clip_url = api_result.get("clip_url")
+        if not clip_url:
+            return json.dumps({
+                "success": False,
+                "error": "API response thiếu clip_url",
+                "suggestion": "Video clip có thể chưa được tạo thành công"
+            })
+
+        logger.info(f"✅ API call successful: {clip_url}")
+
+        # ===== BƯỚC 4: OUTPUT FORMATTING =====
+        logger.info("Bước 4: Formatting enhanced output...")
+        
+        # Create enhanced response for agent consumption
+        enhanced_result = {
+            "success": True,
+            "clip_url": clip_url,
+            "full_url": f"{config.VIDEO_API_URL}{clip_url}" if clip_url.startswith('/') else clip_url,
+            "duration": api_result.get("duration", 0.0),
+            "frame_range": f"{start_frame}-{end_frame}",
+            "frame_count": frame_count,
+            "video_name": video_name,
+            "cached": api_result.get("cached", False),
+            "ready_for_validation": True,  # Signal cho valid_video_query tool
+            "metadata": {
+                "start_time": api_result.get("start_time", 0.0),
+                "end_time": api_result.get("end_time", 0.0),
+                "created_at": api_result.get("created_at", ""),
+                "file_size_mb": api_result.get("file_size_mb", 0.0)
+            }
+        }
+
+        logger.info(f"✅ Video clip ready: {enhanced_result['full_url']}")
+        logger.info(f"Duration: {enhanced_result['duration']}s, Cached: {enhanced_result['cached']}")
+        
+        return json.dumps(enhanced_result)
+
+    except requests.exceptions.Timeout:
+        error_msg = "Timeout khi gọi video clip API (>30s)"
+        logger.error(error_msg)
+        return json.dumps({
+            "success": False,
+            "error": error_msg,
+            "suggestion": "API server có thể đang quá tải, thử lại với frame range nhỏ hơn"
+        })
+    except requests.exceptions.ConnectionError:
+        error_msg = "Không thể kết nối tới video clip API server"
+        logger.error(error_msg)
+        return json.dumps({
+            "success": False,
+            "error": error_msg,
+            "suggestion": "Kiểm tra API server có đang chạy và network connection"
+        })
     except requests.exceptions.RequestException as e:
         error_msg = f"Network error calling video clip API: {str(e)}"
         logger.error(error_msg)
-        return json.dumps({"error": error_msg})
+        return json.dumps({
+            "success": False,
+            "error": error_msg,
+            "suggestion": "Kiểm tra network connection và API server status"
+        })
     except Exception as e:
         error_msg = f"Unexpected error in get_video: {str(e)}"
         logger.error(error_msg)
-        return json.dumps({"error": error_msg})
+        return json.dumps({
+            "success": False,
+            "error": error_msg,
+            "suggestion": "Lỗi không xác định, kiểm tra logs để biết chi tiết"
+        })
 
 
 def grid_search(input_params: str) -> str:
     """
-    🔍 GRID SEARCH - Công cụ phân tích đồng thời nhiều frame bằng lưới hình ảnh
+    🎯 GRID SEARCH - CÔNG CỤ TÌM ỨNG CỬ VIÊN (CANDIDATE FINDER)
+    
+    🔥 VAI TRÒ CHÍNH: Công cụ chuyên biệt để tìm và xếp hạng các ứng cử viên frame/chuỗi frame tốt nhất 
+    từ kết quả temporal search, chuẩn bị cho bước xác thực cuối cùng bằng valid_video_query.
+    
+    📋 WORKFLOW CHUẨN (QUAN TRỌNG):
+    🔸 Temporal Search (1 stage) → Grid Search LEGACY → valid_video_query
+    🔸 Temporal Search (≥2 stages) → Grid Search ENHANCED SEPARATE → valid_video_query
     
     ⚡ TÍNH NĂNG CHÍNH:
-    - Ghép nhiều frame thành lưới ảnh và gửi đến Gemini để phân tích cùng lúc
+    - Phân tích đồng thời nhiều frame bằng Vision AI để ranking candidates
     - Tiết kiệm 80-90% API calls so với phân tích từng frame riêng lẻ
-    - Hỗ trợ so sánh và tìm mối liên hệ giữa các frame
-    - 2 chế độ: Legacy (đơn giản) và Enhanced (nâng cao, nhiều nhóm)
+    - Intelligent ranking để tìm ra TOP candidates phù hợp nhất
+    - 2 chế độ tối ưu cho different temporal search scenarios
     
-    📋 KHI NÀO SỬ DỤNG:
-    ✅ Sau khi có danh sách frame ứng viên từ temporal_frame_search_topk
-    ✅ Cần đánh giá/so sánh 3-20 frame cùng lúc
-    ✅ Tìm frame tốt nhất trong nhóm ứng viên
-    ✅ So sánh nhiều chuỗi frame từ các kết quả khác nhau
-    ✅ Xác thực nhanh tính phù hợp của nhiều frame
+    🎯 LEGACY MODE - Cho Temporal Search 1 Stage:
+    ✅ INPUT: frame_urls (từ temporal search) + query (tìm candidates)
+    ✅ OUTPUT: Ranked frame candidates để chuyển cho valid_video_query
+    ✅ EXAMPLE: Tìm 3-5 frame candidates tốt nhất từ 12 frames cho cảnh "người đàn ông mặc áo đỏ nói chuyện"
     
-    🎯 WORKFLOW KHUYẾN NGHỊ:
-    1. Dùng temporal_frame_search_topk → có frame URLs
-    2. Nhóm frame theo logic (cùng chuỗi, cùng chủ đề...)
-    3. Dùng grid_search để phân tích/so sánh nhanh
-    4. Nếu cần chi tiết hơn → dùng valid_frame_query cho frame cụ thể
+    🎯 ENHANCED SEPARATE MODE - Cho Temporal Search Multi-Stage:  
+    ✅ INPUT: frame_groups (từ multiple temporal stages) + comparison_query
+    ✅ OUTPUT: Ranked stage candidates để chuyển cho valid_video_query
+    ✅ EXAMPLE: So sánh stages "người A nói" vs "người B phản ứng" vs "kết quả cuối"
 
     Args:
         input_params (str): JSON string chứa các tham số:
         
-        🔸 LEGACY FORMAT (đơn giản):
-            - frame_urls (List[str]): Danh sách URL frame cần phân tích
+        🔸 LEGACY FORMAT (cho 1 stage temporal search):
+            - frame_urls (List[str]): Danh sách frame URLs từ temporal_frame_search_topk
             - grid_dimensions (Tuple[int, int], optional): Kích thước lưới (rows, cols), mặc định (2,2)
-            - query (str): Câu hỏi phân tích cho toàn bộ lưới
+            - query (str): Câu hỏi để tìm và rank candidates (focus vào "tìm top X candidates")
             
-        🔸 ENHANCED FORMAT (nâng cao):
-            - frame_groups (List[List[str]]): Nhiều nhóm frame URLs để so sánh
-            - group_queries (List[str], optional): Câu hỏi riêng cho từng nhóm
-            - comparison_query (str, optional): Câu hỏi so sánh giữa các nhóm
-            - layout_mode (str): "separate" hoặc "combined"
-            - max_images_per_group (int): Giới hạn frame mỗi nhóm (mặc định 6)
-            - grid_dimensions_per_group (Tuple[int, int]): Kích thước lưới mỗi nhóm
+        🔸 ENHANCED FORMAT (cho multi-stage temporal search):
+            - frame_groups (List[List[str]]): Nhóm frame URLs từ different temporal stages
+            - comparison_query (str): Câu hỏi so sánh để rank stage candidates
+            - layout_mode (str): "separate" (required cho temporal stages)
+            - max_images_per_group (int): Giới hạn frame mỗi stage (mặc định 6)
 
     Returns:
         str: JSON string chứa:
-        - is_match (bool): Có frame phù hợp không
-        - confidence_score (float): Độ tin cậy 0.0-1.0
-        - reasoning (str): Giải thích chi tiết
-        - relevant_frames (List): Danh sách frame phù hợp nhất
-        - metadata (dict): Thông tin về quá trình xử lý
+        - is_match (bool): Có candidates phù hợp không
+        - confidence_score (float): Độ tin cậy tổng thể 0.0-1.0
+        - reasoning (str): Giải thích chi tiết về ranking và candidates
+        - relevant_frames (List): TOP candidates được recommend (ready cho valid_video_query)
+        - metadata (dict): Thông tin về quá trình candidate finding
         
     Examples:
-        # Legacy mode - tìm frame tốt nhất
+        # Legacy mode - tìm frame candidates từ 1 stage temporal search
         {
-            "frame_urls": ["frame1.jpg", "frame2.jpg", "frame3.jpg", "frame4.jpg"],
-            "grid_dimensions": [2, 2],
-            "query": "Frame nào cho thấy người đàn ông mặc áo đỏ đang nói chuyện?"
+            "frame_urls": ["frame1.jpg", "frame2.jpg", ..., "frame12.jpg"],
+            "grid_dimensions": [3, 4],
+            "query": "Tìm 3-5 frame candidates tốt nhất cho cảnh người đàn ông mặc áo đỏ đang nói chuyện. Rank theo độ phù hợp và chất lượng."
         }
         
-        # Enhanced mode - so sánh nhiều chuỗi
+        # Enhanced mode - so sánh stage candidates từ multi-stage temporal search
         {
             "frame_groups": [
-                ["seq1_frame1.jpg", "seq1_frame2.jpg"],
-                ["seq2_frame1.jpg", "seq2_frame2.jpg"]
+                ["stage1_frame1.jpg", "stage1_frame2.jpg"],  # Stage: "người A nói"
+                ["stage2_frame1.jpg", "stage2_frame2.jpg"],  # Stage: "người B phản ứng"
+                ["stage3_frame1.jpg", "stage3_frame2.jpg"]   # Stage: "kết thúc"
             ],
-            "comparison_query": "Chuỗi nào diễn ra trước?",
+            "comparison_query": "So sánh 3 temporal stages. Stage nào có candidates tốt nhất để validate với valid_video_query?",
             "layout_mode": "separate"
         }
     """
@@ -328,172 +461,412 @@ def grid_search(input_params: str) -> str:
 
 def _grid_search_legacy(parsed_input: GridSearchInput) -> str:
     """Handle legacy single-group grid search format."""
-    frame_urls = parsed_input.frame_urls
-    grid_dimensions = parsed_input.grid_dimensions or (2, 2)
-    query = parsed_input.query
-
-    if not frame_urls:
-        return json.dumps({"error": "Tham số 'frame_urls' không thể rỗng."})
-    if not query:
-        return json.dumps({"error": "Tham số 'query' không thể rỗng."})
-
-    # Use existing logic
-    pil_images = get_frames(frame_urls)
-    pil_images = [img for img in pil_images if img is not None]
-    if not pil_images:
-        return json.dumps({"error": "Không thể tải bất kỳ frame nào để tạo lưới."})
-
-    # Create grid using helper function
-    grid_image = create_grid_from_images(pil_images, grid_dimensions)
-
-    #delete if exists
-    if os.path.exists("grid_image.png"):
-        os.remove("grid_image.png")
-
-    grid_image.save("grid_image.png")
-
-    # Prepare image data for Gemini
-    image_data = prepare_image_for_gemini(grid_image)
-
-    # Create prompt using helper
-    user_prompt = create_prompt_with_requirements(
-        f'Phân tích lưới ảnh này dựa trên câu hỏi: "{query}"',
-        JSON_OUTPUT_FORMATS["basic_validation"]
-    )
-
-    # Call Gemini with retry logic
-    gemini_result = call_gemini_with_retry(user_prompt, image_data, "grid_search_legacy")
-    
-    if gemini_result["success"] and gemini_result["response_text"]:
-        result = robust_json_parse(gemini_result["response_text"], {
-            "is_match": False,
-            "confidence_score": 0.5,
-            "reasoning": f"Phản hồi từ Gemini không đúng định dạng: {gemini_result['response_text']}",
-            "relevant_frames": []
-        })
-    else:
-        # Provide detailed debug info when response is empty
-        result = {
-            "is_match": False,
-            "confidence_score": 0.0,
-            "reasoning": "Gemini trả về response rỗng. Có thể do: 1) Ảnh quá lớn/phức tạp, 2) Prompt bị chặn bởi safety filter, 3) Lỗi API tạm thời, 4) Nội dung ảnh vi phạm chính sách. Vui lòng kiểm tra logs để biết chi tiết.",
-            "relevant_frames": [],
-            "debug_info": {
-                "image_size_bytes": gemini_result.get("image_size", 0),
-                "prompt_length": len(user_prompt),
-                "image_dimensions": f"{grid_image.width}x{grid_image.height}",
-                "frame_count": len(frame_urls),
-                "error": gemini_result.get("error", "Unknown"),
-                "suggested_solutions": [
-                    "Giảm số lượng frame trong lưới",
-                    "Thử prompt đơn giản hơn",
-                    "Kiểm tra nội dung ảnh có phù hợp không",
-                    "Thử lại sau vài phút"
-                ]
-            }
-        }
-    
-    return json.dumps(result)
+    return grid_search_legacy(parsed_input)
 
 
 def _grid_search_enhanced(parsed_input: GridSearchInput) -> str:
     """Handle enhanced multi-group grid search format."""
-    frame_groups = parsed_input.frame_groups
-    group_queries = parsed_input.group_queries
-    comparison_query = parsed_input.comparison_query
-    layout_mode = parsed_input.layout_mode
-    max_images_per_group = parsed_input.max_images_per_group
-    grid_dims_per_group = parsed_input.grid_dimensions_per_group or (2, 3)
+    return grid_search_enhanced(parsed_input)
 
-    if not frame_groups:
-        return json.dumps({"error": "Tham số 'frame_groups' không thể rỗng."})
+
+def valid_video_query(input_params: str) -> str:
+    """
+    🎬 ENHANCED VIDEO VALIDATION - TRỰC TIẾP ANALYZE VIDEO BẰNG GEMINI
     
-    if not comparison_query and not group_queries:
-        return json.dumps({"error": "Phải cung cấp 'comparison_query' hoặc 'group_queries'."})
+    Tool: Xác thực xem một đoạn video có khớp với chuỗi mô tả sự kiện hay không.
+    Sử dụng Gemini Video API để phân tích trực tiếp video content thay vì extract frames.
+    
+    🔥 CẢI TIẾN CHÍNH:
+    ✅ Upload video trực tiếp lên Gemini File API 
+    ✅ Analyze video với temporal continuity và motion understanding
+    ✅ Hiểu được context đầy đủ của video sequence
+    ✅ Robust error handling cho video processing
+    ✅ Enhanced insights về temporal patterns và transitions
+    
+    🎯 WORKFLOW SEQUENCE:
+    1. Download Video → 2. Upload to Gemini → 3. Wait Processing → 4. Video Analysis → 5. Cleanup
+    
+    Args:
+        input_params (str): JSON string chứa các tham số:
+            - video_clip_url (str): URL của đoạn video ngắn cần xác thực (từ get_video tool)
+            - query_sequence (List[str]): Chuỗi các mô tả sự kiện trong video theo thời gian
+            - question (str, optional): Câu hỏi tùy chọn về nội dung video
 
-    # Validate group_queries length if provided
-    if group_queries and len(group_queries) != len(frame_groups):
-        return json.dumps({"error": "Số lượng 'group_queries' phải bằng số lượng 'frame_groups'."})
-
-    logger.info(f"Enhanced grid search: {len(frame_groups)} groups, layout_mode={layout_mode}")
-
+    Returns:
+        str: JSON string chứa kết quả xác thực video chi tiết.
+        
+    Response Format:
+        {
+            "is_match": bool,
+            "confidence_score": float,
+            "reasoning": str,
+            "sequence_analysis": [...],
+            "video_analysis": {
+                "duration_seconds": float,
+                "temporal_insights": str,
+                "motion_analysis": str,
+                "scene_transitions": [...]
+            },
+            "metadata": {...}
+        }
+    """
     try:
-        # Load all images for all groups
-        all_group_images = []
-        group_info = []
+        # ===== BƯỚC 1: INPUT VALIDATION =====
+        logger.info("Bước 1: Validating input parameters...")
         
-        for i, frame_urls in enumerate(frame_groups):
-            if not frame_urls:
-                continue
-                
-            # Limit images per group
-            limited_urls = frame_urls[:max_images_per_group]
-            pil_images = get_frames(limited_urls)
-            valid_images = [img for img in pil_images if img is not None]
-            
-            if valid_images:
-                all_group_images.append(valid_images)
-                group_info.append({
-                    "group_id": i,
-                    "frame_count": len(valid_images),
-                    "original_urls": limited_urls
-                })
+        clean_input = strip_markdown_code_fences(input_params)
+        parsed_input = ValidVideoQueryInput.parse_raw(clean_input)
+        video_clip_url = parsed_input.video_clip_url
+        query_sequence = parsed_input.query_sequence
+        question = parsed_input.question
 
-        if not all_group_images:
-            return json.dumps({"error": "Không thể tải bất kỳ frame nào từ tất cả các nhóm."})
-
-        # Create visual layout
-        if layout_mode == "separate":
-            final_image = create_separate_grids(all_group_images, grid_dims_per_group, group_info)
-        else:  # combined
-            final_image = create_combined_grid(all_group_images, group_info)
-
-        # Save the final image
-        final_image.save("grid_image_enhanced.png")
-
-        # Prepare image data for Gemini
-        image_data = prepare_image_for_gemini(final_image)
-
-        # Create comprehensive prompt for Gemini
-        prompt = create_enhanced_prompt(group_info, group_queries, comparison_query, layout_mode)
-
-        # Call Gemini with retry logic
-        gemini_result = call_gemini_with_retry(prompt, image_data, "grid_search_enhanced")
-        
-        if gemini_result["success"] and gemini_result["response_text"]:
-            result = robust_json_parse(gemini_result["response_text"], {
-                "overall_match": False,
-                "confidence_score": 0.0,
-                "reasoning": f"Không thể phân tích phản hồi từ Gemini: {gemini_result['response_text']}",
-                "group_results": []
+        if not video_clip_url or not query_sequence:
+            return json.dumps({
+                "error": "Tham số 'video_clip_url' và 'query_sequence' không thể rỗng.",
+                "suggestion": "Cung cấp video URL và sequence mô tả sự kiện"
             })
-        else:
-            result = {
-                "overall_match": False,
+
+        logger.info(f"Validating video clip: {video_clip_url} with {len(query_sequence)} sequence steps")
+
+        # ===== BƯỚC 2: VIDEO DOWNLOAD =====
+        logger.info("Bước 2: Downloading video for analysis...")
+        
+        try:
+            # Construct full URL if relative path
+            if video_clip_url.startswith('/'):
+                full_video_url = f"{config.MEDIA_API_URL}{video_clip_url}"
+            else:
+                full_video_url = video_clip_url
+                
+            logger.info(f"Full video URL: {full_video_url}")
+            
+            # Download video to temporary location
+            
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as temp_file:
+                response = requests.get(full_video_url, timeout=30, stream=True)
+                response.raise_for_status()
+                
+                total_size = 0
+                for chunk in response.iter_content(chunk_size=8192):
+                    temp_file.write(chunk)
+                    total_size += len(chunk)
+                    
+                    # Limit video size (50MB max)
+                    if total_size > 50 * 1024 * 1024:
+                        raise Exception("Video file quá lớn (>50MB) cho analysis")
+                    
+                temp_video_path = temp_file.name
+                
+            logger.info(f"✅ Downloaded video: {total_size / 1024 / 1024:.2f}MB")
+
+        except requests.exceptions.RequestException as e:
+            error_msg = f"Không thể download video từ {video_clip_url}: {str(e)}"
+            logger.error(error_msg)
+            return json.dumps({
+                "error": error_msg,
+                "suggestion": "Kiểm tra video URL có accessible không và network connection"
+            })
+
+        # ===== BƯỚC 3: PREPARE VIDEO FOR GEMINI ANALYSIS =====
+        logger.info("Bước 3: Preparing video for Gemini analysis...")
+        
+        video_content = None  # Will store either file reference or inline data
+        cleanup_uploaded_file = None  # Track uploaded file for cleanup
+        
+        try:
+            # Determine approach based on file size
+            video_size_mb = total_size / 1024 / 1024
+            logger.info(f"Video size: {video_size_mb:.2f}MB")
+            
+            if video_size_mb < 20:
+                # ===== APPROACH 1: INLINE VIDEO DATA (<20MB) =====
+                logger.info("Using inline video data approach (video <20MB)")
+                
+                # Read video file as bytes
+                with open(temp_video_path, 'rb') as video_file:
+                    video_bytes = video_file.read()
+                
+                # Create inline video content
+                video_content = {
+                    "mime_type": "video/mp4",
+                    "data": video_bytes
+                }
+                
+                logger.info(f"✅ Video prepared as inline data: {len(video_bytes)} bytes")
+                
+            else:
+                # ===== APPROACH 2: FILES API (>=20MB) =====
+                logger.info("Using Files API approach (video >=20MB)")
+                
+                # Import the new genai client
+                from google import genai as genai_client
+                
+                # Create client
+                client = genai_client.Client(api_key=config.GOOGLE_API_KEY)
+                
+                # Upload video file to Gemini Files API
+                uploaded_file = client.files.upload(
+                    path=temp_video_path,
+                    display_name=f"video_validation_{int(time.time())}.mp4"
+                )
+                
+                # Store reference for cleanup
+                cleanup_uploaded_file = uploaded_file
+                video_content = uploaded_file
+                
+                logger.info(f"✅ Video uploaded to Files API: {uploaded_file.name}")
+
+        except ImportError as e:
+            error_msg = f"Không thể import Files API client: {str(e)}"
+            logger.error(error_msg)
+            
+            # Fallback: Try inline approach even for larger files
+            logger.info("Fallback: Attempting inline approach for larger video...")
+            try:
+                with open(temp_video_path, 'rb') as video_file:
+                    video_bytes = video_file.read()
+                
+                video_content = {
+                    "mime_type": "video/mp4", 
+                    "data": video_bytes
+                }
+                
+                logger.info(f"✅ Fallback successful: Using inline data for {video_size_mb:.2f}MB video")
+                
+            except Exception as fallback_error:
+                # Cleanup
+                try:
+                    os.unlink(temp_video_path)
+                except:
+                    pass
+                    
+                return json.dumps({
+                    "error": f"Both Files API and inline approaches failed: {str(fallback_error)}",
+                    "suggestion": "Video có thể quá lớn hoặc format không support. Thử video ngắn hơn hoặc convert sang MP4."
+                })
+                
+        except Exception as e:
+            error_msg = f"Lỗi prepare video cho Gemini: {str(e)}"
+            logger.error(error_msg)
+            
+            # Cleanup
+            try:
+                os.unlink(temp_video_path)
+            except:
+                pass
+                
+            if cleanup_uploaded_file:
+                try:
+                    from google import genai as genai_client
+                    client = genai_client.Client(api_key=config.GOOGLE_API_KEY)
+                    client.files.delete(cleanup_uploaded_file.name)
+                except:
+                    pass
+                    
+            return json.dumps({
+                "error": error_msg,
+                "suggestion": "Video có thể quá lớn, format không support, hoặc API limit. Thử video ngắn hơn."
+            })
+
+        # ===== BƯỚC 4: CREATE ENHANCED VIDEO ANALYSIS PROMPT =====
+        logger.info("Bước 4: Creating comprehensive video analysis prompt...")
+        
+        sequence_text = "\n".join([f"{i+1}. {desc}" for i, desc in enumerate(query_sequence)])
+        
+        base_prompt = f"""🎬 PHÂN TÍCH VIDEO VALIDATION - TEMPORAL SEQUENCE ANALYSIS
+
+📋 NHIỆM VỤ: Phân tích video này để xác định xem nó có khớp với chuỗi sự kiện được mô tả không.
+
+🎯 CHUỖI SỰ KIỆN CẦN VALIDATE:
+{sequence_text}
+
+🔍 YÊU CẦU PHÂN TÍCH CHI TIẾT:
+
+1. **TEMPORAL SEQUENCE VALIDATION:**
+   - Phân tích từng bước trong chuỗi sự kiện
+   - Kiểm tra thứ tự thời gian có đúng không
+   - Xác định transitions giữa các sự kiện
+
+2. **MOTION & ACTION ANALYSIS:**
+   - Phân tích movement và actions trong video
+   - Kiểm tra continuity của các hành động
+   - Đánh giá quality của temporal progression
+
+3. **CONTENT MATCHING:**
+   - So sánh nội dung video với từng mô tả
+   - Identify missing hoặc extra elements
+   - Đánh giá overall coherence
+
+4. **SCENE QUALITY ASSESSMENT:**
+   - Lighting, angle, clarity của video
+   - Visibility của key elements được mô tả
+   - Technical quality affect validation"""
+
+        if question:
+            base_prompt += f"\n\n🤔 **ADDITIONAL QUESTION:**\n{question}"
+
+        base_prompt += f"""
+
+📊 **RESPONSE FORMAT REQUIRED:**
+Trả về JSON với format sau (STRICTLY follow this structure):
+
+{{
+    "is_match": true/false,
+    "confidence_score": 0.0-1.0,
+    "reasoning": "Giải thích chi tiết về kết quả validation",
+    "sequence_analysis": [
+        {{
+            "step": 1,
+            "description": "Mô tả step đầu tiên",
+            "found_in_video": true/false,
+            "timestamp_range": "0s-2s",
+            "confidence": 0.0-1.0,
+            "details": "Chi tiết về step này trong video"
+        }}
+    ],
+    "video_analysis": {{
+        "duration_seconds": 5.2,
+        "temporal_insights": "Phân tích về temporal flow và transitions",
+        "motion_analysis": "Phân tích về movement và actions",
+        "scene_transitions": ["List các transitions quan trọng"],
+        "overall_quality": "Assessment về technical quality"
+    }},
+    "missing_elements": ["Các elements được mô tả nhưng không có trong video"],
+    "extra_elements": ["Các elements có trong video nhưng không được mô tả"],
+    "recommendations": ["Gợi ý để improve validation"]
+}}
+
+🚀 **ANALYZE VIDEO NOW:**"""
+
+        # ===== BƯỚC 5: CALL GEMINI WITH VIDEO =====
+        logger.info("Bước 5: Calling Gemini for video analysis...")
+        
+        try:
+            # Create model for video analysis
+            model = genai.GenerativeModel(
+                model_name="gemini-1.5-pro",
+                generation_config={
+                    "temperature": 0.1,
+                    "top_p": 0.8,
+                    "top_k": 40,
+                    "max_output_tokens": 4096,
+                }
+            )
+            
+            # Prepare content based on video type
+            if isinstance(video_content, dict) and "data" in video_content:
+                # Inline video data approach
+                logger.info("Generating content with inline video data...")
+                
+                # Create content parts for inline video
+                content_parts = [
+                    {
+                        "inline_data": {
+                            "mime_type": video_content["mime_type"],
+                            "data": base64.b64encode(video_content["data"]).decode('utf-8')
+                        }
+                    },
+                    {"text": base_prompt}
+                ]
+                
+                response = model.generate_content(
+                    content_parts,
+                    # request_options={"timeout": 120}
+                )
+                
+            else:
+                # Files API approach 
+                logger.info("Generating content with Files API reference...")
+                
+                response = model.generate_content(
+                    [video_content, base_prompt],
+                    # request_options={"timeout": 120}
+                )
+            
+            if not response.text:
+                raise Exception("Gemini trả về response rỗng cho video analysis")
+                
+            logger.info(f"✅ Gemini video analysis completed: {len(response.text)} chars")
+            
+            # Parse JSON response
+            result = robust_json_parse(response.text, {
+                "is_match": False,
                 "confidence_score": 0.0,
-                "reasoning": "Gemini trả về response rỗng cho enhanced grid search",
-                "group_results": [],
+                "reasoning": f"Không thể parse response từ Gemini: {response.text[:500]}...",
+                "sequence_analysis": [],
+                "video_analysis": {
+                    "duration_seconds": 0.0,
+                    "temporal_insights": "Analysis failed",
+                    "motion_analysis": "Analysis failed",
+                    "scene_transitions": [],
+                    "overall_quality": "Unknown"
+                }
+            })
+
+        except Exception as e:
+            error_msg = f"Lỗi Gemini video analysis: {str(e)}"
+            logger.error(error_msg)
+            
+            result = {
+                "is_match": False,
+                "confidence_score": 0.0,
+                "reasoning": f"Gemini video analysis failed: {error_msg}",
+                "sequence_analysis": [],
+                "video_analysis": {
+                    "error": error_msg,
+                    "suggestion": "Thử video ngắn hơn hoặc format khác"
+                },
                 "debug_info": {
-                    "image_size": gemini_result.get("image_size", 0),
-                    "prompt_length": len(prompt),
-                    "error": gemini_result.get("error", "Unknown")
+                    "video_size_mb": total_size / 1024 / 1024,
+                    "video_url": video_clip_url,
+                    "approach_used": "inline" if isinstance(video_content, dict) else "files_api"
                 }
             }
+
+        # ===== BƯỚC 6: CLEANUP & ENHANCE METADATA =====
+        logger.info("Bước 6: Cleanup and finalizing results...")
         
-        # Add metadata
+        # Cleanup uploaded file if using Files API
+        if cleanup_uploaded_file:
+            try:
+                from google import genai as genai_client
+                client = genai_client.Client(api_key=config.GOOGLE_API_KEY)
+                client.files.delete(cleanup_uploaded_file.name)
+                logger.info("✅ Cleaned up Gemini uploaded file (Files API)")
+            except Exception as e:
+                logger.warning(f"Could not delete Gemini file: {e}")
+        
+        # Cleanup local temp file
+        try:
+            os.unlink(temp_video_path)
+            logger.info("✅ Cleaned up local temp file")
+        except Exception as e:
+            logger.warning(f"Could not delete temp file: {e}")
+
+        # Add enhanced metadata
+        analysis_method = "inline_video_data" if isinstance(video_content, dict) else "files_api_upload"
+        
         result["metadata"] = {
-            "total_groups": len(frame_groups),
-            "layout_mode": layout_mode,
-            "groups_processed": len(all_group_images),
-            "group_info": group_info
+            "video_url": video_clip_url,
+            "video_size_mb": total_size / 1024 / 1024,
+            "query_sequence_length": len(query_sequence),
+            "analysis_method": analysis_method,
+            "gemini_model": "gemini-1.5-pro",
+            "processing_time": "video_native_analysis",
+            "approach_used": "inline" if isinstance(video_content, dict) else "files_api"
         }
+
+        logger.info(f"✅ Video validation completed: match={result.get('is_match', False)}, confidence={result.get('confidence_score', 0.0)}")
         
         return json.dumps(result)
 
     except Exception as e:
-        error_msg = f"Error in enhanced grid search: {str(e)}"
+        error_msg = f"Unexpected error in valid_video_query: {str(e)}"
         logger.error(error_msg)
-        return json.dumps({"error": error_msg})
+        return json.dumps({
+            "error": error_msg,
+            "suggestion": "Lỗi không xác định trong video validation, kiểm tra logs để biết chi tiết"
+        })
 
 
 def valid_frame_query(input_params: str) -> str:
@@ -502,8 +875,9 @@ def valid_frame_query(input_params: str) -> str:
     Sử dụng khi cần kiểm tra từng frame một cách chi tiết. Tool này kém hiệu quả hơn grid_search nếu chỉ cần một đánh giá tổng thể.
 
     Args:
-        frames (List[str]): Danh sách frame_url cần xác thực.
-        queries (List[str]): Danh sách các câu mô tả tương ứng với từng frame.
+        input_params (str): JSON string chứa các tham số:
+            - frames (List[str]): Danh sách frame_url cần xác thực.
+            - queries (List[str]): Danh sách các câu mô tả tương ứng với từng frame.
 
     Returns:
         str: JSON string chứa kết quả xác thực cho từng cặp (frame, mô tả) và một kết luận tổng thể.
@@ -668,59 +1042,70 @@ TOOL_DESCRIPTIONS = {
         }
     },
     "grid_search": {
-        "name": "grid_search",
-        "description": """🔍 GRID SEARCH - Công cụ phân tích đồng thời nhiều frame bằng lưới hình ảnh
+        "name": "grid_search", 
+        "description": """🎯 GRID SEARCH - CÔNG CỤ TÌM ỨNG CỬ VIÊN (CANDIDATE FINDER)
 
-⚡ ĐẶC ĐIỂM CHÍNH:
-- Ghép nhiều frame thành lưới ảnh và phân tích đồng thời bằng Vision AI
-- Tiết kiệm đáng kể API calls so với phân tích từng frame riêng lẻ
-- Hỗ trợ 2 chế độ: Legacy (đơn giản) và Enhanced (nâng cao)
+🔥 VAI TRÒ CHÍNH: Công cụ chuyên biệt để tìm và xếp hạng các ứng cử viên frame/chuỗi frame tốt nhất từ kết quả temporal search, chuẩn bị cho bước xác thực cuối cùng bằng valid_video_query.
 
-📋 KHI NÀO SỬ DỤNG:
-✅ Sau khi có danh sách frame ứng viên từ temporal_frame_search_topk
-✅ Cần so sánh/đánh giá nhiều frame cùng lúc (3-20 frame)
-✅ Tìm frame tốt nhất trong một nhóm ứng viên
-✅ So sánh nhiều chuỗi frame khác nhau
-✅ Xác thực nhanh tính phù hợp của nhiều frame
+⚡ TÍNH NĂNG CHÍNH:
+- Phân tích đồng thời nhiều frame bằng lưới hình ảnh với Vision AI
+- Tiết kiệm 80-90% API calls so với phân tích từng frame riêng lẻ  
+- Ranking thông minh để tìm ra TOP candidates phù hợp nhất
+- 2 chế độ tối ưu cho different temporal search scenarios
+
+📋 WORKFLOW CHUẨN (QUAN TRỌNG):
+🔸 Temporal Search (1 stage) → Grid Search LEGACY → valid_video_query
+🔸 Temporal Search (≥2 stages) → Grid Search ENHANCED SEPARATE → valid_video_query
+
+🎯 LEGACY MODE - Cho Temporal Search 1 Stage:
+✅ KHI NÀO: Sau temporal_frame_search_topk với query_sequence chỉ có 1 stage
+✅ MỤC ĐÍCH: Tìm frame/chuỗi frame tốt nhất từ một tập ứng viên đồng nhất  
+✅ INPUT: Danh sách frame URLs từ temporal search + query tìm candidates
+✅ OUTPUT: Ranking các frame candidates để chuyển cho valid_video_query
+✅ VÍ DỤ: "Từ 12 frame này, tìm 3-5 frame candidates tốt nhất cho cảnh người đàn ông mặc áo đỏ đang nói chuyện"
+
+🎯 ENHANCED SEPARATE MODE - Cho Temporal Search Multi-Stage:
+✅ KHI NÀO: Sau temporal_frame_search_topk với query_sequence có ≥2 stages
+✅ MỤC ĐÍCH: So sánh các chuỗi frame từ different stages, tìm chuỗi candidates tốt nhất
+✅ INPUT: Múltiple frame groups từ different temporal stages + comparison queries
+✅ OUTPUT: Ranking các chuỗi candidates tốt nhất để chuyển cho valid_video_query
+✅ VÍ DỤ: So sánh chuỗi "người A nói" vs "người B phản ứng" vs "kết quả cuối cùng"
 
 ❌ KHÔNG DÙNG KHI:
-❌ Chỉ có 1-2 frame (dùng valid_frame_query thay thế)
-❌ Cần phân tích chi tiết từng frame riêng biệt
-❌ Chưa có frame URLs cụ thể
+❌ Chưa có kết quả từ temporal_frame_search_topk
+❌ Chỉ cần xác thực 1-2 frame cụ thể (dùng valid_frame_query trực tiếp)
+❌ Đã xác định chắc chắn frame target (skip đến valid_video_query)
 
-🎯 USE CASES THỰC TẾ:
-
-1️⃣ LEGACY MODE - Phân tích đơn giản:
-   - Input: 1 danh sách frame URLs + 1 câu hỏi chung
-   - Output: Đánh giá tổng thể + frame nào phù hợp nhất
-   - Ví dụ: "Trong 8 frame này, frame nào cho thấy người đàn ông mặc áo đỏ đang nói chuyện?"
-
-2️⃣ ENHANCED MODE - So sánh nâng cao:
-   - Input: Nhiều nhóm frame + câu hỏi riêng cho từng nhóm + câu hỏi so sánh
-   - Output: Phân tích từng nhóm + so sánh giữa các nhóm
-   - Ví dụ: So sánh 3 chuỗi frame khác nhau về cùng một sự kiện
-
-💡 WORKFLOW KHUYẾN NGHỊ:
-1. Dùng temporal_frame_search_topk để tìm frame ứng viên
-2. Nhóm frame theo logic (cùng chuỗi thời gian, cùng chủ đề, etc.)
-3. Dùng grid_search để phân tích/so sánh nhanh
-4. Nếu cần chi tiết hơn, dùng valid_frame_query cho frame cụ thể
+🔗 KẾT NỐI VỚI VALID_VIDEO_QUERY:
+- Grid search output sẽ cung cấp ranked candidates
+- valid_video_query sẽ xác thực chi tiết từng candidate được recommend
+- Workflow hoàn chỉnh: temporal → grid (find candidates) → valid_video (validate candidates)
 
 📊 HIỆU SUẤT:
-- Legacy: 1 API call cho 4-16 frame
-- Enhanced: 1 API call cho nhiều nhóm frame (tối đa ~50 frame)
-- Tiết kiệm 80-90% API calls so với phân tích riêng lẻ""",
+- Legacy: 1 API call cho 4-20 frame candidates analysis
+- Enhanced: 1 API call cho multi-group comparison từ temporal stages
+- Tiết kiệm massive API calls và time so với validate từng frame riêng lẻ""",
         "parameters": {
             "type": "object",
             "properties": {
                 "frame_urls": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": """[LEGACY MODE] Danh sách URL frame cần phân tích trong một lưới đơn.
+                    "description": """[LEGACY MODE - Temporal Search 1 Stage] Danh sách frame URLs từ temporal_frame_search_topk để tìm candidates.
                     
-📝 Cách dùng: Cung cấp 4-16 frame URLs để tạo lưới 2x2, 3x3, 4x4...
-💡 Ví dụ: ["frame1.jpg", "frame2.jpg", "frame3.jpg", "frame4.jpg"]
-⚠️ Lưu ý: Phải đi kèm với 'query', không dùng cùng 'frame_groups'"""
+🎯 MỤC ĐÍCH: Phân tích đồng thời để rank và tìm TOP frame candidates tốt nhất
+📝 INPUT: 4-20 frame URLs từ temporal search results  
+💡 WORKFLOW: temporal_frame_search_topk → frame_urls → grid_search LEGACY → candidates cho valid_video_query
+
+📋 CÁCH DÙNG:
+- Lấy frame URLs từ temporal search kết quả (usually top 10-20)
+- Grid search sẽ analyze tất cả và rank để tìm 3-5 top candidates
+- Kết quả candidates sẽ được pass cho valid_video_query để final validation
+
+⚠️ LƯU Ý: 
+- Chỉ dùng cho temporal search có 1 stage duy nhất
+- Phải đi kèm với 'query' parameter
+- Không dùng cùng 'frame_groups' (đó là ENHANCED mode)"""
                 },
                 "grid_dimensions": {
                     "type": "array",
@@ -735,17 +1120,24 @@ TOOL_DESCRIPTIONS = {
                 },
                 "query": {
                     "type": "string",
-                    "description": """[LEGACY MODE] Câu hỏi/nhiệm vụ phân tích cho toàn bộ lưới.
+                    "description": """[LEGACY MODE] Câu hỏi để tìm và rank frame candidates từ temporal search results.
                     
-📝 Ví dụ tốt:
-- "Frame nào trong lưới này cho thấy người đàn ông mặc áo đỏ đang nói chuyện?"
-- "Sắp xếp các frame theo thứ tự thời gian hợp lý nhất"
-- "Frame nào có chất lượng hình ảnh tốt nhất và rõ nét nhất?"
-- "Tìm frame có nhiều người nhất trong cảnh"
+🎯 FOCUS: Tìm ứng cử viên (candidates) tốt nhất, không chỉ đánh giá yes/no
+📝 FORMAT MẪU để tối ưu candidate finding:
 
-❌ Tránh câu hỏi mơ hồ: "Phân tích lưới này", "Frame nào tốt?"
-✅ Câu hỏi cụ thể: "Frame nào cho thấy X đang làm Y?"
-"""
+✅ VÍ DỤ TỐT (focus vào ranking candidates):
+- "Tìm 3-5 frame candidates tốt nhất cho cảnh người đàn ông mặc áo đỏ đang nói chuyện. Rank theo độ rõ nét và phù hợp."
+- "Rank các frame theo thứ tự phù hợp nhất với mô tả '[temporal_query]'. Chọn top 3 candidates để validate tiếp."
+- "Từ các frame này, tìm candidates tốt nhất cho chuỗi sự kiện '[temporal_sequence]'. Ưu tiên frame có chất lượng cao và nội dung rõ ràng."
+- "Phân tích và recommend 3-5 frame candidates có khả năng match cao nhất với query '[original_query]'"
+
+❌ TRÁNH (không focus vào candidates):
+- "Phân tích lưới này" (quá mơ hồ)
+- "Frame nào tốt?" (không rõ criteria)
+- "Có frame nào match không?" (chỉ yes/no, không rank)
+
+🔗 CONNECTION với valid_video_query:
+Query này sẽ tạo ra ranked candidates list → valid_video_query sẽ validate từng candidate chi tiết"""
                 },
                 "frame_groups": {
                     "type": "array",
@@ -753,16 +1145,34 @@ TOOL_DESCRIPTIONS = {
                         "type": "array",
                         "items": {"type": "string"}
                     },
-                    "description": """[ENHANCED MODE] Danh sách các nhóm frame để so sánh.
+                    "description": """[ENHANCED SEPARATE MODE - Temporal Search Multi-Stage] Danh sách các nhóm frame URLs từ different stages của temporal search.
                     
-📝 Cấu trúc: [["group1_frame1", "group1_frame2"], ["group2_frame1", "group2_frame2"]]
-💡 Use cases:
-- So sánh nhiều chuỗi thời gian khác nhau
-- So sánh kết quả từ các query khác nhau
-- Phân tích nhiều góc nhìn của cùng một sự kiện
+🎯 MỤC ĐÍCH: So sánh candidates từ múltiple temporal stages để tìm chuỗi tốt nhất
+📝 STRUCTURE: [["stage1_frames"], ["stage2_frames"], ["stage3_frames"]]
+💡 WORKFLOW: temporal_frame_search_topk (multi-stage) → frame_groups → grid_search ENHANCED → stage candidates cho valid_video_query
 
-📊 Giới hạn: Mỗi nhóm tối đa 6 frame (có thể tùy chỉnh bằng max_images_per_group)
-⚠️ Phải đi kèm group_queries HOẶC comparison_query"""
+� USE CASES:
+🔸 Temporal sequence có 2+ stages: "người A nói" → "người B phản ứng" → "kết quả"
+🔸 So sánh candidates từ different temporal stages
+🔸 Tìm stage/chuỗi có candidates quality cao nhất
+🔸 Rank multiple temporal sequences để chọn tốt nhất cho validation
+
+📊 VÍ DỤ THỰC TẾ:
+```json
+{
+  "frame_groups": [
+    ["stage1_frame1.jpg", "stage1_frame2.jpg", "stage1_frame3.jpg"],  // Stage: "người A bắt đầu nói"
+    ["stage2_frame1.jpg", "stage2_frame2.jpg"],                       // Stage: "người B phản ứng" 
+    ["stage3_frame1.jpg", "stage3_frame2.jpg", "stage3_frame3.jpg"]   // Stage: "kết thúc cuộc trò chuyện"
+  ]
+}
+```
+
+⚠️ LƯU Ý:
+- Mỗi nhóm = 1 temporal stage từ query_sequence
+- Mỗi nhóm tối đa 6 frame (có thể tùy chỉnh)
+- Phải dùng layout_mode="separate" để phân biệt stages
+- Kết quả sẽ rank stages và recommend stage candidates tốt nhất"""
                 },
                 "group_queries": {
                     "type": "array",
@@ -779,16 +1189,27 @@ TOOL_DESCRIPTIONS = {
                 },
                 "comparison_query": {
                     "type": "string", 
-                    "description": """[ENHANCED MODE] Câu hỏi so sánh giữa các nhóm.
+                    "description": """[ENHANCED SEPARATE MODE] Câu hỏi so sánh để rank temporal stage candidates.
                     
-📝 Mục đích: Phân tích mối quan hệ/khác biệt giữa các nhóm
-💡 Ví dụ:
-- "Nhóm nào cho thấy sự kiện diễn ra sớm hơn?"
-- "So sánh chất lượng hình ảnh giữa các nhóm"
-- "Nhóm nào có nhiều người tham gia hơn?"
-- "Xác định thứ tự thời gian của các nhóm sự kiện"
+🎯 FOCUS: So sánh multiple temporal stages để tìm stage có candidates tốt nhất cho validation
+📝 FORMAT MẪU để tối ưu stage candidate finding:
 
-⚠️ Có thể dùng thay thế hoặc kết hợp với group_queries"""
+✅ VÍ DỤ TỐT (focus vào ranking stage candidates):
+- "So sánh 3 temporal stages này. Stage nào có frame candidates chất lượng cao nhất và phù hợp với sequence gốc? Rank theo độ ưu tiên."
+- "Đánh giá từng temporal stage và recommend 1-2 stages có candidates tốt nhất để validate với valid_video_query."
+- "Từ các stages này, stage nào có frame sequence candidates phù hợp và rõ ràng nhất? Rank theo khả năng thành công khi validate."
+- "Compare temporal stages quality. Recommend top stage candidates có potential cao nhất cho video validation."
+
+💡 STAGE COMPARISON CRITERIA:
+- Chất lượng frame (độ rõ nét, lighting, angle)
+- Tính phù hợp với original temporal sequence  
+- Completeness của stage (có đủ thông tin không)
+- Continuity between frames trong stage
+
+🔗 CONNECTION với valid_video_query:
+Comparison này sẽ tạo ra ranked stage candidates → valid_video_query sẽ validate stage tốt nhất đầu tiên
+
+⚠️ LƯU Ý: Dùng thay thế hoặc kết hợp với group_queries"""
                 },
                 "layout_mode": {
                     "type": "string",
@@ -838,6 +1259,188 @@ TOOL_DESCRIPTIONS = {
                 {"required": ["frame_urls", "query"]},
                 {"required": ["frame_groups"], "anyOf": [{"required": ["comparison_query"]}, {"required": ["group_queries"]}]}
             ]
+        }
+    },
+    "get_video": {
+        "name": "get_video",
+        "description": """🎬 GET VIDEO - ENHANCED VIDEO CLIP GENERATOR
+
+🔥 VAI TRÒ CHÍNH: Tool tạo video clip từ frame range với validation toàn diện và output tối ưu cho agent workflow.
+
+⚡ CÁCH HOẠT ĐỘNG (Sequence Thinking):
+1️⃣ Input Validation → 2️⃣ API Call → 3️⃣ Response Validation → 4️⃣ Enhanced Output
+
+📋 WORKFLOW CHUẨN:
+🔸 temporal_frame_search_topk → grid_search → get_video → valid_video_query
+🔸 Tạo video clip từ frame range được xác định bởi grid_search
+🔸 Prepare video cho valid_video_query validation
+
+⚡ TÍNH NĂNG ENHANCED:
+✅ Input validation: video name format, frame range logic, reasonable duration
+✅ Robust error handling: network, server, validation errors với detailed suggestions
+✅ Response verification: đảm bảo video clip thực sự accessible
+✅ Enhanced output: metadata đầy đủ, ready_for_validation signal
+✅ Integration-ready: output format tối ưu cho valid_video_query tool
+
+🎯 KHI NÀO SỬ DỤNG:
+✅ Sau khi grid_search đã identify frame range phù hợp
+✅ Cần tạo video clip để validate với valid_video_query  
+✅ Có video_name và frame range cụ thể từ temporal search results
+
+❌ KHÔNG DÙNG KHI:
+❌ Chưa có frame range cụ thể (dùng temporal_search trước)
+❌ Chỉ cần static frame analysis (dùng valid_frame_query)
+❌ Video name không rõ ràng hoặc frame range không hợp lệ
+
+🔗 OUTPUT CHO VALID_VIDEO_QUERY:
+- clip_url: URL tương đối của video clip
+- full_url: URL đầy đủ để access video  
+- ready_for_validation: true signal
+- metadata: duration, frame_count, timing info""",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "video_name": {
+                    "type": "string",
+                    "description": """Tên video theo format L##_V### (ví dụ: L01_V001, L05_V010).
+                    
+📝 FORMAT REQUIRED: L##_V###
+- L: Literal character
+- ##: 2-digit lesson number (01-99)  
+- _V: Literal separator + V
+- ###: 3-digit video number (001-999)
+
+✅ VÍ DỤ HỢP LỆ: L01_V001, L05_V010, L12_V045
+❌ VÍ DỤ KHÔNG HỢP LỆ: L1_V1, video01, L01_V1
+
+💡 Lấy từ temporal search results hoặc grid search metadata"""
+                },
+                "start_frame": {
+                    "type": "integer",
+                    "description": """Frame bắt đầu (số nguyên dương, ≥ 0).
+                    
+📝 VALIDATION RULES:
+- Phải ≥ 0 (frame index bắt đầu từ 0)
+- Phải < end_frame để có video clip hợp lệ
+- Thường lấy từ temporal search result start point
+
+💡 Frame numbering thường bắt đầu từ 0, so với timestamp có thể khác nhau tùy video"""
+                },
+                "end_frame": {
+                    "type": "integer", 
+                    "description": """Frame kết thúc (số nguyên dương, > start_frame).
+                    
+📝 VALIDATION RULES:
+- Phải > start_frame (tối thiểu start_frame + 1 cho single frame clip)
+- Auto-adjust: nếu ≤ start_frame sẽ được set thành start_frame + 1
+- Frame count ≤ 1800 (tối đa ~1 phút at 30fps) để tránh file quá lớn
+
+💡 Tool sẽ tự động điều chỉnh nếu end_frame ≤ start_frame để tạo clip tối thiểu 1 frame"""
+                }
+            },
+            "required": ["video_name", "start_frame", "end_frame"]
+        }
+    },
+    "valid_video_query": {
+        "name": "valid_video_query",
+        "description": """🎬 ENHANCED VIDEO VALIDATION - TRỰC TIẾP ANALYZE VIDEO
+
+🔥 VAI TRÒ CHÍNH: Tool validation cuối cùng trong workflow, sử dụng Gemini Video API để phân tích trực tiếp video content với temporal understanding đầy đủ.
+
+⚡ CẢI TIẾN QUAN TRỌNG:
+✅ DIRECT VIDEO UPLOAD: Gửi video trực tiếp lên Gemini thay vì extract frames
+✅ TEMPORAL CONTINUITY: Hiểu được motion, transitions, và temporal flow
+✅ MOTION ANALYSIS: Phân tích movement và actions trong video context
+✅ ENHANCED VALIDATION: Chi tiết hơn về sequence validation và scene analysis
+✅ ROBUST PROCESSING: Handle video upload, processing, timeout với comprehensive error handling
+
+📋 WORKFLOW CHUẨN:
+🔸 temporal_frame_search_topk → grid_search → get_video → valid_video_query (FINAL VALIDATION)
+🔸 Grid search identifies candidates → get_video creates clips → valid_video_query validates with full video context
+
+🎯 KHI NÀO SỬ DỤNG:
+✅ Có video clip URL từ get_video tool
+✅ Cần validation chi tiết cho temporal sequence
+✅ Yêu cầu analysis về motion, transitions, và temporal patterns
+✅ Final step để confirm video matches query requirements
+
+⚡ WORKFLOW SEQUENCE:
+1️⃣ Download Video → 2️⃣ Upload to Gemini → 3️⃣ Wait Processing → 4️⃣ Video Analysis → 5️⃣ Cleanup
+
+🔗 INPUT từ GET_VIDEO:
+- video_clip_url: URL của video clip đã được tạo
+- query_sequence: Chuỗi temporal events cần validate
+- question: Optional câu hỏi specific về video content
+
+📊 OUTPUT ENHANCED:
+- Detailed sequence_analysis cho từng step
+- Video_analysis với temporal_insights, motion_analysis, scene_transitions
+- Missing_elements và extra_elements analysis
+- Recommendations để improve validation
+- Technical quality assessment
+
+❌ KHÔNG DÙNG KHI:
+❌ Chưa có video clip URL (cần get_video trước)
+❌ Chỉ cần frame-level analysis (dùng valid_frame_query)
+❌ Video quá lớn (>50MB) hoặc quá dài (>5 phút)
+
+🚀 PERFORMANCE:
+- Video upload và processing time: 10-60 seconds
+- Analysis time: 30-120 seconds depending on video complexity
+- File size limit: 50MB per video clip
+- Supported formats: MP4, AVI, MOV, WebM""",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "video_clip_url": {
+                    "type": "string",
+                    "description": """URL của đoạn video ngắn cần xác thực (từ get_video tool).
+                    
+📝 FORMAT: Relative path (/media/video_clips/...) hoặc full URL
+💡 SOURCE: Output từ get_video tool provide clip_url hoặc full_url
+✅ VÍ DỤ: "/media/video_clips/L01_V001_f100-150.mp4"
+
+🔗 INTEGRATION: get_video tool tạo video clip → provide URL → valid_video_query validate"""
+                },
+                "query_sequence": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": """Chuỗi các mô tả sự kiện trong video theo thứ tự thời gian.
+                    
+📝 STRUCTURE: Danh sách các mô tả events theo temporal order
+💡 SOURCE: Original temporal query sequence từ user hoặc temporal_frame_search_topk
+
+✅ VÍ DỤ:
+[
+    "Người đàn ông mặc áo đỏ bắt đầu nói chuyện",
+    "Anh ta chỉ tay về phía bảng white board", 
+    "Người phụ nữ ngồi bên cạnh gật đầu đồng ý",
+    "Cuộc trò chuyện kết thúc với cả hai người cười"
+]
+
+🎯 MỤC ĐÍCH: Validate từng step trong sequence có xuất hiện đúng thứ tự trong video không"""
+                },
+                "question": {
+                    "type": "string",
+                    "description": """Câu hỏi tùy chọn về nội dung video để phân tích thêm.
+                    
+📝 OPTIONAL: Không bắt buộc, nhưng useful cho specific analysis
+💡 USE CASES:
+- "Video có rõ ràng không? Có bị mờ hoặc tối không?"
+- "Người nói có pronunciation rõ ràng không?"
+- "Background có ảnh hưởng đến nội dung chính không?"
+- "Video có đủ context để hiểu complete story không?"
+
+✅ VÍ DỤ SPECIFIC QUESTIONS:
+- "Người đàn ông có đang hold microphone không?"
+- "Slide presentation có visible và readable không?"
+- "Audio quality có tốt không (nếu có)?"
+- "Camera angle có phù hợp với nội dung không?"
+
+🎯 ENHANCE: Cung cấp additional context cho comprehensive validation"""
+                }
+            },
+            "required": ["video_clip_url", "query_sequence"]
         }
     }
 }

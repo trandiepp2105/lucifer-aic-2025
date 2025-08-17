@@ -6,48 +6,57 @@
 
 # English
 
-An intelligent agent system using Google Gemini and LangChain to automate video frame retrieval and validation based on natural language descriptions.
+An intelligent agent system using Google Gemini and **LangGraph** to automate video frame retrieval and validation based on natural language descriptions.
 
 ## 🎯 Overview
 
-This project implements an agentic RAG (Retrieval-Augmented Generation) system that enables intelligent video frame search and analysis using natural language queries. The system leverages Google Gemini's vision capabilities, LangChain's agent framework, and advanced search strategies to find and validate video frames that match user descriptions.
+This project implements an agentic RAG (Retrieval-Augmented Generation) system that enables intelligent video frame search and analysis using natural language queries. The system leverages Google Gemini's vision capabilities, **LangGraph's workflow framework**, and advanced search strategies to find and validate video frames that match user descriptions.
 
 ### Key Features
 
-- **🤖 Intelligent Agent**: Multi-strategy search approach with fallback mechanisms
+- **🤖 Intelligent Agent**: Structured LangGraph workflow with state management
 - **🔍 Advanced Search**: Temporal frame search with OCR and text recognition
 - **🎯 Accurate Validation**: Grid-based batch processing and frame-by-frame validation
 - **📊 Real-time Monitoring**: Streamlit dashboard for tracking agent reasoning
 - **🌐 RESTful API**: FastAPI-based web service with comprehensive documentation
 - **🐳 Docker Ready**: Containerized deployment with docker-compose support
+- **⚡ Improved Reliability**: Better error handling and workflow control with LangGraph
 
 ## 🏗️ Architecture
 
 ```mermaid
 graph TB
     A[Client Request] --> B[FastAPI Layer]
-    B --> C[Agent Core LangChain]
-    C --> D[Tool Layer]
+    B --> C[Agent Core LangGraph]
+    C --> D[LangGraph Workflow]
     
-    D --> E[temporal_frame_search_topk]
-    D --> F[grid_search]
-    D --> G[valid_frame_query]
+    D --> E[Preprocess Node]
+    E --> F[Temporal Search Node]
+    F --> G[Grid Search Node]
+    G --> H[Validation Node]
+    H --> I[Synthesis Node]
     
-    E --> H[External Search API]
-    F --> I[Google Gemini Vision]
-    G --> I
+    F --> J[temporal_frame_search_topk]
+    G --> K[grid_search]
+    H --> L[valid_video_query]
     
-    I --> J[Frame Validation]
-    J --> K[Results Synthesis]
-    K --> B
+    J --> M[External Search API]
+    K --> N[Google Gemini Vision]
+    L --> N
     
-    B --> L[Monitoring Dashboard]
-    L --> M[Streamlit UI]
+    N --> O[Frame Validation]
+    O --> I
+    I --> P[Error Handler]
+    I --> B
+    P --> B
+    
+    B --> Q[Monitoring Dashboard]
+    Q --> R[Streamlit UI]
 ```
 
 ### Core Components
 
-- **Agent Core**: LangChain-powered reasoning engine with multi-strategy search
+- **Agent Core**: LangGraph-powered workflow engine with structured state management
 - **Tools Layer**: Specialized tools for frame search, validation, and analysis
 - **Monitoring System**: Real-time tracking of agent decisions and performance
 - **API Layer**: RESTful endpoints for integration and testing
@@ -56,153 +65,98 @@ graph TB
 
 ### Prerequisites
 
-- Python 3.11+
+- Python 3.8+
+- Docker & Docker Compose
 - Google API Key with Gemini access
-- Docker & Docker Compose (optional)
 
 ### Installation
 
-1. **Clone the repository**
-```bash
-git clone <https://github.com/voicon324/agentic_rag.git>
-cd agentic_rag
-```
+1. **Clone and Setup**
+   ```bash
+   cd agentic_rag
+   pip install -r requirements.txt
+   ```
 
-2. **Create virtual environment**
-```bash
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# or
-venv\Scripts\activate     # Windows
-```
+2. **Environment Configuration**
+   ```bash
+   # Create .env file
+   echo "GOOGLE_API_KEY=your_api_key" > .env
+   echo "TEMPORAL_SEARCH_API_URL=your_search_api" >> .env
+   ```
 
-3. **Install dependencies**
-```bash
-pip install -r requirements.txt
-```
+3. **Start Services**
+   ```bash
+   # Docker deployment
+   docker-compose up -d
+   
+   # Or development mode
+   python -m app.main
+   ```
 
-4. **Configure environment**
-```bash
-cp .env.template .env
-# Edit .env with your configuration
-```
+### API Usage
 
-### Configuration
-
-Create a `.env` file with the following variables:
-
-```env
-# Google API Configuration
-GOOGLE_API_KEY=your_google_api_key_here
-
-# External API URLs
-SEARCH_API_URL=https://your-search-api.com/search
-MEDIA_API_URL=https://your-media-api.com/media
-
-# Gemini Configuration
-GEMINI_MODEL=gemini-pro-vision
-GEMINI_TEMPERATURE=0.1
-GEMINI_MAX_TOKENS=2048
-
-# Application Settings
-DEBUG=false
-APP_NAME=Agentic RAG Video Retrieval
-APP_VERSION=2.0.0
-```
-
-### Running the Application
-
-#### Development Mode
-```bash
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
-
-#### Production Mode
-```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
-```
-
-#### With Docker
-```bash
-docker-compose up -d
-```
-
-#### Monitoring Dashboard
-```bash
-streamlit run streamlit_monitoring.py --server.port 8501
-```
-
-## 📡 API Usage
-
-### Main Endpoint: POST /find-video
-
-Find videos based on natural language descriptions.
-
-**Request:**
-```json
-{
-  "description": "A person walking a dog in a park on a sunny day"
-}
-```
-
-**Response (Success):**
-```json
-{
-  "success": true,
-  "frames": [
-    "L05_V027/23198.jpg",
-    "L05_V027/23199.jpg",
-    "L05_V027/23200.jpg"
-  ],
-  "confidence_score": 0.95,
-  "reasoning": "Found frames showing a person walking a dog in a park setting with bright natural lighting indicating sunny weather conditions."
-}
-```
-
-**Response (No Match):**
-```json
-{
-  "success": false,
-  "error_type": "no_match",
-  "error_message": "No suitable frames found matching the description"
-}
-```
-
-### API Examples
-
-#### Python
 ```python
 import requests
 
-response = requests.post(
-    "http://localhost:8000/find-video",
-    json={"description": "A car turning right at an intersection"}
-)
+# Search for video frames
+response = requests.post("http://localhost:8000/find-video", json={
+    "query": "Show me frames with a person holding a red apple"
+})
+
 result = response.json()
-print(result)
+print(f"Found video: {result['video_id']}")
+print(f"Relevant frames: {result['frame_numbers']}")
 ```
 
-#### cURL
+## 📊 LangGraph Workflow
+
+The system uses LangGraph to implement a structured, stateful workflow for video frame retrieval:
+
+### Workflow States
+
+- **Preprocessing**: Query analysis and planning
+- **Temporal Search**: Time-based frame retrieval
+- **Grid Search**: Batch visual analysis
+- **Validation**: Frame-by-frame accuracy checking
+- **Synthesis**: Result compilation and ranking
+- **Error Handling**: Fallback mechanisms and error recovery
+
+### Key Improvements with LangGraph
+
+- **Better State Management**: Structured state tracking across workflow steps
+- **Conditional Routing**: Dynamic path selection based on intermediate results
+- **Error Recovery**: Built-in fallback mechanisms and error handling
+- **Debugging**: Enhanced observability and workflow monitoring
+- **Scalability**: More maintainable and extensible architecture
+
+## 🔧 Configuration
+
+### Core Settings (`app/config.py`)
+
+```python
+# LangGraph Configuration
+WORKFLOW_TIMEOUT = 300  # seconds
+MAX_RETRIES = 3
+ENABLE_DEBUGGING = True
+
+# Search Configuration
+MAX_FRAMES_PER_SEARCH = 50
+GRID_SEARCH_BATCH_SIZE = 9
+TEMPORAL_SEARCH_THRESHOLD = 0.8
+```
+
+### Environment Variables
+
 ```bash
-curl -X POST "http://localhost:8000/find-video" \
-     -H "Content-Type: application/json" \
-     -d '{"description": "A cat sleeping on a couch"}'
-```
+# Required
+GOOGLE_API_KEY=your_gemini_api_key
+TEMPORAL_SEARCH_API_URL=http://your-search-api
 
-#### JavaScript
-```javascript
-const response = await fetch('http://localhost:8000/find-video', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    description: 'A person cooking in a kitchen'
-  })
-});
-const result = await response.json();
-console.log(result);
-```
-
-### Additional Endpoints
+# Optional
+WORKFLOW_DEBUG=true
+MAX_CONCURRENT_REQUESTS=10
+CACHE_TTL=3600
+```### Additional Endpoints
 
 - `GET /` - API information and status
 - `GET /health` - Health check endpoint
@@ -230,38 +184,365 @@ pytest tests/test_api.py
 
 ```
 agentic_rag/
-├── app/                          # Main application package
-│   ├── __init__.py              # Package initialization
-│   ├── main.py                  # FastAPI application
-│   ├── agent_core.py            # LangChain agent implementation
-│   ├── tools.py                 # Agent tools (search, validation)
-│   ├── schemas.py               # Pydantic models and schemas
-│   ├── config.py                # Configuration management
-│   ├── monitoring.py            # Agent monitoring system
-│   ├── callbacks.py             # LangChain callbacks
-│   ├── frame_viewer.py          # Frame visualization utilities
-│   └── utils.py                 # Helper utilities
-├── tests/                       # Test suite
-│   ├── test_agent.py           # Agent core tests
-│   ├── test_tools.py           # Tools tests
-│   └── test_api.py             # API integration tests
-├── docs/                        # Documentation
-│   ├── MONITORING.md           # Monitoring guide
-│   ├── FRAME_LOADING_FIX.md    # Technical fixes
-│   └── JSON_PARSING_FIX.md     # Parsing fixes
-├── streamlit_monitoring.py      # Monitoring dashboard
-├── demo_monitoring.py          # Demo monitoring script
-├── docker-compose.yml          # Docker compose configuration
-├── Dockerfile                  # Docker container configuration
+├── app/
+│   ├── __init__.py
+│   ├── main.py                 # FastAPI application
+│   ├── agent_core.py           # LangGraph agent interface
+│   ├── langgraph_agent.py      # LangGraph workflow implementation
+│   ├── tools.py                # Search and validation tools
+│   ├── config.py               # Configuration management
+│   ├── schemas.py              # Pydantic models
+│   ├── utils.py                # Utility functions
+│   ├── callbacks.py            # LangGraph callbacks
+│   └── monitoring.py           # Agent monitoring
+├── docs/
+│   ├── LANGGRAPH_IMPLEMENTATION.md  # LangGraph migration guide
+│   ├── LANGGRAPH_REFACTORING.md     # Complete refactoring documentation
+│   └── MONITORING.md                # Monitoring setup
 ├── requirements.txt            # Python dependencies
-├── .env.template              # Environment template
-├── .gitignore                 # Git ignore patterns
-└── README.md                  # This file
+├── docker-compose.yml          # Docker services
+├── Dockerfile                  # Container definition
+└── README.md                   # This file
 ```
 
-## 🔄 Agent Workflow
+## 🛠️ Development
 
-The system employs a sophisticated multi-strategy search approach:
+### LangGraph Workflow Development
+
+The core agent logic is implemented using LangGraph's StateGraph pattern:
+
+```python
+from langgraph.graph import StateGraph
+from app.schemas import VideoRetrievalState
+
+# Create workflow
+workflow = StateGraph(VideoRetrievalState)
+
+# Add nodes
+workflow.add_node("preprocess", preprocess_query_node)
+workflow.add_node("temporal_search", temporal_search_node)
+workflow.add_node("grid_search", grid_search_node)
+workflow.add_node("validation", validation_node)
+workflow.add_node("synthesis", response_synthesis_node)
+
+# Add conditional routing
+workflow.add_conditional_edges(
+    "temporal_search",
+    should_continue_to_grid_search,
+    {
+        "continue": "grid_search",
+        "retry": "temporal_search",
+        "end": "synthesis"
+    }
+)
+```
+
+### Running Tests
+
+```bash
+# Structure validation
+python -c "
+from app.agent_core import VideoRetrievalAgent
+from app.langgraph_agent import LangGraphVideoAgent
+print('✓ All imports successful')
+"
+
+# Integration tests
+python -m pytest tests/ -v
+
+# Workflow debugging
+python -c "
+from app.langgraph_agent import LangGraphVideoAgent
+agent = LangGraphVideoAgent()
+print('✓ LangGraph workflow compiled successfully')
+"
+```
+
+### Monitoring
+
+Start the monitoring dashboard:
+
+```bash
+streamlit run streamlit_monitoring.py
+```
+
+Access at: http://localhost:8501
+
+## 📊 Performance & Monitoring
+
+### Key Metrics
+
+- **Search Accuracy**: Frame relevance scoring
+- **Response Time**: End-to-end query processing
+- **Workflow Efficiency**: Node execution times
+- **Error Rates**: Failure and retry statistics
+
+### LangGraph Benefits
+
+- **Structured State**: Type-safe state management
+- **Better Debugging**: Visual workflow inspection
+- **Error Recovery**: Automatic retry and fallback mechanisms
+- **Scalable Architecture**: Easy to extend with new nodes
+
+## 🐛 Troubleshooting
+
+### Common Issues
+
+1. **Import Errors**
+   ```bash
+   # Ensure all dependencies installed
+   pip install -r requirements.txt
+   ```
+
+2. **Google API Issues**
+   ```bash
+   # Verify API key
+   export GOOGLE_API_KEY=your_key
+   python -c "import google.generativeai as genai; genai.configure(api_key='$GOOGLE_API_KEY')"
+   ```
+
+3. **Workflow Failures**
+   ```bash
+   # Enable debug mode
+   export WORKFLOW_DEBUG=true
+   python -m app.main
+   ```
+
+### Debug Mode
+
+Enable comprehensive logging:
+
+```python
+import logging
+logging.basicConfig(level=logging.DEBUG)
+
+from app.langgraph_agent import LangGraphVideoAgent
+agent = LangGraphVideoAgent(debug=True)
+```
+
+---
+
+# Tiếng Việt
+
+Hệ thống agent thông minh sử dụng Google Gemini và **LangGraph** để tự động tìm kiếm và xác thực khung hình video dựa trên mô tả ngôn ngữ tự nhiên.
+
+## 🎯 Tổng quan
+
+Dự án này triển khai một hệ thống agentic RAG (Retrieval-Augmented Generation) cho phép tìm kiếm và phân tích khung hình video thông minh bằng truy vấn ngôn ngữ tự nhiên. Hệ thống tận dụng khả năng thị giác của Google Gemini, **framework workflow LangGraph**, và các chiến lược tìm kiếm tiên tiến để tìm và xác thực các khung hình video phù hợp với mô tả của người dùng.
+
+### Tính năng chính
+
+- **🤖 Agent Thông minh**: Workflow LangGraph có cấu trúc với quản lý trạng thái
+- **� Tìm kiếm Tiên tiến**: Tìm kiếm khung hình theo thời gian với OCR và nhận dạng văn bản
+- **🎯 Xác thực Chính xác**: Xử lý batch dựa trên lưới và xác thực từng khung hình
+- **📊 Giám sát Thời gian thực**: Dashboard Streamlit để theo dõi suy luận của agent
+- **🌐 API RESTful**: Dịch vụ web FastAPI với tài liệu toàn diện
+- **🐳 Sẵn sàng Docker**: Triển khai containerized với hỗ trợ docker-compose
+- **⚡ Độ tin cậy Cải thiện**: Xử lý lỗi tốt hơn và kiểm soát workflow với LangGraph
+
+## 🏗️ Kiến trúc
+
+Hệ thống sử dụng LangGraph để triển khai workflow có cấu trúc, có trạng thái cho việc truy xuất khung hình video với các node chuyên biệt và routing có điều kiện.
+
+### Các thành phần chính
+
+- **Agent Core**: Engine workflow LangGraph với quản lý trạng thái có cấu trúc
+- **Tool Layer**: Bộ công cụ tìm kiếm và xác thực
+- **API Layer**: Endpoints FastAPI với documentation OpenAPI
+- **Monitoring**: Dashboard Streamlit cho theo dõi và debug
+
+## 🚀 Bắt đầu nhanh
+
+### Yêu cầu hệ thống
+
+- Python 3.8+
+- Docker & Docker Compose
+- Google API Key với quyền truy cập Gemini
+
+### Cài đặt
+
+1. **Clone và Setup**
+   ```bash
+   cd agentic_rag
+   pip install -r requirements.txt
+   ```
+
+2. **Cấu hình môi trường**
+   ```bash
+   # Tạo file .env
+   echo "GOOGLE_API_KEY=your_api_key" > .env
+   echo "TEMPORAL_SEARCH_API_URL=your_search_api" >> .env
+   ```
+
+3. **Khởi động dịch vụ**
+   ```bash
+   # Triển khai Docker
+   docker-compose up -d
+   
+   # Hoặc chế độ development
+   python -m app.main
+   ```
+
+## 📊 LangGraph Workflow
+
+Hệ thống sử dụng LangGraph để triển khai workflow có cấu trúc, có trạng thái:
+
+### Các trạng thái Workflow
+
+- **Preprocessing**: Phân tích truy vấn và lập kế hoạch
+- **Temporal Search**: Truy xuất khung hình dựa trên thời gian
+- **Grid Search**: Phân tích thị giác batch
+- **Validation**: Kiểm tra độ chính xác từng khung hình
+- **Synthesis**: Biên dịch và xếp hạng kết quả
+- **Error Handling**: Cơ chế fallback và phục hồi lỗi
+
+### Cải tiến chính với LangGraph
+
+- **Quản lý Trạng thái Tốt hơn**: Theo dõi trạng thái có cấu trúc qua các bước workflow
+- **Routing Có điều kiện**: Lựa chọn đường dẫn động dựa trên kết quả trung gian
+- **Phục hồi Lỗi**: Cơ chế fallback tích hợp và xử lý lỗi
+- **Debugging**: Tăng cường khả năng quan sát và giám sát workflow
+- **Khả năng mở rộng**: Kiến trúc dễ bảo trì và mở rộng hơn
+
+## 🔧 Cấu hình
+
+### Cài đặt cốt lõi (`app/config.py`)
+
+```python
+# Cấu hình LangGraph
+WORKFLOW_TIMEOUT = 300  # giây
+MAX_RETRIES = 3
+ENABLE_DEBUGGING = True
+
+# Cấu hình tìm kiếm
+MAX_FRAMES_PER_SEARCH = 50
+GRID_SEARCH_BATCH_SIZE = 9
+TEMPORAL_SEARCH_THRESHOLD = 0.8
+```
+
+## 🛠️ Phát triển
+
+### Phát triển LangGraph Workflow
+
+Logic agent cốt lõi được triển khai bằng pattern StateGraph của LangGraph:
+
+```python
+from langgraph.graph import StateGraph
+from app.schemas import VideoRetrievalState
+
+# Tạo workflow
+workflow = StateGraph(VideoRetrievalState)
+
+# Thêm nodes
+workflow.add_node("preprocess", preprocess_query_node)
+workflow.add_node("temporal_search", temporal_search_node)
+workflow.add_node("grid_search", grid_search_node)
+workflow.add_node("validation", validation_node)
+workflow.add_node("synthesis", response_synthesis_node)
+
+# Thêm routing có điều kiện
+workflow.add_conditional_edges(
+    "temporal_search",
+    should_continue_to_grid_search,
+    {
+        "continue": "grid_search",
+        "retry": "temporal_search",
+        "end": "synthesis"
+    }
+)
+```
+
+### Chạy kiểm thử
+
+```bash
+# Xác thực cấu trúc
+python -c "
+from app.agent_core import VideoRetrievalAgent
+from app.langgraph_agent import LangGraphVideoAgent
+print('✓ Tất cả imports thành công')
+"
+
+# Kiểm thử tích hợp
+python -m pytest tests/ -v
+
+# Debug workflow
+python -c "
+from app.langgraph_agent import LangGraphVideoAgent
+agent = LangGraphVideoAgent()
+print('✓ LangGraph workflow compiled thành công')
+"
+```
+
+## 📊 Hiệu suất & Giám sát
+
+### Chỉ số chính
+
+- **Độ chính xác Tìm kiếm**: Điểm số liên quan của khung hình
+- **Thời gian Phản hồi**: Xử lý truy vấn end-to-end
+- **Hiệu quả Workflow**: Thời gian thực thi node
+- **Tỷ lệ Lỗi**: Thống kê thất bại và retry
+
+### Lợi ích của LangGraph
+
+- **Trạng thái Có cấu trúc**: Quản lý trạng thái type-safe
+- **Debug Tốt hơn**: Kiểm tra workflow trực quan
+- **Phục hồi Lỗi**: Cơ chế retry và fallback tự động
+- **Kiến trúc Mở rộng**: Dễ dàng mở rộng với các node mới
+
+## 🐛 Khắc phục sự cố
+
+### Vấn đề thường gặp
+
+1. **Lỗi Import**
+   ```bash
+   # Đảm bảo tất cả dependencies đã cài đặt
+   pip install -r requirements.txt
+   ```
+
+2. **Vấn đề Google API**
+   ```bash
+   # Xác minh API key
+   export GOOGLE_API_KEY=your_key
+   python -c "import google.generativeai as genai; genai.configure(api_key='$GOOGLE_API_KEY')"
+   ```
+
+3. **Lỗi Workflow**
+   ```bash
+   # Bật chế độ debug
+   export WORKFLOW_DEBUG=true
+   python -m app.main
+   ```
+
+## 📚 Tài liệu
+
+- [LANGGRAPH_IMPLEMENTATION.md](docs/LANGGRAPH_IMPLEMENTATION.md): Hướng dẫn triển khai LangGraph
+- [LANGGRAPH_REFACTORING.md](docs/LANGGRAPH_REFACTORING.md): Tài liệu refactoring hoàn chỉnh
+- [MONITORING.md](docs/MONITORING.md): Thiết lập giám sát
+
+## 🤝 Đóng góp
+
+1. Fork dự án
+2. Tạo feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit thay đổi (`git commit -m 'Add some AmazingFeature'`)
+4. Push to branch (`git push origin feature/AmazingFeature`)
+5. Mở Pull Request
+
+## 📄 Giấy phép
+
+Dự án này được cấp phép theo MIT License - xem file [LICENSE](LICENSE) để biết chi tiết.
+
+---
+
+## 🔄 Migration Notes
+
+**Đã di chuyển từ LangChain sang LangGraph** ✅
+
+- **Cải tiến**: Workflow có cấu trúc tốt hơn với quản lý trạng thái
+- **Backwards Compatible**: API endpoints giữ nguyên interface
+- **Better Error Handling**: Cơ chế phục hồi lỗi cải thiện
+- **Enhanced Debugging**: Khả năng quan sát workflow tốt hơn
+
+Xem [LANGGRAPH_REFACTORING.md](docs/LANGGRAPH_REFACTORING.md) để biết chi tiết về quá trình migration.
 
 ### Phase 0: Query Translation and Preparation
 - Translate user queries to English while preserving structure

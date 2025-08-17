@@ -5,7 +5,7 @@ set -e
 echo "Waiting for MySQL to be ready..."
 
 # Wait for MySQL to be ready
-until mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" -p"$DB_PASSWORD" -e "SELECT 1" > /dev/null 2>&1; do
+until mysql -h"$DB_HOST" -P"$DB_PORT" -u"$DB_USER" -p"$DB_PASSWORD" --ssl=false -e "SELECT 1" > /dev/null 2>&1; do
   echo "MySQL is unavailable - sleeping"
   sleep 2
 done

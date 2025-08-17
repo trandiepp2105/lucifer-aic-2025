@@ -107,6 +107,7 @@ services:
       - "8000"
     volumes:
       - ./backend:/backend
+      - ${VIDEOS_PATH}:/media/videos:ro
     environment:
       - DB_NAME=${MYSQL_DATABASE}
       - DB_USER=${MYSQL_USER}

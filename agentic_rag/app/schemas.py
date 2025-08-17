@@ -40,8 +40,9 @@ class GetFrameInput(BaseModel):
 
 class GetVideoInput(BaseModel):
     """Input schema for get_video tool."""
-    start_frame_id: str = Field(description="ID của frame bắt đầu cho đoạn video.")
-    duration_seconds: int = Field(default=5, description="Thời lượng của đoạn video cần trích xuất (tính bằng giây).")
+    video_name: str = Field(description="Tên video (ví dụ: L01_V001)")
+    start_frame: int = Field(description="Frame bắt đầu")
+    end_frame: int = Field(description="Frame kết thúc")
 
 
 class TemporalSearchInput(BaseModel):

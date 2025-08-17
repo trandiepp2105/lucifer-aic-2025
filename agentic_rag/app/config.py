@@ -18,6 +18,7 @@ class Config:
     # External API URLs
     SEARCH_API_URL: str = os.getenv("SEARCH_API_URL", "http://35.194.169.93/search")
     MEDIA_API_URL: str = os.getenv("MEDIA_API_URL", "http://35.194.169.93/media/frames")
+    VIDEO_API_URL: str = os.getenv("VIDEO_API_URL", "http://35.194.169.93")
     
     # Gemini Configuration
     GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-pro-vision")

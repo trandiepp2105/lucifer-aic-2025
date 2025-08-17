@@ -15,6 +15,7 @@ RUN apt-get update \
         gcc \
         pkg-config \
         curl \
+        ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies

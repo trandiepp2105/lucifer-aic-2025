@@ -9,3 +9,8 @@ __pycache__
 *.pyo
 *.pyd
 .Python  
+
+chia_video.py
+move_video.py
+
+.env

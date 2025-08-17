@@ -6,6 +6,7 @@ Contains helper functions for Gemini API calls, image processing, and API reques
 import json
 import logging
 import io
+import os
 import time
 from typing import List, Dict, Any, Optional, Tuple
 import requests
@@ -432,3 +433,185 @@ Trả về kết quả dưới dạng JSON với cấu trúc sau:
 {JSON_OUTPUT_FORMATS["enhanced_grid"]}""")
     
     return "\n".join(prompt_parts)
+
+
+def get_frames_wrapper(frame_urls):
+    """
+    Wrapper function for backward compatibility.
+    """
+    return get_frames_from_urls(frame_urls)
+
+
+def grid_search_legacy(parsed_input) -> str:
+    """Handle legacy single-group grid search format."""
+    from .utils import robust_json_parse
+    import os
+    
+    frame_urls = parsed_input.frame_urls
+    grid_dimensions = parsed_input.grid_dimensions or (2, 2)
+    query = parsed_input.query
+
+    if not frame_urls:
+        return json.dumps({"error": "Tham số 'frame_urls' không thể rỗng."})
+    if not query:
+        return json.dumps({"error": "Tham số 'query' không thể rỗng."})
+
+    # Use existing logic
+    pil_images = get_frames_from_urls(frame_urls)
+    pil_images = [img for img in pil_images if img is not None]
+    if not pil_images:
+        return json.dumps({"error": "Không thể tải bất kỳ frame nào để tạo lưới."})
+
+    # Create grid using helper function
+    grid_image = create_grid_from_images(pil_images, grid_dimensions)
+
+    #delete if exists
+    if os.path.exists("grid_image.png"):
+        os.remove("grid_image.png")
+
+    grid_image.save("grid_image.png")
+
+    # Prepare image data for Gemini
+    image_data = prepare_image_for_gemini(grid_image)
+
+    # Create prompt using helper
+    user_prompt = create_prompt_with_requirements(
+        f'Phân tích lưới ảnh này dựa trên câu hỏi: "{query}"',
+        JSON_OUTPUT_FORMATS["basic_validation"]
+    )
+
+    # Call Gemini with retry logic
+    gemini_result = call_gemini_with_retry(user_prompt, image_data, "grid_search_legacy")
+    
+    if gemini_result["success"] and gemini_result["response_text"]:
+        result = robust_json_parse(gemini_result["response_text"], {
+            "is_match": False,
+            "confidence_score": 0.5,
+            "reasoning": f"Phản hồi từ Gemini không đúng định dạng: {gemini_result['response_text']}",
+            "relevant_frames": []
+        })
+    else:
+        # Provide detailed debug info when response is empty
+        result = {
+            "is_match": False,
+            "confidence_score": 0.0,
+            "reasoning": "Gemini trả về response rỗng. Có thể do: 1) Ảnh quá lớn/phức tạp, 2) Prompt bị chặn bởi safety filter, 3) Lỗi API tạm thời, 4) Nội dung ảnh vi phạm chính sách. Vui lòng kiểm tra logs để biết chi tiết.",
+            "relevant_frames": [],
+            "debug_info": {
+                "image_size_bytes": gemini_result.get("image_size", 0),
+                "prompt_length": len(user_prompt),
+                "image_dimensions": f"{grid_image.width}x{grid_image.height}",
+                "frame_count": len(frame_urls),
+                "error": gemini_result.get("error", "Unknown"),
+                "suggested_solutions": [
+                    "Giảm số lượng frame trong lưới",
+                    "Thử prompt đơn giản hơn",
+                    "Kiểm tra nội dung ảnh có phù hợp không",
+                    "Thử lại sau vài phút"
+                ]
+            }
+        }
+    
+    return json.dumps(result)
+
+
+def grid_search_enhanced(parsed_input) -> str:
+    """Handle enhanced multi-group grid search format."""
+    from .utils import robust_json_parse
+    
+    frame_groups = parsed_input.frame_groups
+    group_queries = parsed_input.group_queries
+    comparison_query = parsed_input.comparison_query
+    layout_mode = parsed_input.layout_mode
+    max_images_per_group = parsed_input.max_images_per_group
+    grid_dims_per_group = parsed_input.grid_dimensions_per_group or (2, 3)
+
+    if not frame_groups:
+        return json.dumps({"error": "Tham số 'frame_groups' không thể rỗng."})
+    
+    if not comparison_query and not group_queries:
+        return json.dumps({"error": "Phải cung cấp 'comparison_query' hoặc 'group_queries'."})
+
+    # Validate group_queries length if provided
+    if group_queries and len(group_queries) != len(frame_groups):
+        return json.dumps({"error": "Số lượng 'group_queries' phải bằng số lượng 'frame_groups'."})
+
+    logger.info(f"Enhanced grid search: {len(frame_groups)} groups, layout_mode={layout_mode}")
+
+    try:
+        # Load all images for all groups
+        all_group_images = []
+        group_info = []
+        
+        for i, frame_urls in enumerate(frame_groups):
+            if not frame_urls:
+                continue
+                
+            # Limit images per group
+            limited_urls = frame_urls[:max_images_per_group]
+            pil_images = get_frames_from_urls(limited_urls)
+            valid_images = [img for img in pil_images if img is not None]
+            
+            if valid_images:
+                all_group_images.append(valid_images)
+                group_info.append({
+                    "group_id": i,
+                    "frame_count": len(valid_images),
+                    "original_urls": limited_urls
+                })
+
+        if not all_group_images:
+            return json.dumps({"error": "Không thể tải bất kỳ frame nào từ tất cả các nhóm."})
+
+        # Create visual layout
+        if layout_mode == "separate":
+            final_image = create_separate_grids(all_group_images, grid_dims_per_group, group_info)
+        else:  # combined
+            final_image = create_combined_grid(all_group_images, group_info)
+
+        # Save the final image
+        final_image.save("grid_image_enhanced.png")
+
+        # Prepare image data for Gemini
+        image_data = prepare_image_for_gemini(final_image)
+
+        # Create comprehensive prompt for Gemini
+        prompt = create_enhanced_prompt(group_info, group_queries, comparison_query, layout_mode)
+
+        # Call Gemini with retry logic
+        gemini_result = call_gemini_with_retry(prompt, image_data, "grid_search_enhanced")
+        
+        if gemini_result["success"] and gemini_result["response_text"]:
+            result = robust_json_parse(gemini_result["response_text"], {
+                "overall_match": False,
+                "confidence_score": 0.0,
+                "reasoning": f"Không thể phân tích phản hồi từ Gemini: {gemini_result['response_text']}",
+                "group_results": []
+            })
+        else:
+            result = {
+                "overall_match": False,
+                "confidence_score": 0.0,
+                "reasoning": "Gemini trả về response rỗng cho enhanced grid search",
+                "group_results": [],
+                "debug_info": {
+                    "image_size": gemini_result.get("image_size", 0),
+                    "prompt_length": len(prompt),
+                    "error": gemini_result.get("error", "Unknown")
+                }
+            }
+        
+        # Add metadata
+        result["metadata"] = {
+            "total_groups": len(frame_groups),
+            "layout_mode": layout_mode,
+            "groups_processed": len(all_group_images),
+            "group_info": group_info
+        }
+        
+        return json.dumps(result)
+
+    except Exception as e:
+        error_msg = f"Error in enhanced grid search: {str(e)}"
+        logger.error(error_msg)
+        return json.dumps({"error": error_msg})

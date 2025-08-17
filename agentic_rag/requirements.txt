@@ -7,6 +7,7 @@ pydantic==2.5.0
 langchain==0.1.0
 langchain-google-genai==0.0.6
 google-generativeai==0.3.2
+langgraph==0.0.26
 
 # HTTP and Media processing
 httpx==0.25.2
