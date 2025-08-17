@@ -1,6 +1,6 @@
 """
 LangGraph-based video retrieval agent.
-This module replaces the LangChain agent with a more structured LangGraph workflow.
+This module implements a structured LangGraph workflow for video retrieval.
 """
 import json
 import logging
@@ -511,7 +511,7 @@ def create_langgraph_workflow() -> CompiledStateGraph:
 
 class LangGraphVideoAgent:
     """
-    LangGraph-based video retrieval agent that replaces the LangChain implementation.
+    LangGraph-based video retrieval agent for intelligent video search.
     """
     
     def __init__(self):

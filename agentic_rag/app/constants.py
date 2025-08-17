@@ -409,7 +409,7 @@ AGENT_MANDATORY_RULES = """5. MANDATORY RULES
 
 🚨 CRITICAL FORMAT REQUIREMENTS:
 - ALWAYS follow the exact Thought/Action/Action Input/Observation format
-- NEVER output JSON directly without proper LangChain format
+- NEVER output JSON directly without proper LangGraph format
 - Every response MUST start with "Thought:" 
 - Final Answer MUST be preceded by "Final Answer:" exactly
 - JSON comes AFTER "Final Answer:" prefix, never before or standalone

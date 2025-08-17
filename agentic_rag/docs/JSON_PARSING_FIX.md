@@ -3,7 +3,7 @@
 ## Issues Fixed
 
 ### 1. JSON Parsing Error in Tools
-**Problem**: The `temporal_frame_search_topk` and other tools were failing with a JSON decoding error when receiving input from LangChain agents. The error occurred because the agent was wrapping JSON action inputs in markdown code fences (```json ... ```), which the JSON parser couldn't handle.
+**Problem**: The `temporal_frame_search_topk` and other tools were failing with a JSON decoding error when receiving input from LangGraph agents. The error occurred because the agent was wrapping JSON action inputs in markdown code fences (```json ... ```), which the JSON parser couldn't handle.
 
 **Error Message**:
 ```
@@ -102,4 +102,4 @@ The frames successfully match the description of Christmas decorations in a Euro
 }
 ```
 
-This comprehensive fix ensures robust JSON parsing and response formatting regardless of how the LangChain agent formats its inputs and outputs.
+This comprehensive fix ensures robust JSON parsing and response formatting regardless of how the LangGraph agent formats its inputs and outputs.

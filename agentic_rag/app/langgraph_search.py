@@ -1,6 +1,6 @@
 """
 LangGraph implementation for video retrieval pipeline.
-Converts the existing LangChain pipeline into a LangGraph workflow with improved
+Implements video retrieval functionality using LangGraph workflow with improved
 retrieval quality, maintainability, and parallel processing capabilities.
 """
 import json
@@ -551,7 +551,7 @@ def create_langgraph_workflow():
 
 class LangGraphVideoAgent:
     """
-    LangGraph-based video retrieval agent that replaces the LangChain implementation.
+    LangGraph-based video retrieval agent for intelligent video search.
     """
     
     def __init__(self):
@@ -1433,7 +1433,7 @@ def rerank_node(state: SearchState) -> SearchState:
 class LangGraphVideoRetrieval:
     """
     LangGraph-based video retrieval system.
-    Replaces the LangChain agent with a structured graph workflow.
+    Implements a structured graph workflow for video search and analysis.
     """
     
     def __init__(self, max_concurrency: int = 8):

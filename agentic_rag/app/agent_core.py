@@ -1,6 +1,6 @@
 """
 Agent core functionality using LangGraph for orchestrating the video retrieval process.
-This module has been refactored to use LangGraph instead of LangChain for better workflow management.
+This module uses LangGraph for structured workflow management and video search.
 """
 import json
 import logging
@@ -79,71 +79,7 @@ class VideoRetrievalAgent:
             return "Please provide a valid JSON response format."
         
         return "Please reformulate your response and try again."
-        logger.warning(f"Parsing error detected: {error_msg}")
         
-        # Kiểm tra nếu error chứa JSON object được output trực tiếp
-        # Global instance for backwards compatibility
-_agent_instance = None
-
-
-def get_agent() -> VideoRetrievalAgent:
-    """
-    Get the global agent instance (singleton pattern).
-    
-    Returns:
-        VideoRetrievalAgent instance
-    """
-    global _agent_instance
-    if _agent_instance is None:
-        _agent_instance = VideoRetrievalAgent()
-    return _agent_instance
-    
-    def _create_system_prompt(self) -> PromptTemplate:
-        """Create the system prompt template for the agent."""
-        # Tạo các scenarios sử dụng workflow components
-        scenarios = {
-            "frame_search_with_fallback": AGENT_SCENARIOS["frame_search_with_fallback"].format(
-                phase_1=AGENT_WORKFLOW_PHASE_1,
-                phase_2=AGENT_WORKFLOW_PHASE_2,
-                fallback_strategies=AGENT_FALLBACK_STRATEGIES,
-                phase_3=AGENT_WORKFLOW_PHASE_3,
-                phase_4=AGENT_WORKFLOW_PHASE_4
-            ),
-            "question_answering": AGENT_SCENARIOS["question_answering"]
-        }
-        
-        # Tổ hợp tất cả components thành template hoàn chỉnh
-        template = f"""{AGENT_CORE_ROLE}
-
-{AGENT_OPERATIONAL_PRINCIPLES}
-
-{AGENT_TEXT_HANDLING}
-
-{AGENT_VALIDATION_STRATEGY}
-
-3. AVAILABLE TOOLS
-You have access to the following tools. Use them strictly according to their described functions.
-
-{{tools}}
-
-4. WORKFLOW AND REASONING STRATEGIES
-
-{AGENT_WORKFLOW_PHASE_0}
-
-{scenarios["frame_search_with_fallback"]}
-
-{scenarios["question_answering"]}
-
-{AGENT_MANDATORY_RULES}
-
-{AGENT_GRID_SEARCH_EXAMPLES}
-
-{AGENT_FORMAT_TEMPLATE}"""
-                        
-        return PromptTemplate(
-            template=template,
-            input_variables=["input", "tools", "tool_names", "agent_scratchpad"]
-        )
     
     def _extract_structured_info_from_text(self, text: str) -> Dict[str, Any]:
         """

@@ -2,7 +2,7 @@ node_modules
 staticfiles
 venv/
 
-media
+# media
 .venv
 __pycache__
 *.pyc
@@ -14,3 +14,9 @@ chia_video.py
 move_video.py
 
 .env
+
+*.mp4
+*.mkv
+*.webm
+*.png
+*.jpg
