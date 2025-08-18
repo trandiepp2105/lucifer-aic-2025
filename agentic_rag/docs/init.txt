@@ -34,21 +34,21 @@ Xây dựng và duy trì các hệ thống cơ sở dữ liệu/API cho việc t
 Fine-tuning mô hình Gemini.
 
 2. Kiến trúc Tổng thể
-Hệ thống tuân thủ kiến trúc Agent-Tool được điều phối bởi LangChain, một framework tiêu chuẩn để xây dựng các ứng dụng dựa trên LLM.
+Hệ thống tuân thủ kiến trúc Agent-Tool được điều phối bởi LangGraph, một framework tiêu chuẩn để xây dựng các ứng dụng dựa trên LLM.
 
 Web API Layer (FastAPI): Lớp giao tiếp ngoài cùng, tiếp nhận các yêu cầu HTTP từ client. Nó chịu trách nhiệm xác thực request, gọi đến lớp Agent và định dạng response trả về.
 
-Agent Orchestration Layer (LangChain): Đây là trái tim của hệ thống.
+Agent Orchestration Layer (LangGraph): Đây là trái tim của hệ thống.
 
 Agent Executor: Vòng lặp chính điều khiển luồng hoạt động. Nó nhận input, gọi đến LLM để quyết định hành động (chọn tool), thực thi tool, nhận kết quả từ tool, và lặp lại cho đến khi hoàn thành nhiệm vụ.
 
-LLM (Gemini): "Bộ não" đưa ra quyết định. LangChain sẽ gửi các prompt chứa lịch sử hội thoại, mô tả các tool có sẵn, và yêu cầu hiện tại đến Gemini để nhận về quyết định chọn tool nào.
+LLM (Gemini): "Bộ não" đưa ra quyết định. LangGraph sẽ gửi các prompt chứa lịch sử hội thoại, mô tả các tool có sẵn, và yêu cầu hiện tại đến Gemini để nhận về quyết định chọn tool nào.
 
 Tooling Layer: Tập hợp các hàm Python độc lập, được "bọc" lại thành các tool cho Agent. Mỗi tool thực hiện một nhiệm vụ nguyên tử và giao tiếp với các dịch vụ bên ngoài.
 
 External Services: Các dịch vụ độc lập mà hệ thống phụ thuộc vào, bao gồm API tìm kiếm, API media và Google Gemini API.
 
-<center>Hình 1: Sơ đồ kiến trúc chi tiết với LangChain làm trung tâm điều phối.</center>
+<center>Hình 1: Sơ đồ kiến trúc chi tiết với LangGraph làm trung tâm điều phối.</center>
 
 graph TD
     subgraph "Client"
@@ -57,7 +57,7 @@ graph TD
 
     subgraph "Hạ tầng Triển khai (Python Application)"
         B(FastAPI Endpoint: POST /find-video)
-        subgraph "Agent Orchestration Layer (LangChain)"
+        subgraph "Agent Orchestration Layer (LangGraph)"
             C{Agent Executor}
             D(LLM: Google Gemini)
         end

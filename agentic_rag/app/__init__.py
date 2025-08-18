@@ -2,7 +2,7 @@
 Agentic RAG Video Retrieval System
 
 A sophisticated agent-based system for video retrieval using natural language descriptions,
-powered by Google Gemini and LangChain.
+powered by Google Gemini and LangGraph.
 """
 
 __version__ = "2.0.0"

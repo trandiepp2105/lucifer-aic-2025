@@ -1,6 +1,6 @@
 """
 Tool implementations for the Agentic RAG system.
-Each tool is a standalone function that can be called by the LangChain agent.
+Each tool is a standalone function that can be called by the LangGraph agent.
 
 Recent refactoring:
 - Moved constants to constants.py
@@ -971,7 +971,7 @@ def valid_frame_query(input_params: str) -> str:
         return json.dumps({"error": error_msg})
 
 
-# Tool descriptions for LangChain
+# Tool descriptions for LangGraph
 TOOL_DESCRIPTIONS = {
     "temporal_frame_search_topk": {
         "name": "temporal_frame_search_topk",

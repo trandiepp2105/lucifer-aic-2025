@@ -24,8 +24,8 @@ Hệ thống Agent Monitoring cung cấp giao diện trực quan để theo dõi
            │                          │                          │
            ▼                          ▼                          ▼
 ┌─────────────────────┐    ┌─────────────────────┐    ┌─────────────────────┐
-│   Callback Handler  │    │   Session Storage   │    │   Frame Viewer      │
-│   (callbacks.py)    │    │   (temp files)      │    │   (frame_viewer.py) │
+│   LangGraph State   │    │   Session Storage   │    │   Frame Viewer      │
+│   Management        │    │   (temp files)      │    │   (frame_viewer.py) │
 └─────────────────────┘    └─────────────────────┘    └─────────────────────┘
 ```
 
@@ -90,9 +90,9 @@ monitor.end_session(
 - **AgentStep**: Individual reasoning step
 - **Tools Info**: Metadata về các tools
 
-### 2. Callback Handler (`app/callbacks.py`)
+### 2. LangGraph State Management
 
-Automatically captures agent reasoning steps:
+LangGraph automatically manages workflow state and execution tracking:
 ```python
 # Automatically integrated in agent_core.py
 self.agent_executor = AgentExecutor(
@@ -337,5 +337,5 @@ python -m app.main   # API on :8000
 ### Key Files
 - `app/monitoring.py` - Core monitoring system
 - `streamlit_monitoring.py` - Dashboard interface  
-- `app/callbacks.py` - Agent integration
+- `app/langgraph_agent.py` - LangGraph workflow integration
 - `app/frame_viewer.py` - Frame visualization

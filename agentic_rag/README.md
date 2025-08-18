@@ -795,12 +795,12 @@ Một hệ thống agent thông minh sử dụng Google Gemini để tự độn
 
 ## 🏗️ Kiến trúc
 
-Hệ thống sử dụng kiến trúc Agent-Tool được điều phối bởi LangChain:
+Hệ thống sử dụng kiến trúc Agent-Tool được điều phối bởi LangGraph:
 
 ```mermaid
 graph TB
     A[Client Request] --> B[FastAPI Layer]
-    B --> C[Agent Core LangChain]
+    B --> C[Agent Core LangGraph]
     C --> D[Tool Layer]
     
     D --> E[temporal_frame_search_topk]
@@ -818,7 +818,7 @@ graph TB
 
 ### Các thành phần chính
 
-- **Agent Core**: Bộ não suy luận được hỗ trợ bởi LangChain với chiến lược tìm kiếm đa tầng
+- **Agent Core**: Bộ não suy luận được hỗ trợ bởi LangGraph với chiến lược tìm kiếm đa tầng
 - **Tool Layer**: Các công cụ chuyên biệt cho tìm kiếm, xác thực và phân tích frame
 - **Monitoring System**: Theo dõi thời gian thực các quyết định và hiệu suất của agent
 - **API Layer**: Các endpoint RESTful để tích hợp và kiểm thử
@@ -986,12 +986,11 @@ agentic_rag/
 ├── app/                          # Package ứng dụng chính
 │   ├── __init__.py              # Khởi tạo package
 │   ├── main.py              # Ứng dụng FastAPI
-│   ├── agent_core.py        # Triển khai LangChain agent
+│   ├── agent_core.py        # Triển khai LangGraph agent
 │   ├── tools.py             # Công cụ agent (tìm kiếm, xác thực)
 │   ├── schemas.py           # Mô hình và schema Pydantic
 │   ├── config.py            # Quản lý cấu hình
 │   ├── monitoring.py        # Hệ thống giám sát agent
-│   ├── callbacks.py         # LangChain callbacks
 │   ├── frame_viewer.py      # Tiện ích hiển thị frame
 │   └── utils.py             # Các tiện ích hỗ trợ
 ├── tests/                       # Bộ test
