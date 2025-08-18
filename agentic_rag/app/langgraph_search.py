@@ -1,15 +1,12 @@
 """
-LangGraph implementation for video retrieval pipeline.
-Implements video retrieval functionality using LangGraph workflow with improved
-retrieval quality, maintainability, and parallel processing capabilities.
+Simplified video retrieval pipeline.
+Implements streamlined video search with validation and retry logic.
 """
-import json
 import logging
-import asyncio
+import re
 from typing import List, Dict, Any, TypedDict, Union, Optional
 from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import re
 
 try:
     from langgraph.graph import StateGraph, START, END
@@ -24,8 +21,8 @@ except ImportError:
     START = "START"
     END = "END"
 
-from .tools import temporal_frame_search_topk, grid_search, valid_video_query, get_video
-from .schemas import TemporalSearchInput, GridSearchInput, ValidVideoQueryInput, GetVideoInput
+from .tools import temporal_frame_search_topk, valid_video_query, get_video
+from .schemas import TemporalSearchInput, ValidVideoQueryInput, GetVideoInput
 from .utils import robust_json_parse, strip_markdown_code_fences
 from .config import config
 
@@ -35,619 +32,20 @@ logger = logging.getLogger(__name__)
 
 
 class SearchState(TypedDict):
-    """State definition for the LangGraph search workflow."""
+    """State definition for the simplified video search workflow."""
     query: str
     descriptions: List[str]  # Original user descriptions
     preprocessed_query: str
     search_modes: List[str]  # e.g., ["text", "ocr", "image"]
-    temporal_results: Dict[str, Any]
-    grid_results: Dict[str, Any]
-    validation_results: Dict[str, Any]
-    video_clips: List[Dict[str, Any]]
-    final_frames: List[str]
-    confidence_score: float
-    reasoning: str
+    current_attempt: int
+    max_attempts: int
+    hits: List['ClipHit']
+    verified_clips: List['ClipHit']
+    final_results: List[Dict[str, Any]]
+    user_feedback: Optional[str]
     success: bool
-    error_type: Optional[str]
     error_message: Optional[str]
     intermediate_results: Dict[str, Any]
-
-
-def preprocess_query_node(state: SearchState) -> SearchState:
-    """
-    Node: Preprocess the input query to improve search quality.
-    
-    Args:
-        state: Current workflow state
-        
-    Returns:
-        Updated state with preprocessed query
-    """
-    try:
-        descriptions = state.get("descriptions", [])
-        if not descriptions:
-            return {
-                **state,
-                "success": False,
-                "error_type": "validation_error",
-                "error_message": "No descriptions provided"
-            }
-        
-        # Combine descriptions into a single query
-        combined_query = " ".join(descriptions)
-        logger.info(f"Preprocessing query: {combined_query[:100]}...")
-        
-        # Basic preprocessing
-        processed = combined_query.strip()
-        processed = " ".join(processed.split())
-        
-        # Detect search modes based on content
-        search_modes = ["text"]  # Default to text search
-        if any(keyword in processed.lower() for keyword in ["text", "writing", "words"]):
-            search_modes.append("ocr")
-        
-        logger.info(f"Preprocessed query: {processed[:100]}...")
-        
-        return {
-            **state,
-            "query": combined_query,
-            "preprocessed_query": processed,
-            "search_modes": search_modes,
-            "intermediate_results": {"preprocessing": {"original_length": len(combined_query), "processed_length": len(processed)}}
-        }
-        
-    except Exception as e:
-        logger.error(f"Error in preprocess_query_node: {str(e)}")
-        return {
-            **state,
-            "success": False,
-            "error_type": "preprocessing_error", 
-            "error_message": f"Query preprocessing failed: {str(e)}"
-        }
-
-
-def temporal_search_node(state: SearchState) -> SearchState:
-    """
-    Node: Perform temporal frame search to find relevant sequences.
-    
-    Args:
-        state: Current workflow state
-        
-    Returns:
-        Updated state with temporal search results
-    """
-    try:
-        preprocessed_query = state.get("preprocessed_query", "")
-        if not preprocessed_query:
-            return {
-                **state,
-                "success": False,
-                "error_type": "temporal_search_error",
-                "error_message": "No preprocessed query available"
-            }
-        
-        logger.info("Performing temporal frame search...")
-        
-        # Prepare temporal search input
-        query_sequence = [{"text": preprocessed_query}]
-        search_input = TemporalSearchInput(
-            query_sequence=query_sequence,
-            k=10,
-            weights={"text": 1.0, "ocr": 0.8}
-        )
-        
-        # Call temporal search tool
-        search_result = temporal_frame_search_topk(search_input.model_dump_json())
-        result_data = robust_json_parse(search_result)
-        
-        if "error" in result_data:
-            return {
-                **state,
-                "success": False,
-                "error_type": "temporal_search_error",
-                "error_message": result_data["error"]
-            }
-        
-        logger.info(f"Temporal search found {len(result_data.get('results', []))} sequences")
-        
-        return {
-            **state,
-            "temporal_results": result_data,
-            "intermediate_results": {
-                **state.get("intermediate_results", {}),
-                "temporal_search": {"sequences_found": len(result_data.get("results", []))}
-            }
-        }
-        
-    except Exception as e:
-        logger.error(f"Error in temporal_search_node: {str(e)}")
-        return {
-            **state,
-            "success": False,
-            "error_type": "temporal_search_error",
-            "error_message": f"Temporal search failed: {str(e)}"
-        }
-
-
-def grid_search_node(state: SearchState) -> SearchState:
-    """
-    Node: Perform grid search to rank and filter candidate frames.
-    
-    Args:
-        state: Current workflow state
-        
-    Returns:
-        Updated state with grid search results
-    """
-    try:
-        temporal_results = state.get("temporal_results", {})
-        if not temporal_results or "results" not in temporal_results:
-            return {
-                **state,
-                "success": False,
-                "error_type": "grid_search_error",
-                "error_message": "No temporal search results available"
-            }
-        
-        logger.info("Performing grid search for candidate ranking...")
-        
-        # Extract frame URLs from temporal results
-        frame_urls = []
-        for result in temporal_results["results"][:5]:  # Top 5 sequences
-            frames = result.get("frames", [])
-            frame_urls.extend(frames)
-        
-        if not frame_urls:
-            return {
-                **state,
-                "success": False,
-                "error_type": "grid_search_error",
-                "error_message": "No frames found in temporal results"
-            }
-        
-        # Prepare grid search input
-        query = f"Find the best 3-5 frame candidates matching: {state.get('preprocessed_query', '')}"
-        grid_input = GridSearchInput(
-            frame_urls=frame_urls[:20],  # Limit to avoid too many frames
-            query=query
-        )
-        
-        # Call grid search tool
-        grid_result = grid_search(grid_input.model_dump_json())
-        result_data = robust_json_parse(grid_result)
-        
-        if "error" in result_data:
-            return {
-                **state,
-                "success": False,
-                "error_type": "grid_search_error",
-                "error_message": result_data["error"]
-            }
-        
-        logger.info("Grid search completed successfully")
-        
-        return {
-            **state,
-            "grid_results": result_data,
-            "intermediate_results": {
-                **state.get("intermediate_results", {}),
-                "grid_search": {"frames_analyzed": len(frame_urls)}
-            }
-        }
-        
-    except Exception as e:
-        logger.error(f"Error in grid_search_node: {str(e)}")
-        return {
-            **state,
-            "success": False,
-            "error_type": "grid_search_error",
-            "error_message": f"Grid search failed: {str(e)}"
-        }
-
-
-def validation_node(state: SearchState) -> SearchState:
-    """
-    Node: Validate the best candidates using video validation.
-    
-    Args:
-        state: Current workflow state
-        
-    Returns:
-        Updated state with validation results
-    """
-    try:
-        grid_results = state.get("grid_results", {})
-        if not grid_results:
-            return {
-                **state,
-                "success": False,
-                "error_type": "validation_error",
-                "error_message": "No grid search results available for validation"
-            }
-        
-        logger.info("Performing video validation...")
-        
-        # Extract the best frame range for video generation
-        recommended_frames = grid_results.get("recommended_frames", [])
-        if not recommended_frames:
-            return {
-                **state,
-                "success": False,
-                "error_type": "validation_error",
-                "error_message": "No recommended frames from grid search"
-            }
-        
-        # Take the first recommended frame range
-        first_frame = recommended_frames[0]
-        
-        # Extract video name and frame numbers from frame URL
-        # Assuming frame URL format: /path/to/video_name/frame_XXXXXX.jpg
-        frame_pattern = r'([^/]+)/frame_(\d+)\.jpg'
-        match = re.search(frame_pattern, first_frame)
-        
-        if not match:
-            return {
-                **state,
-                "success": False,
-                "error_type": "validation_error",
-                "error_message": "Could not extract video info from frame URL"
-            }
-        
-        video_name = match.group(1)
-        start_frame = int(match.group(2))
-        end_frame = start_frame + 30  # Generate ~1 second clip (assuming 30fps)
-        
-        # Generate video clip
-        video_input = GetVideoInput(
-            video_name=video_name,
-            start_frame=start_frame,
-            end_frame=end_frame
-        )
-        
-        video_result = get_video(video_input.model_dump_json())
-        video_data = robust_json_parse(video_result)
-        
-        if "error" in video_data:
-            return {
-                **state,
-                "success": False,
-                "error_type": "validation_error",
-                "error_message": video_data["error"]
-            }
-        
-        clip_url = video_data.get("clip_url", "")
-        
-        # Validate the video clip
-        validation_input = ValidVideoQueryInput(
-            video_clip_url=clip_url,
-            query_sequence=[{"text": state.get("preprocessed_query", "")}],
-            question=f"Does this video clip match the description: {state.get('preprocessed_query', '')}?"
-        )
-        
-        validation_result = valid_video_query(validation_input.model_dump_json())
-        validation_data = robust_json_parse(validation_result)
-        
-        if "error" in validation_data:
-            return {
-                **state,
-                "success": False,
-                "error_type": "validation_error",
-                "error_message": validation_data["error"]
-            }
-        
-        logger.info("Video validation completed successfully")
-        
-        return {
-            **state,
-            "validation_results": validation_data,
-            "video_clips": [video_data],
-            "intermediate_results": {
-                **state.get("intermediate_results", {}),
-                "validation": {
-                    "clip_generated": clip_url,
-                    "validation_score": validation_data.get("confidence_score", 0)
-                }
-            }
-        }
-        
-    except Exception as e:
-        logger.error(f"Error in validation_node: {str(e)}")
-        return {
-            **state,
-            "success": False,
-            "error_type": "validation_error",
-            "error_message": f"Validation failed: {str(e)}"
-        }
-
-
-def response_synthesis_node(state: SearchState) -> SearchState:
-    """
-    Node: Synthesize the final response with results and reasoning.
-    
-    Args:
-        state: Current workflow state
-        
-    Returns:
-        Updated state with final response
-    """
-    try:
-        validation_results = state.get("validation_results", {})
-        grid_results = state.get("grid_results", {})
-        
-        if not validation_results:
-            return {
-                **state,
-                "success": False,
-                "error_type": "synthesis_error",
-                "error_message": "No validation results available for synthesis"
-            }
-        
-        logger.info("Synthesizing final response...")
-        
-        # Extract final results
-        is_match = validation_results.get("is_match", False)
-        confidence_score = validation_results.get("confidence_score", 0.0)
-        validation_reasoning = validation_results.get("reasoning", "")
-        
-        # Get recommended frames from grid search
-        recommended_frames = grid_results.get("recommended_frames", [])
-        
-        # Build reasoning
-        reasoning_parts = []
-        if grid_results.get("grid_analysis"):
-            reasoning_parts.append(f"Grid Analysis: {grid_results['grid_analysis']}")
-        if validation_reasoning:
-            reasoning_parts.append(f"Validation: {validation_reasoning}")
-        
-        final_reasoning = " | ".join(reasoning_parts) if reasoning_parts else "Analysis completed successfully"
-        
-        if is_match and confidence_score >= 0.5:
-            return {
-                **state,
-                "success": True,
-                "final_frames": recommended_frames[:5],  # Return top 5 frames
-                "confidence_score": confidence_score,
-                "reasoning": final_reasoning,
-                "error_type": None,
-                "error_message": None
-            }
-        else:
-            return {
-                **state,
-                "success": False,
-                "error_type": "no_match",
-                "error_message": f"No suitable video found. Confidence: {confidence_score:.2f}",
-                "final_frames": [],
-                "confidence_score": confidence_score,
-                "reasoning": final_reasoning
-            }
-        
-    except Exception as e:
-        logger.error(f"Error in response_synthesis_node: {str(e)}")
-        return {
-            **state,
-            "success": False,
-            "error_type": "synthesis_error",
-            "error_message": f"Response synthesis failed: {str(e)}"
-        }
-
-
-def should_continue_to_grid_search(state: SearchState) -> str:
-    """Conditional edge: Determine if temporal search was successful enough to continue."""
-    temporal_results = state.get("temporal_results", {})
-    if temporal_results and "results" in temporal_results and len(temporal_results["results"]) > 0:
-        return "grid_search"
-    else:
-        return "end_error"
-
-
-def should_continue_to_validation(state: SearchState) -> str:
-    """Conditional edge: Determine if grid search was successful enough to continue."""
-    grid_results = state.get("grid_results", {})
-    if grid_results and grid_results.get("recommended_frames"):
-        return "validation"
-    else:
-        return "end_error"
-
-
-def should_continue_to_synthesis(state: SearchState) -> str:
-    """Conditional edge: Determine if validation was completed."""
-    validation_results = state.get("validation_results", {})
-    if validation_results:
-        return "synthesis"
-    else:
-        return "end_error"
-
-
-def error_handler_node(state: SearchState) -> SearchState:
-    """
-    Node: Handle errors and provide fallback responses.
-    
-    Args:
-        state: Current workflow state with error information
-        
-    Returns:
-        Updated state with error handling
-    """
-    error_type = state.get("error_type", "unknown")
-    error_message = state.get("error_message", "Unknown error occurred")
-    
-    logger.error(f"Error handler activated: {error_type} - {error_message}")
-    
-    return {
-        **state,
-        "success": False,
-        "final_frames": [],
-        "confidence_score": 0.0,
-        "reasoning": f"Error occurred during processing: {error_message}"
-    }
-
-
-def create_langgraph_workflow():
-    """
-    Create and compile the LangGraph workflow for video retrieval.
-    
-    Returns:
-        Compiled LangGraph workflow ready for execution
-    """
-    if not LANGGRAPH_AVAILABLE:
-        raise ImportError("LangGraph is not available. Please install with: pip install langgraph")
-    
-    # Create the workflow graph
-    workflow = StateGraph(SearchState)
-    
-    # Add nodes
-    workflow.add_node("preprocess", preprocess_query_node)
-    workflow.add_node("temporal_search", temporal_search_node)
-    workflow.add_node("grid_search", grid_search_node)
-    workflow.add_node("validation", validation_node)
-    workflow.add_node("synthesis", response_synthesis_node)
-    workflow.add_node("error_handler", error_handler_node)
-    
-    # Set entry point
-    workflow.set_entry_point("preprocess")
-    
-    # Add edges
-    workflow.add_edge("preprocess", "temporal_search")
-    
-    # Add conditional edges
-    workflow.add_conditional_edges(
-        "temporal_search",
-        should_continue_to_grid_search,
-        {
-            "grid_search": "grid_search",
-            "end_error": "error_handler"
-        }
-    )
-    
-    workflow.add_conditional_edges(
-        "grid_search", 
-        should_continue_to_validation,
-        {
-            "validation": "validation",
-            "end_error": "error_handler"
-        }
-    )
-    
-    workflow.add_conditional_edges(
-        "validation",
-        should_continue_to_synthesis,
-        {
-            "synthesis": "synthesis",
-            "end_error": "error_handler"
-        }
-    )
-    
-    # Add finish edges
-    workflow.add_edge("synthesis", END)
-    workflow.add_edge("error_handler", END)
-    
-    # Compile the workflow
-    compiled_workflow = workflow.compile()
-    
-    logger.info("LangGraph workflow compiled successfully")
-    return compiled_workflow
-
-
-class LangGraphVideoAgent:
-    """
-    LangGraph-based video retrieval agent for intelligent video search.
-    """
-    
-    def __init__(self):
-        """Initialize the LangGraph agent."""
-        self.workflow = None
-        self._setup_workflow()
-    
-    def _setup_workflow(self):
-        """Setup the LangGraph workflow."""
-        try:
-            self.workflow = create_langgraph_workflow()
-            logger.info("LangGraph video agent initialized successfully")
-        except Exception as e:
-            logger.error(f"Error setting up LangGraph workflow: {str(e)}")
-            raise
-    
-    def find_video(self, descriptions: List[str]) -> Dict[str, Any]:
-        """
-        Find video clips matching the given descriptions.
-        
-        Args:
-            descriptions: List of natural language descriptions
-            
-        Returns:
-            Dictionary with search results matching the existing API format
-        """
-        try:
-            # Prepare initial state
-            initial_state = SearchState(
-                query="",
-                descriptions=descriptions,
-                preprocessed_query="",
-                search_modes=[],
-                temporal_results={},
-                grid_results={},
-                validation_results={},
-                video_clips=[],
-                final_frames=[],
-                confidence_score=0.0,
-                reasoning="",
-                success=False,
-                error_type=None,
-                error_message=None,
-                intermediate_results={}
-            )
-            
-            # Execute the workflow
-            logger.info(f"Starting LangGraph workflow for descriptions: {descriptions}")
-            
-            result = self.workflow.invoke(initial_state)
-            
-            # Format response to match existing API
-            if result.get("success"):
-                return {
-                    "success": True,
-                    "frames": result.get("final_frames", []),
-                    "confidence_score": result.get("confidence_score", 0.0),
-                    "reasoning": result.get("reasoning", ""),
-                    "intermediate_results": result.get("intermediate_results", {})
-                }
-            else:
-                return {
-                    "success": False,
-                    "error_type": result.get("error_type", "unknown"),
-                    "error_message": result.get("error_message", "Unknown error"),
-                    "frames": [],
-                    "confidence_score": result.get("confidence_score", 0.0),
-                    "reasoning": result.get("reasoning", "")
-                }
-                
-        except Exception as e:
-            logger.error(f"Error in LangGraph workflow execution: {str(e)}")
-            return {
-                "success": False,
-                "error_type": "workflow_error",
-                "error_message": f"Workflow execution failed: {str(e)}",
-                "frames": [],
-                "confidence_score": 0.0,
-                "reasoning": f"Workflow error: {str(e)}"
-            }
-
-
-# Global instance for backwards compatibility
-_langgraph_agent_instance = None
-
-def get_langgraph_agent() -> LangGraphVideoAgent:
-    """
-    Get the global LangGraph agent instance.
-    
-    Returns:
-        LangGraphVideoAgent instance
-    """
-    global _langgraph_agent_instance
-    if _langgraph_agent_instance is None:
-        _langgraph_agent_instance = LangGraphVideoAgent()
-    return _langgraph_agent_instance
 
 
 @dataclass
@@ -669,34 +67,9 @@ class ClipHit:
             self.metadata = {}
 
 
-class SearchState(TypedDict):
-    """State definition for the LangGraph search workflow."""
-    query: str
-    descriptions: List[str]  # Original user descriptions
-    preprocessed_query: str
-    search_modes: List[str]  # e.g., ["text", "ocr", "image"]
-    temporal_results: Dict[str, Any]
-    grid_results: Dict[str, Any]
-    validation_results: Dict[str, Any]
-    video_clips: List[Dict[str, Any]]
-    final_frames: List[str]
-    confidence_score: float
-    reasoning: str
-    success: bool
-    error_type: Optional[str]
-    error_message: Optional[str]
-    intermediate_results: Dict[str, Any]
-
-
 def preprocess_query_node(state: SearchState) -> SearchState:
     """
     Node: Preprocess the input query to improve search quality.
-    
-    Args:
-        state: Current workflow state
-        
-    Returns:
-        Updated state with preprocessed query
     """
     try:
         descriptions = state.get("descriptions", [])
@@ -704,7 +77,6 @@ def preprocess_query_node(state: SearchState) -> SearchState:
             return {
                 **state,
                 "success": False,
-                "error_type": "validation_error",
                 "error_message": "No descriptions provided"
             }
         
@@ -728,6 +100,8 @@ def preprocess_query_node(state: SearchState) -> SearchState:
             "query": combined_query,
             "preprocessed_query": processed,
             "search_modes": search_modes,
+            "current_attempt": state.get("current_attempt", 1),
+            "max_attempts": state.get("max_attempts", 3),
             "intermediate_results": {"preprocessing": {"original_length": len(combined_query), "processed_length": len(processed)}}
         }
         
@@ -736,20 +110,13 @@ def preprocess_query_node(state: SearchState) -> SearchState:
         return {
             **state,
             "success": False,
-            "error_type": "preprocessing_error", 
             "error_message": f"Query preprocessing failed: {str(e)}"
         }
 
 
-def temporal_search_node(state: SearchState) -> SearchState:
+def search_node(state: SearchState) -> SearchState:
     """
-    Node: Perform temporal frame search to find relevant sequences.
-    
-    Args:
-        state: Current workflow state
-        
-    Returns:
-        Updated state with temporal search results
+    Node: Perform temporal search to find video candidates.
     """
     try:
         preprocessed_query = state.get("preprocessed_query", "")
@@ -757,17 +124,16 @@ def temporal_search_node(state: SearchState) -> SearchState:
             return {
                 **state,
                 "success": False,
-                "error_type": "temporal_search_error",
                 "error_message": "No preprocessed query available"
             }
         
-        logger.info("Performing temporal frame search...")
+        logger.info(f"Performing search attempt {state.get('current_attempt', 1)}...")
         
         # Prepare temporal search input
         query_sequence = [{"text": preprocessed_query}]
         search_input = TemporalSearchInput(
             query_sequence=query_sequence,
-            k=10,
+            k=15,  # Get more candidates for validation
             weights={"text": 1.0, "ocr": 0.8}
         )
         
@@ -779,393 +145,8 @@ def temporal_search_node(state: SearchState) -> SearchState:
             return {
                 **state,
                 "success": False,
-                "error_type": "temporal_search_error",
                 "error_message": result_data["error"]
             }
-        
-        logger.info(f"Temporal search found {len(result_data.get('results', []))} sequences")
-        
-        return {
-            **state,
-            "temporal_results": result_data,
-            "intermediate_results": {
-                **state.get("intermediate_results", {}),
-                "temporal_search": {"sequences_found": len(result_data.get("results", []))}
-            }
-        }
-        
-    except Exception as e:
-        logger.error(f"Error in temporal_search_node: {str(e)}")
-        return {
-            **state,
-            "success": False,
-            "error_type": "temporal_search_error",
-            "error_message": f"Temporal search failed: {str(e)}"
-        }
-
-
-def grid_search_node(state: SearchState) -> SearchState:
-    """
-    Node: Perform grid search to rank and filter candidate frames.
-    
-    Args:
-        state: Current workflow state
-        
-    Returns:
-        Updated state with grid search results
-    """
-    try:
-        temporal_results = state.get("temporal_results", {})
-        if not temporal_results or "results" not in temporal_results:
-            return {
-                **state,
-                "success": False,
-                "error_type": "grid_search_error",
-                "error_message": "No temporal search results available"
-            }
-        
-        logger.info("Performing grid search for candidate ranking...")
-        
-        # Extract frame URLs from temporal results
-        frame_urls = []
-        for result in temporal_results["results"][:5]:  # Top 5 sequences
-            frames = result.get("frames", [])
-            frame_urls.extend(frames)
-        
-        if not frame_urls:
-            return {
-                **state,
-                "success": False,
-                "error_type": "grid_search_error",
-                "error_message": "No frames found in temporal results"
-            }
-        
-        # Prepare grid search input
-        query = f"Find the best 3-5 frame candidates matching: {state.get('preprocessed_query', '')}"
-        grid_input = GridSearchInput(
-            frame_urls=frame_urls[:20],  # Limit to avoid too many frames
-            query=query
-        )
-        
-        # Call grid search tool
-        grid_result = grid_search(grid_input.model_dump_json())
-        result_data = robust_json_parse(grid_result)
-        
-        if "error" in result_data:
-            return {
-                **state,
-                "success": False,
-                "error_type": "grid_search_error",
-                "error_message": result_data["error"]
-            }
-        
-        logger.info("Grid search completed successfully")
-        
-        return {
-            **state,
-            "grid_results": result_data,
-            "intermediate_results": {
-                **state.get("intermediate_results", {}),
-                "grid_search": {"frames_analyzed": len(frame_urls)}
-            }
-        }
-        
-    except Exception as e:
-        logger.error(f"Error in grid_search_node: {str(e)}")
-        return {
-            **state,
-            "success": False,
-            "error_type": "grid_search_error",
-            "error_message": f"Grid search failed: {str(e)}"
-        }
-
-
-def validation_node(state: SearchState) -> SearchState:
-    """
-    Node: Validate the best candidates using video validation.
-    
-    Args:
-        state: Current workflow state
-        
-    Returns:
-        Updated state with validation results
-    """
-    try:
-        grid_results = state.get("grid_results", {})
-        if not grid_results:
-            return {
-                **state,
-                "success": False,
-                "error_type": "validation_error",
-                "error_message": "No grid search results available for validation"
-            }
-        
-        logger.info("Performing video validation...")
-        
-        # Extract the best frame range for video generation
-        recommended_frames = grid_results.get("recommended_frames", [])
-        if not recommended_frames:
-            return {
-                **state,
-                "success": False,
-                "error_type": "validation_error",
-                "error_message": "No recommended frames from grid search"
-            }
-        
-        # Take the first recommended frame range
-        first_frame = recommended_frames[0]
-        
-        # Extract video name and frame numbers from frame URL
-        # Assuming frame URL format: /path/to/video_name/frame_XXXXXX.jpg
-        import re
-        frame_pattern = r'([^/]+)/frame_(\d+)\.jpg'
-        match = re.search(frame_pattern, first_frame)
-        
-        if not match:
-            return {
-                **state,
-                "success": False,
-                "error_type": "validation_error",
-                "error_message": "Could not extract video info from frame URL"
-            }
-        
-        video_name = match.group(1)
-        start_frame = int(match.group(2))
-        end_frame = start_frame + 30  # Generate ~1 second clip (assuming 30fps)
-        
-        # Generate video clip
-        video_input = GetVideoInput(
-            video_name=video_name,
-            start_frame=start_frame,
-            end_frame=end_frame
-        )
-        
-        video_result = get_video(video_input.model_dump_json())
-        video_data = robust_json_parse(video_result)
-        
-        if "error" in video_data:
-            return {
-                **state,
-                "success": False,
-                "error_type": "validation_error",
-                "error_message": video_data["error"]
-            }
-        
-        clip_url = video_data.get("clip_url", "")
-        
-        # Validate the video clip
-        validation_input = ValidVideoQueryInput(
-            video_clip_url=clip_url,
-            query_sequence=[{"text": state.get("preprocessed_query", "")}],
-            question=f"Does this video clip match the description: {state.get('preprocessed_query', '')}?"
-        )
-        
-        validation_result = valid_video_query(validation_input.model_dump_json())
-        validation_data = robust_json_parse(validation_result)
-        
-        if "error" in validation_data:
-            return {
-                **state,
-                "success": False,
-                "error_type": "validation_error",
-                "error_message": validation_data["error"]
-            }
-        
-        logger.info("Video validation completed successfully")
-        
-        return {
-            **state,
-            "validation_results": validation_data,
-            "video_clips": [video_data],
-            "intermediate_results": {
-                **state.get("intermediate_results", {}),
-                "validation": {
-                    "clip_generated": clip_url,
-                    "validation_score": validation_data.get("confidence_score", 0)
-                }
-            }
-        }
-        
-    except Exception as e:
-        logger.error(f"Error in validation_node: {str(e)}")
-        return {
-            **state,
-            "success": False,
-            "error_type": "validation_error",
-            "error_message": f"Validation failed: {str(e)}"
-        }
-
-
-def response_synthesis_node(state: SearchState) -> SearchState:
-    """
-    Node: Synthesize the final response with results and reasoning.
-    
-    Args:
-        state: Current workflow state
-        
-    Returns:
-        Updated state with final response
-    """
-    try:
-        validation_results = state.get("validation_results", {})
-        grid_results = state.get("grid_results", {})
-        
-        if not validation_results:
-            return {
-                **state,
-                "success": False,
-                "error_type": "synthesis_error",
-                "error_message": "No validation results available for synthesis"
-            }
-        
-        logger.info("Synthesizing final response...")
-        
-        # Extract final results
-        is_match = validation_results.get("is_match", False)
-        confidence_score = validation_results.get("confidence_score", 0.0)
-        validation_reasoning = validation_results.get("reasoning", "")
-        
-        # Get recommended frames from grid search
-        recommended_frames = grid_results.get("recommended_frames", [])
-        
-        # Build reasoning
-        reasoning_parts = []
-        if grid_results.get("grid_analysis"):
-            reasoning_parts.append(f"Grid Analysis: {grid_results['grid_analysis']}")
-        if validation_reasoning:
-            reasoning_parts.append(f"Validation: {validation_reasoning}")
-        
-        final_reasoning = " | ".join(reasoning_parts) if reasoning_parts else "Analysis completed successfully"
-        
-        if is_match and confidence_score >= 0.5:
-            return {
-                **state,
-                "success": True,
-                "final_frames": recommended_frames[:5],  # Return top 5 frames
-                "confidence_score": confidence_score,
-                "reasoning": final_reasoning,
-                "error_type": None,
-                "error_message": None
-            }
-        else:
-            return {
-                **state,
-                "success": False,
-                "error_type": "no_match",
-                "error_message": f"No suitable video found. Confidence: {confidence_score:.2f}",
-                "final_frames": [],
-                "confidence_score": confidence_score,
-                "reasoning": final_reasoning
-            }
-        
-    except Exception as e:
-        logger.error(f"Error in response_synthesis_node: {str(e)}")
-        return {
-            **state,
-            "success": False,
-            "error_type": "synthesis_error",
-            "error_message": f"Response synthesis failed: {str(e)}"
-        }
-
-
-def should_continue_to_grid_search(state: SearchState) -> str:
-    """Conditional edge: Determine if temporal search was successful enough to continue."""
-    temporal_results = state.get("temporal_results", {})
-    if temporal_results and "results" in temporal_results and len(temporal_results["results"]) > 0:
-        return "grid_search"
-    else:
-        return "end_error"
-
-
-def should_continue_to_validation(state: SearchState) -> str:
-    """Conditional edge: Determine if grid search was successful enough to continue."""
-    grid_results = state.get("grid_results", {})
-    if grid_results and grid_results.get("recommended_frames"):
-        return "validation"
-    else:
-        return "end_error"
-
-
-def should_continue_to_synthesis(state: SearchState) -> str:
-    """Conditional edge: Determine if validation was completed."""
-    validation_results = state.get("validation_results", {})
-    if validation_results:
-        return "synthesis"
-    else:
-        return "end_error"
-
-
-def error_handler_node(state: SearchState) -> SearchState:
-    """
-    Node: Handle errors and provide fallback responses.
-    
-    Args:
-        state: Current workflow state with error information
-        
-    Returns:
-        Updated state with error handling
-    """
-    error_type = state.get("error_type", "unknown")
-    error_message = state.get("error_message", "Unknown error occurred")
-    
-    logger.error(f"Error handler activated: {error_type} - {error_message}")
-    
-    return {
-        **state,
-        "success": False,
-        "final_frames": [],
-        "confidence_score": 0.0,
-        "reasoning": f"Error occurred during processing: {error_message}"
-    }
-
-
-def embed_search_api(query: str, modes: List[str], k: int = 10) -> List[ClipHit]:
-    """
-    Search for clips using temporal API with specified modes.
-    
-    Args:
-        query: Search query string
-        modes: List of search modes (text, ocr, image)
-        k: Number of results to return
-        
-    Returns:
-        List of ClipHit objects representing search results
-    """
-    logger.info(f"Embed search with modes {modes} for query: {query[:100]}...")
-    
-    try:
-        # Convert the query into a temporal search format
-        # For simplicity, we'll create a single stage query
-        query_sequence = []
-        
-        for mode in modes:
-            stage = {}
-            if mode == "text":
-                stage["text"] = query
-            elif mode == "ocr":
-                stage["ocr"] = query
-            # For image mode, we'd need image data - skip for now
-            
-            if stage:
-                query_sequence.append(stage)
-        
-        if not query_sequence:
-            # Fallback to text search
-            query_sequence = [{"text": query}]
-        
-        # Prepare input for temporal search
-        search_input = TemporalSearchInput(
-            query_sequence=query_sequence,
-            k=k
-        )
-        
-        # Call the existing temporal search function
-        result_str = temporal_frame_search_topk(search_input.json())
-        result_data = robust_json_parse(result_str)
-        
-        if "error" in result_data:
-            logger.error(f"Search API error: {result_data['error']}")
-            return []
         
         # Convert results to ClipHit objects
         hits = []
@@ -1182,13 +163,11 @@ def embed_search_api(query: str, modes: List[str], k: int = 10) -> List[ClipHit]
                 end_frame = 0
                 
                 if frames:
-                    # Parse frame URL to extract video info
-                    # Assuming format like "L01_V001_frame_123.jpg"
                     first_frame = frames[0]
                     if "_frame_" in first_frame:
                         parts = first_frame.split("_frame_")
                         if len(parts) >= 2:
-                            video_name = parts[0].split("/")[-1]  # Get last part of path
+                            video_name = parts[0].split("/")[-1]
                             try:
                                 start_frame = int(parts[1].split(".")[0])
                                 end_frame = start_frame + len(frames)
@@ -1198,7 +177,7 @@ def embed_search_api(query: str, modes: List[str], k: int = 10) -> List[ClipHit]
                 hit = ClipHit(
                     id=f"hit_{i}",
                     score=score,
-                    url="",  # Will be filled during verification
+                    url="",
                     video_name=video_name,
                     start_frame=start_frame,
                     end_frame=end_frame,
@@ -1208,47 +187,98 @@ def embed_search_api(query: str, modes: List[str], k: int = 10) -> List[ClipHit]
                 hits.append(hit)
         
         logger.info(f"Found {len(hits)} search hits")
-        return hits
+        
+        return {
+            **state,
+            "hits": hits,
+            "intermediate_results": {
+                **state.get("intermediate_results", {}),
+                "search": {"candidates_found": len(hits)}
+            }
+        }
         
     except Exception as e:
-        logger.error(f"Error in embed_search_api: {str(e)}")
-        return []
+        logger.error(f"Error in search_node: {str(e)}")
+        return {
+            **state,
+            "success": False,
+            "error_message": f"Search failed: {str(e)}"
+        }
 
 
-def verify_clip(clip: ClipHit) -> bool:
+def validate_clips_node(state: SearchState) -> SearchState:
     """
-    Verify if a clip hit is relevant and of good quality.
-    
-    Args:
-        clip: ClipHit object to verify
-        
-    Returns:
-        True if clip passes verification, False otherwise
+    Node: Validate top 5-10 clips in parallel.
     """
-    logger.info(f"Verifying clip {clip.id} with {len(clip.frames)} frames")
-    
     try:
-        # Skip verification if no frames
-        if not clip.frames:
-            logger.warning(f"Clip {clip.id} has no frames")
-            return False
+        hits = state.get("hits", [])
+        if not hits:
+            return {
+                **state,
+                "success": False,
+                "error_message": "No hits to validate"
+            }
         
-        # Use grid search for initial ranking/verification
-        grid_input = GridSearchInput(
-            frame_urls=clip.frames[:6],  # Limit to 6 frames for grid
-            query=f"Find the most relevant frames for the search query",
-            grid_dimensions=(2, 3)
-        )
+        # Take top 8 hits for validation
+        top_hits = sorted(hits, key=lambda x: x.score, reverse=True)[:8]
+        logger.info(f"Validating top {len(top_hits)} clips...")
         
-        grid_result_str = grid_search(grid_input.json())
-        grid_result = robust_json_parse(grid_result_str)
+        verified_clips = []
         
-        if "error" in grid_result:
-            logger.warning(f"Grid search failed for clip {clip.id}: {grid_result['error']}")
-            return False
+        # Validate clips in parallel
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            future_to_clip = {
+                executor.submit(validate_single_clip, clip, state.get("preprocessed_query", "")): clip 
+                for clip in top_hits
+            }
+            
+            for future in as_completed(future_to_clip):
+                clip = future_to_clip[future]
+                try:
+                    is_valid, confidence = future.result()
+                    if is_valid:
+                        clip.score = confidence  # Update score with validation result
+                        verified_clips.append(clip)
+                        logger.info(f"Clip {clip.id} validated with confidence {confidence:.2f}")
+                except Exception as e:
+                    logger.error(f"Error validating clip {clip.id}: {str(e)}")
         
-        # Check if we can create a video clip for verification
-        if clip.video_name and clip.start_frame < clip.end_frame:
+        logger.info(f"Validated {len(verified_clips)} out of {len(top_hits)} clips")
+        
+        return {
+            **state,
+            "verified_clips": verified_clips,
+            "intermediate_results": {
+                **state.get("intermediate_results", {}),
+                "validation": {
+                    "clips_validated": len(top_hits),
+                    "clips_passed": len(verified_clips)
+                }
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in validate_clips_node: {str(e)}")
+        return {
+            **state,
+            "success": False,
+            "error_message": f"Validation failed: {str(e)}"
+        }
+
+
+def validate_single_clip(clip: ClipHit, query: str) -> tuple:
+    """
+    Validate a single clip against the query.
+    
+    Returns:
+        Tuple of (is_valid, confidence_score)
+    """
+    try:
+        if not clip.frames or not clip.video_name:
+            return False, 0.0
+        
+        # Generate video clip if we have the necessary info
+        if clip.start_frame < clip.end_frame:
             try:
                 video_input = GetVideoInput(
                     video_name=clip.video_name,
@@ -1256,256 +286,273 @@ def verify_clip(clip: ClipHit) -> bool:
                     end_frame=min(clip.end_frame, clip.start_frame + 150)  # Limit clip length
                 )
                 
-                video_result_str = get_video(video_input.json())
+                video_result_str = get_video(video_input.model_dump_json())
                 video_result = robust_json_parse(video_result_str)
                 
                 if video_result.get("success"):
-                    clip.url = video_result.get("full_url", "")
+                    clip.url = video_result.get("clip_url", "")
                     
-                    # Use valid_video_query for final verification
-                    valid_input = ValidVideoQueryInput(
+                    # Validate the video clip
+                    validation_input = ValidVideoQueryInput(
                         video_clip_url=clip.url,
-                        query_sequence=["Check if this video clip is relevant to the search query"]
+                        query_sequence=[{"text": query}],
+                        question=f"Does this video clip match the description: {query}?"
                     )
                     
-                    valid_result_str = valid_video_query(valid_input.json())
+                    valid_result_str = valid_video_query(validation_input.model_dump_json())
                     valid_result = robust_json_parse(valid_result_str)
                     
                     is_match = valid_result.get("is_match", False)
                     confidence = valid_result.get("confidence_score", 0.0)
                     
-                    # Update clip score based on verification
-                    clip.score = confidence
-                    
-                    logger.info(f"Clip {clip.id} verification: match={is_match}, confidence={confidence}")
-                    return is_match and confidence > 0.3  # Threshold for acceptance
+                    # Threshold for acceptance
+                    return is_match and confidence > 0.4, confidence
                     
             except Exception as e:
-                logger.warning(f"Video verification failed for clip {clip.id}: {str(e)}")
+                logger.warning(f"Video validation failed for clip {clip.id}: {str(e)}")
         
-        # Fallback: accept if grid search didn't error and clip has reasonable score
-        return clip.score > 0.2
+        # Fallback: accept if clip has reasonable score
+        return clip.score > 0.3, clip.score
         
     except Exception as e:
-        logger.error(f"Error verifying clip {clip.id}: {str(e)}")
-        return False
+        logger.error(f"Error validating clip {clip.id}: {str(e)}")
+        return False, 0.0
 
 
-def rerank_clips(clips: List[ClipHit]) -> List[ClipHit]:
+def decision_node(state: SearchState) -> SearchState:
     """
-    Rerank clips based on verification results and additional criteria.
-    
-    Args:
-        clips: List of verified clips
-        
-    Returns:
-        Reranked list of clips
+    Node: Decide if we have good results or need to retry.
     """
-    logger.info(f"Reranking {len(clips)} clips")
+    verified_clips = state.get("verified_clips", [])
+    current_attempt = state.get("current_attempt", 1)
+    max_attempts = state.get("max_attempts", 3)
     
-    if not clips:
-        return clips
+    # Sort verified clips by score
+    verified_clips.sort(key=lambda x: x.score, reverse=True)
     
-    # Sort by score (highest first)
-    reranked = sorted(clips, key=lambda x: x.score, reverse=True)
+    # If we have good results (at least 2 clips with confidence > 0.6)
+    good_clips = [clip for clip in verified_clips if clip.score > 0.6]
     
-    # Additional reranking logic could be added here:
-    # - Diversity scoring
-    # - Temporal coherence
-    # - Video quality metrics
-    
-    logger.info(f"Reranking completed, top score: {reranked[0].score if reranked else 0}")
-    return reranked
-
-
-# LangGraph Node Functions - Note: Node functions already defined above
-
-
-def embed_search_node(state: SearchState) -> SearchState:
-    """Node: Perform embedding-based search."""
-    logger.info("=== EMBED SEARCH NODE ===")
-    
-    try:
-        query = state.get("preprocessed_query", state["query"])
-        modes = state.get("search_modes", ["text"])
+    if len(good_clips) >= 2:
+        logger.info(f"Found {len(good_clips)} high-confidence clips, finishing search")
+        final_results = []
+        for clip in verified_clips[:5]:  # Return top 5
+            final_results.append({
+                "video_name": clip.video_name,
+                "start_frame": clip.start_frame,
+                "end_frame": clip.end_frame,
+                "frames": clip.frames[:5],  # Limit frames returned
+                "confidence_score": clip.score,
+                "clip_url": clip.url
+            })
         
-        hits = embed_search_api(query, modes, k=10)
-        state["hits"] = hits
-        
-        logger.info(f"Found {len(hits)} initial hits")
-        
-    except Exception as e:
-        logger.error(f"Error in embed_search_node: {str(e)}")
-        state["error"] = str(e)
-        state["hits"] = []
+        return {
+            **state,
+            "success": True,
+            "final_results": final_results,
+            "verified_clips": verified_clips
+        }
     
-    return state
-
-
-def verify_clips_parallel(state: SearchState, max_concurrency: int = 8) -> SearchState:
-    """Node: Verify clips in parallel with configurable concurrency."""
-    logger.info("=== VERIFY CLIPS NODE (PARALLEL) ===")
+    # If we have some results but not great, and haven't maxed out attempts
+    elif len(verified_clips) > 0 and current_attempt < max_attempts:
+        logger.info(f"Found {len(verified_clips)} clips but quality not great, will retry with refined query")
+        return {
+            **state,
+            "success": False,
+            "error_message": f"Results quality insufficient (attempt {current_attempt}/{max_attempts}), preparing retry",
+            "verified_clips": verified_clips
+        }
     
-    hits = state.get("hits", [])
-    if not hits:
-        logger.warning("No hits to verify")
-        state["verified"] = []
-        return state
-    
-    verified_clips = []
-    
-    try:
-        # Use ThreadPoolExecutor for parallel verification
-        with ThreadPoolExecutor(max_workers=max_concurrency) as executor:
-            # Submit all verification tasks
-            future_to_clip = {executor.submit(verify_clip, clip): clip for clip in hits}
-            
-            # Collect results as they complete
-            for future in as_completed(future_to_clip):
-                clip = future_to_clip[future]
-                try:
-                    is_verified = future.result()
-                    if is_verified:
-                        verified_clips.append(clip)
-                        logger.info(f"Clip {clip.id} verified successfully")
-                    else:
-                        logger.info(f"Clip {clip.id} failed verification")
-                except Exception as e:
-                    logger.error(f"Error verifying clip {clip.id}: {str(e)}")
-        
-        state["verified"] = verified_clips
-        logger.info(f"Verified {len(verified_clips)} out of {len(hits)} clips")
-        
-    except Exception as e:
-        logger.error(f"Error in verify_clips_parallel: {str(e)}")
-        state["error"] = str(e)
-        state["verified"] = []
-    
-    return state
-
-
-def aggregate_results_node(state: SearchState) -> SearchState:
-    """Node: Aggregate and filter verification results."""
-    logger.info("=== AGGREGATE RESULTS NODE ===")
-    
-    verified_clips = state.get("verified", [])
-    
-    # Additional filtering/aggregation logic
-    if verified_clips:
-        # Remove duplicates based on video content
-        unique_clips = []
-        seen_videos = set()
-        
-        for clip in verified_clips:
-            video_key = f"{clip.video_name}_{clip.start_frame}_{clip.end_frame}"
-            if video_key not in seen_videos:
-                unique_clips.append(clip)
-                seen_videos.add(video_key)
-        
-        state["verified"] = unique_clips
-        logger.info(f"After deduplication: {len(unique_clips)} unique clips")
-    
-    return state
-
-
-def rerank_node(state: SearchState) -> SearchState:
-    """Node: Rerank the verified clips."""
-    logger.info("=== RERANK NODE ===")
-    
-    try:
-        verified_clips = state.get("verified", [])
+    # No attempts left or no results
+    else:
         if verified_clips:
-            reranked = rerank_clips(verified_clips)
-            state["reranked"] = reranked
-            logger.info(f"Reranked {len(reranked)} clips")
-        else:
-            state["reranked"] = []
-            logger.info("No clips to rerank")
+            # Return what we have
+            final_results = []
+            for clip in verified_clips[:3]:
+                final_results.append({
+                    "video_name": clip.video_name,
+                    "start_frame": clip.start_frame,
+                    "end_frame": clip.end_frame,
+                    "frames": clip.frames[:5],
+                    "confidence_score": clip.score,
+                    "clip_url": clip.url
+                })
             
-    except Exception as e:
-        logger.error(f"Error in rerank_node: {str(e)}")
-        state["error"] = str(e)
-        state["reranked"] = state.get("verified", [])
-    
-    return state
+            return {
+                **state,
+                "success": True,
+                "final_results": final_results,
+                "verified_clips": verified_clips,
+                "error_message": f"Found {len(verified_clips)} candidates but confidence is lower than ideal"
+            }
+        else:
+            return {
+                **state,
+                "success": False,
+                "final_results": [],
+                "error_message": f"No suitable videos found after {current_attempt} attempts"
+            }
 
 
-class LangGraphVideoRetrieval:
+def retry_node(state: SearchState) -> SearchState:
     """
-    LangGraph-based video retrieval system.
-    Implements a structured graph workflow for video search and analysis.
+    Node: Prepare for retry with refined query.
+    """
+    current_attempt = state.get("current_attempt", 1)
+    verified_clips = state.get("verified_clips", [])
+    original_query = state.get("preprocessed_query", "")
+    
+    # Analyze why previous search might have failed
+    if verified_clips:
+        # We had some results but low confidence - refine the query
+        refined_query = f"Looking for videos that clearly show: {original_query}. Must be highly relevant and specific."
+    else:
+        # No results - try broader search
+        refined_query = f"Find any videos related to: {original_query}. Include similar or related content."
+    
+    logger.info(f"Retrying search (attempt {current_attempt + 1}) with refined query: {refined_query[:100]}...")
+    
+    return {
+        **state,
+        "preprocessed_query": refined_query,
+        "current_attempt": current_attempt + 1,
+        "hits": [],  # Clear previous hits
+        "verified_clips": [],  # Clear previous results
+        "success": False,
+        "error_message": None
+    }
+
+
+def should_retry(state: SearchState) -> str:
+    """Conditional edge: Determine if we should retry or finish."""
+    if state.get("success"):
+        return "finish"
+    
+    current_attempt = state.get("current_attempt", 1)
+    max_attempts = state.get("max_attempts", 3)
+    
+    if current_attempt < max_attempts:
+        return "retry"
+    else:
+        return "finish"
+
+
+def finish_node(state: SearchState) -> SearchState:
+    """
+    Node: Final processing and cleanup.
+    """
+    final_results = state.get("final_results", [])
+    success = state.get("success", False)
+    
+    logger.info(f"Search finished. Success: {success}, Results: {len(final_results)}")
+    
+    # Add metadata about the search process
+    search_metadata = {
+        "total_attempts": state.get("current_attempt", 1),
+        "final_success": success,
+        "results_count": len(final_results),
+        "intermediate_results": state.get("intermediate_results", {})
+    }
+    
+    return {
+        **state,
+        "search_metadata": search_metadata,
+        "final_results": final_results
+    }
+
+
+class SimplifiedVideoRetrieval:
+    """
+    Simplified video retrieval system with search, validation, and retry logic.
     """
     
-    def __init__(self, max_concurrency: int = 8):
+    def __init__(self, max_attempts: int = 3):
         """
-        Initialize the LangGraph video retrieval system.
+        Initialize the simplified video retrieval system.
         
         Args:
-            max_concurrency: Maximum number of parallel verification workers
+            max_attempts: Maximum number of search attempts
         """
-        self.max_concurrency = max_concurrency
+        self.max_attempts = max_attempts
         self.graph = self._build_graph()
     
-    def _build_graph(self) -> Any:
+    def _build_graph(self):
         """Build the LangGraph workflow."""
         if not LANGGRAPH_AVAILABLE:
-            logger.error("LangGraph is not available. Please install langgraph package.")
+            logger.warning("LangGraph is not available. Will use fallback sequential execution.")
             return None
             
-        logger.info("Building LangGraph workflow...")
+        logger.info("Building simplified LangGraph workflow...")
         
         # Create the state graph
         builder = StateGraph(SearchState)
         
         # Add nodes
         builder.add_node("preprocess", preprocess_query_node)
-        builder.add_node("embed_search", embed_search_node)
-        builder.add_node("verify_clips", lambda state: verify_clips_parallel(state, self.max_concurrency))
-        builder.add_node("aggregate", aggregate_results_node)
-        builder.add_node("rerank", rerank_node)
+        builder.add_node("search", search_node)
+        builder.add_node("validate", validate_clips_node)
+        builder.add_node("decision", decision_node)
+        builder.add_node("retry", retry_node)
+        builder.add_node("finish", finish_node)
         
         # Add edges to define the workflow
         builder.add_edge(START, "preprocess")
-        builder.add_edge("preprocess", "embed_search")
-        builder.add_edge("embed_search", "verify_clips")
-        builder.add_edge("verify_clips", "aggregate")
-        builder.add_edge("aggregate", "rerank")
-        builder.add_edge("rerank", END)
+        builder.add_edge("preprocess", "search")
+        builder.add_edge("search", "validate")
+        builder.add_edge("validate", "decision")
+        
+        # Add conditional edges
+        builder.add_conditional_edges(
+            "decision",
+            should_retry,
+            {
+                "retry": "retry",
+                "finish": "finish"
+            }
+        )
+        
+        builder.add_edge("retry", "search")  # Retry goes back to search
+        builder.add_edge("finish", END)
         
         # Compile the graph
         graph = builder.compile()
         
-        logger.info("LangGraph workflow compiled successfully")
+        logger.info("Simplified LangGraph workflow compiled successfully")
         return graph
     
-    def search(self, query: str) -> Dict[str, Any]:
+    def search(self, descriptions: List[str], user_feedback: Optional[str] = None) -> Dict[str, Any]:
         """
-        Execute the search workflow for a given query.
+        Execute the search workflow for given descriptions.
         
         Args:
-            query: Search query
+            descriptions: List of natural language descriptions
+            user_feedback: Optional user feedback to improve search
             
         Returns:
             Dictionary containing search results and metadata
         """
-        logger.info(f"Starting LangGraph search for query: {query[:100]}...")
-        
-        # Check if LangGraph is available
-        if not LANGGRAPH_AVAILABLE or self.graph is None:
-            logger.warning("LangGraph not available, falling back to sequential execution")
-            return self._search_fallback(query)
+        logger.info(f"Starting simplified search for descriptions: {descriptions}")
         
         # Initialize state
         initial_state = SearchState(
-            query=query,
+            query="",
+            descriptions=descriptions,
             preprocessed_query="",
             search_modes=[],
+            current_attempt=1,
+            max_attempts=self.max_attempts,
             hits=[],
-            verified=[],
-            reranked=[],
-            error="",
+            verified_clips=[],
+            final_results=[],
+            user_feedback=user_feedback,
+            success=False,
+            error_message=None,
             intermediate_results={}
         )
+        
+        if not LANGGRAPH_AVAILABLE or self.graph is None:
+            logger.warning("LangGraph not available, using fallback sequential execution")
+            return self._search_fallback(initial_state)
         
         try:
             # Execute the graph
@@ -1513,134 +560,113 @@ class LangGraphVideoRetrieval:
             
             # Prepare response
             result = {
-                "success": not bool(final_state.get("error")),
-                "query": query,
-                "preprocessed_query": final_state.get("preprocessed_query", ""),
-                "search_modes": final_state.get("search_modes", []),
-                "total_hits": len(final_state.get("hits", [])),
-                "verified_clips": len(final_state.get("verified", [])),
-                "final_results": [],
-                "error": final_state.get("error", "")
+                "success": final_state.get("success", False),
+                "descriptions": descriptions,
+                "final_results": final_state.get("final_results", []),
+                "search_metadata": final_state.get("search_metadata", {}),
+                "user_feedback": user_feedback,
+                "error_message": final_state.get("error_message")
             }
             
-            # Format final results
-            reranked_clips = final_state.get("reranked", [])
-            for clip in reranked_clips[:5]:  # Return top 5 results
-                result["final_results"].append({
-                    "clip_id": clip.id,
-                    "score": clip.score,
-                    "video_url": clip.url,
-                    "video_name": clip.video_name,
-                    "frame_range": f"{clip.start_frame}-{clip.end_frame}",
-                    "frames": clip.frames[:3],  # Limit frames in response
-                    "metadata": clip.metadata
-                })
-            
-            logger.info(f"Search completed successfully, found {len(result['final_results'])} results")
+            logger.info(f"Search completed. Success: {result['success']}, Results: {len(result['final_results'])}")
             return result
             
         except Exception as e:
-            logger.error(f"Error executing LangGraph search: {str(e)}")
+            logger.error(f"Error executing simplified search: {str(e)}")
             return {
                 "success": False,
-                "query": query,
-                "error": str(e),
+                "descriptions": descriptions,
+                "error_message": str(e),
                 "final_results": []
             }
     
-    def _search_fallback(self, query: str) -> Dict[str, Any]:
+    def _search_fallback(self, state: SearchState) -> Dict[str, Any]:
         """
         Fallback sequential search when LangGraph is not available.
-        
-        Args:
-            query: Search query
-            
-        Returns:
-            Dictionary containing search results and metadata
         """
         logger.info("Executing fallback sequential search")
         
         try:
-            # Initialize state
-            state = SearchState(
-                query=query,
-                preprocessed_query="",
-                search_modes=[],
-                hits=[],
-                verified=[],
-                reranked=[],
-                error="",
-                intermediate_results={}
-            )
-            
             # Execute nodes sequentially
             state = preprocess_query_node(state)
-            if state.get("error"):
-                raise Exception(state["error"])
+            if state.get("error_message"):
+                return {"success": False, "error_message": state["error_message"], "final_results": []}
             
-            state = embed_search_node(state)
-            if state.get("error"):
-                raise Exception(state["error"])
+            # Retry loop
+            while state.get("current_attempt", 1) <= state.get("max_attempts", 3):
+                state = search_node(state)
+                if state.get("error_message"):
+                    break
+                
+                state = validate_clips_node(state)
+                if state.get("error_message"):
+                    break
+                
+                state = decision_node(state)
+                
+                if state.get("success"):
+                    break
+                
+                # Check if we should retry
+                if state.get("current_attempt", 1) < state.get("max_attempts", 3):
+                    state = retry_node(state)
+                else:
+                    break
             
-            state = verify_clips_parallel(state, self.max_concurrency)
-            if state.get("error"):
-                raise Exception(state["error"])
+            state = finish_node(state)
             
-            state = aggregate_results_node(state)
-            if state.get("error"):
-                raise Exception(state["error"])
-            
-            state = rerank_node(state)
-            if state.get("error"):
-                raise Exception(state["error"])
-            
-            # Prepare response
-            result = {
-                "success": True,
-                "query": query,
-                "preprocessed_query": state.get("preprocessed_query", ""),
-                "search_modes": state.get("search_modes", []),
-                "total_hits": len(state.get("hits", [])),
-                "verified_clips": len(state.get("verified", [])),
-                "final_results": [],
-                "error": ""
+            return {
+                "success": state.get("success", False),
+                "descriptions": state.get("descriptions", []),
+                "final_results": state.get("final_results", []),
+                "search_metadata": state.get("search_metadata", {}),
+                "error_message": state.get("error_message")
             }
-            
-            # Format final results
-            reranked_clips = state.get("reranked", [])
-            for clip in reranked_clips[:5]:  # Return top 5 results
-                result["final_results"].append({
-                    "clip_id": clip.id,
-                    "score": clip.score,
-                    "video_url": clip.url,
-                    "video_name": clip.video_name,
-                    "frame_range": f"{clip.start_frame}-{clip.end_frame}",
-                    "frames": clip.frames[:3],  # Limit frames in response
-                    "metadata": clip.metadata
-                })
-            
-            logger.info(f"Fallback search completed successfully, found {len(result['final_results'])} results")
-            return result
             
         except Exception as e:
             logger.error(f"Error in fallback search: {str(e)}")
             return {
                 "success": False,
-                "query": query,
-                "error": str(e),
+                "error_message": str(e),
                 "final_results": []
             }
+    
+    def add_user_feedback(self, feedback: str, previous_results: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Incorporate user feedback and re-run search.
+        
+        Args:
+            feedback: User feedback about previous results
+            previous_results: Previous search results
+            
+        Returns:
+            New search results incorporating feedback
+        """
+        logger.info(f"Incorporating user feedback: {feedback[:100]}...")
+        
+        descriptions = previous_results.get("descriptions", [])
+        
+        # Modify descriptions based on feedback
+        if "not" in feedback.lower() or "wrong" in feedback.lower():
+            # User is saying results are wrong - try different approach
+            modified_descriptions = [f"NOT {desc}" for desc in descriptions]
+            modified_descriptions.append(f"Instead, looking for: {feedback}")
+        else:
+            # User is providing additional context
+            modified_descriptions = descriptions + [f"Additional context: {feedback}"]
+        
+        return self.search(modified_descriptions, user_feedback=feedback)
 
 
 # Global instance for use in the application
-_langgraph_retrieval = None
+_simplified_retrieval = None
 
 
-def get_langgraph_retrieval(max_concurrency: int = 8) -> LangGraphVideoRetrieval:
-    """Get or create the global LangGraph retrieval instance."""
-    global _langgraph_retrieval
+def get_simplified_retrieval(max_attempts: int = 3) -> SimplifiedVideoRetrieval:
+    """Get or create the global simplified retrieval instance."""
+    global _simplified_retrieval
     
-    if _langgraph_retrieval is None:
-        _langgraph_retrieval = LangGraphVideoRetrieval(max_concurrency=max_concurrency)
+    if _simplified_retrieval is None:
+        _simplified_retrieval = SimplifiedVideoRetrieval(max_attempts=max_attempts)
     
-    return _langgraph_retrieval
+    return _simplified_retrieval
