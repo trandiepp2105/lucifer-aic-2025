@@ -1,0 +1,179 @@
+// QueryItem component styles
+.sidebar__message {
+  display: flex;
+  
+  &--query {
+    justify-content: flex-start;
+    margin-bottom: 0.5rem;
+    position: relative;
+    transition: all 0.2s ease;
+    cursor: pointer;
+    
+    &:hover {
+      transform: translateX(2px);
+      
+      .sidebar__message-content {
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+      }
+    }
+    
+    .sidebar__message-content {
+      background: #ffffff;
+      color: #333;
+      width: 100%;
+      max-width: 100%;
+      border-radius: 8px;
+      border: 1px solid #e9ecef;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      transition: all 0.2s ease;
+    }
+  }
+
+  &--current-stage {
+    .sidebar__message-content {
+      border-color: #007bff;
+      background: #f8fbff;
+      box-shadow: 0 2px 8px rgba(0, 123, 255, 0.2);
+    }
+  }
+}
+
+.sidebar__message-content {
+  padding: 0.25rem 0.5rem;
+  padding-right: 0.25rem;
+  word-wrap: break-word;
+  position: relative;
+}
+
+.sidebar__message-field {
+  padding: 0.3rem 0.6rem 0.3rem 0;
+  border-radius: 4px;
+  font-size: 0.9rem;
+  
+  strong {
+    color: #007bff;
+    font-weight: 600;
+    font-size: 0.9rem;
+    margin-right: 0.3rem;
+  }
+}
+
+// Empty field placeholder styling
+.sidebar__empty-field {
+  color: #6c757d;
+  font-style: italic;
+  opacity: 0.7;
+  font-size: 0.85rem;
+}
+
+.sidebar__message-image {
+  padding: 0.3rem 0;
+  
+  img {
+    max-width: 100%;
+    border-radius: 8px;
+    display: block;
+  }
+}
+
+.sidebar__query-image {
+  max-width: 100%;
+  max-height: 100px;
+  border-radius: 6px;
+  object-fit: cover;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  transition: transform 0.2s ease;
+
+  &:hover {
+    transform: scale(1.02);
+  }
+}
+
+// Action buttons that appear on hover
+.sidebar__message-actions {
+  position: absolute;
+  bottom: -10px;
+  right: 5px;
+  display: flex;
+  gap: 7px;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: all 0.2s ease;
+  pointer-events: none;
+}
+
+.sidebar__message--query:hover .sidebar__message-actions {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+.sidebar__action-btn {
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  padding: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  
+  &:hover {
+    transform: scale(1.1);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+  }
+
+  &--create {
+    color: #28a745;
+    
+    &:hover {
+      background: #d4edda;
+      border-color: #28a745;
+      color: #155724;
+    }
+  }
+
+  &--delete {
+    color: #dc3545;
+    
+    &:hover {
+      background: #f8d7da;
+      border-color: #dc3545;
+    //   color: #721c24;
+    }
+  }
+}
+
+.sidebar__delete-query {
+  position: absolute;
+  top: 0.125rem;
+  right: 0.125rem;
+  background: none;
+  border: none;
+  color: #6c757d;
+  cursor: pointer;
+  padding: 0.2rem;
+  border-radius: 4px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  opacity: 1;
+  
+  &:hover {
+    background: #f8d7da;
+    color: #dc3545;
+  }
+}
+
+.sidebar__delete-query-icon {
+  width: 12px;
+  height: 12px;
+}

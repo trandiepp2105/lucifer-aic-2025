@@ -7,6 +7,8 @@ import { useApp } from '../../contexts/AppContext';
 import { getSessionIdFromUrl, getStageFromUrl, getViewModeFromUrl, updateUrlParams } from '../../utils/urlParams';
 import { exportTeamAnswersToZip, exportAnswersToZip } from '../../utils/exportUtils';
 import ConfirmationModal from '../ConfirmationModal';
+import QueryInput from './QueryInput';
+import SidebarQueries from './SidebarQueries';
 import './Sidebar.scss';
 
 const Sidebar = ({ 
@@ -25,16 +27,13 @@ const Sidebar = ({
   const { stage, viewMode, round, queryIndex, k, searchUrl, setStage, setViewMode, setQueryIndex } = useApp();
   const toast = useToast();
   
-  const [queries, setQueries] = useState([]);
+  // Local queries management - unified structure matching backend
+  const [queries, setQueries] = useState([]); // Server queries
+  const [localQueries, setLocalQueries] = useState([]); // Client-side query objects
+  const [currentLocalQuery, setCurrentLocalQuery] = useState(null); // Current query being edited
   const [loading, setLoading] = useState(false);
   const [currentSession, setCurrentSession] = useState(null);
   const [currentStageQuery, setCurrentStageQuery] = useState(null);
-  const [inputMessage, setInputMessage] = useState('');
-  const [ocrText, setOcrText] = useState('');
-  const [speechText, setSpeechText] = useState('');
-  const [uploadedImage, setUploadedImage] = useState(null);
-  const [uploadedImageFile, setUploadedImageFile] = useState(null);
-  const [imageRemoved, setImageRemoved] = useState(false); // Track if user explicitly removed image
   const [isRecording, setIsRecording] = useState(false);
   const [isTranslating, setIsTranslating] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -42,41 +41,97 @@ const Sidebar = ({
   const [isDeleting, setIsDeleting] = useState(false);
   const [currentInputIndex, setCurrentInputIndex] = useState(-1); // Track focused input index
   const messagesEndRef = useRef(null);
-  const fileInputRef = useRef(null);
-  const textareaRef = useRef(null);
-  const ocrTextareaRef = useRef(null);
-  const speechTextareaRef = useRef(null);
   const hasInitialized = useRef(false);
   const hasLoadedQueries = useRef(false);
-  
-  // Debounce để tránh spam translation requests
-  const debounceTimers = useRef({});
-  
-  const debouncedTranslate = useCallback((targetLang, delay = 50) => {
-    const timerId = `translate_${targetLang}`;
+
+  // Create a new local query object matching backend structure
+  const createLocalQuery = useCallback((overrides = {}) => {
+    // For new queries (no id), start with empty strings for editing
+    // For existing queries (with id), preserve null values for display
+    const isNewQuery = !overrides.id;
     
-    // Clear previous timer
-    if (debounceTimers.current[timerId]) {
-      clearTimeout(debounceTimers.current[timerId]);
-    }
-    
-    // Set new timer
-    debounceTimers.current[timerId] = setTimeout(() => {
-      handleTranslateFocusedInput(targetLang);
-    }, delay);
-  }, [currentInputIndex]); // Add dependency
-  
-  // Input refs for navigation
-  const inputRefs = [ocrTextareaRef, speechTextareaRef, textareaRef];
-  
-  // Cleanup timers on unmount
-  useEffect(() => {
-    return () => {
-      Object.values(debounceTimers.current).forEach(timer => {
-        if (timer) clearTimeout(timer);
-      });
+    return {
+      id: overrides.id || null,
+      session: overrides.session || currentSession?.id || null,
+      text: overrides.hasOwnProperty('text') ? overrides.text : (isNewQuery ? '' : null),
+      ocr: overrides.hasOwnProperty('ocr') ? overrides.ocr : (isNewQuery ? '' : null),
+      speech: overrides.hasOwnProperty('speech') ? overrides.speech : (isNewQuery ? '' : null),
+      image: overrides.image || null,
+      imageFile: overrides.imageFile || null, // Client-side file object
+      imageRemoved: overrides.imageRemoved || false, // Track if user removed image
+      time: overrides.time || new Date().toISOString(),
+      background_sound: overrides.hasOwnProperty('background_sound') ? overrides.background_sound : (isNewQuery ? '' : null),
+      stage: overrides.stage || stage || 1,
+      created_at: overrides.created_at || new Date().toISOString(),
+      updated_at: overrides.updated_at || new Date().toISOString(),
+      ...overrides
     };
-  }, []);
+  }, [currentSession, stage]);
+
+  // Initialize current local query for editing
+  useEffect(() => {
+    if (!currentLocalQuery) {
+      setCurrentLocalQuery(createLocalQuery());
+    }
+  }, [currentLocalQuery, createLocalQuery]);
+
+  // Map server queries to local queries
+  const mapServerQueriesToLocal = (serverQueries) => {
+    return serverQueries.map(query => createLocalQuery({
+      id: query.id,
+      session: query.session,
+      text: query.text && query.text !== 'null' ? query.text : null,
+      ocr: query.ocr && query.ocr !== 'null' ? query.ocr : null,
+      speech: query.speech && query.speech !== 'null' ? query.speech : null,
+      image: query.image && query.image !== 'null' ? query.image : null,
+      time: query.time,
+      background_sound: query.background_sound && query.background_sound !== 'null' ? query.background_sound : null,
+      stage: query.stage,
+      created_at: query.created_at,
+      updated_at: query.updated_at
+    }));
+  };
+
+  // Update local queries when server queries change
+  useEffect(() => {
+    if (queries.length > 0) {
+      setLocalQueries(mapServerQueriesToLocal(queries));
+    } else {
+      setLocalQueries([]);
+    }
+  }, [queries]);
+
+  // Update current stage query in localQueries directly
+  const updateCurrentLocalQuery = useCallback((updates) => {
+    setLocalQueries(prev => {
+      const currentStageIndex = prev.findIndex(q => q.stage === stage);
+      
+      if (currentStageIndex >= 0) {
+        // Update existing query for current stage
+        const updatedQueries = [...prev];
+        updatedQueries[currentStageIndex] = {
+          ...updatedQueries[currentStageIndex],
+          ...updates,
+          updated_at: new Date().toISOString()
+        };
+        return updatedQueries;
+      } else {
+        // Create new query for current stage
+        const newQuery = createLocalQuery({
+          stage: stage,
+          ...updates
+        });
+        return [...prev, newQuery];
+      }
+    });
+
+    // Also update currentLocalQuery for input synchronization
+    setCurrentLocalQuery(prev => ({
+      ...prev,
+      ...updates,
+      updated_at: new Date().toISOString()
+    }));
+  }, [stage, createLocalQuery]);
 
   const updateUrlWithSession = (sessionId) => {
     updateUrlParams({ 
@@ -260,105 +315,21 @@ const Sidebar = ({
     }
   }, [viewMode, k, currentSession, loadQueries, mode]);
 
-  // Auto-resize textarea
-  const adjustTextareaHeight = useCallback(() => {
-    const textarea = textareaRef.current;
-    if (textarea) {
-      // Reset height to calculate scrollHeight properly
-      textarea.style.height = 'auto';
-      textarea.style.minHeight = '20px';
-      
-      // Calculate new height
-      const newHeight = Math.min(textarea.scrollHeight, 150);
-      
-      // Set the new height with important to override CSS
-      textarea.style.setProperty('height', newHeight + 'px', 'important');
-      
-      // Also adjust container height if needed
-      const container = textarea.closest('.sidebar__main-input-container');
-      if (container) {
-        container.style.minHeight = 'auto';
-        container.style.height = 'auto';
-      }
-    }
-  }, []);
-
-  // Auto-resize OCR textarea
-  const adjustOcrTextareaHeight = () => {
-    const textarea = ocrTextareaRef.current;
-    if (textarea) {
-      textarea.style.height = 'auto';
-      textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
-    }
-  };
-
-  // Auto-resize Speech textarea
-  const adjustSpeechTextareaHeight = () => {
-    const textarea = speechTextareaRef.current;
-    if (textarea) {
-      textarea.style.height = 'auto';
-      textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
-    }
-  };
-
-  useEffect(() => {
-    adjustTextareaHeight();
-  }, [inputMessage, adjustTextareaHeight]);
-
-  useEffect(() => {
-    adjustOcrTextareaHeight();
-  }, [ocrText]);
-
-  useEffect(() => {
-    adjustSpeechTextareaHeight();
-  }, [speechText]);
-
-  // Initial resize on mount
-  useEffect(() => {
-    adjustTextareaHeight();
-    adjustOcrTextareaHeight();
-    adjustSpeechTextareaHeight();
-  }, [adjustTextareaHeight]);
-
   // Load query content when stage changes (for edit mode)
+  // Sync currentLocalQuery with the corresponding item in localQueries
   useEffect(() => {
-    const currentStageQuery = queries.find(q => q.stage === stage);
-    setCurrentStageQuery(currentStageQuery);
+    const stageQuery = localQueries.find(q => q.stage === stage);
+    setCurrentStageQuery(stageQuery);
     
-    if (currentStageQuery) {
-      // Edit mode - load existing query content
-      // Use helper function to get clean values
-      setInputMessage(hasValidValue(currentStageQuery.text) ? currentStageQuery.text : '');
-      setOcrText(hasValidValue(currentStageQuery.ocr) ? currentStageQuery.ocr : '');
-      setSpeechText(hasValidValue(currentStageQuery.speech) ? currentStageQuery.speech : '');
-      
-      // Handle image if exists
-      if (hasValidValue(currentStageQuery.image)) {
-        setUploadedImage(currentStageQuery.image);
-        setImageRemoved(false); // Reset image removed flag when loading existing query
-        // Note: We don't set uploadedImageFile as it's for new uploads
-      } else {
-        setUploadedImage(null);
-        setUploadedImageFile(null);
-        setImageRemoved(false); // Reset flag when no existing image
-      }
-
-      // Note: Frames will be loaded automatically when loadQueries is called
+    // Update currentLocalQuery to reference the same object in localQueries
+    if (stageQuery) {
+      // Load existing query for editing - create a copy for input binding
+      setCurrentLocalQuery({ ...stageQuery });
     } else {
-      // Create mode - clear all inputs
-      setInputMessage('');
-      setOcrText('');
-      setSpeechText('');
-      setUploadedImage(null);
-      setUploadedImageFile(null);
-      setImageRemoved(false); // Reset flag for new query
-      
-      // Reset file input
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
+      // Create new query for this stage, but don't add to localQueries yet
+      setCurrentLocalQuery(createLocalQuery({ stage: stage }));
     }
-  }, [stage, queries]); // Remove onFramesUpdate and viewMode to prevent infinite loop
+  }, [stage, localQueries, createLocalQuery]);
 
   // Notify parent about available stages when queries change
   useEffect(() => {
@@ -421,15 +392,8 @@ const Sidebar = ({
 
       // Arrow key navigation between inputs - only when not typing in an input
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
-        // Prevent default scroll behavior
-        e.preventDefault();
-        e.stopPropagation();
-        
-        if (e.key === 'ArrowDown') {
-          navigateInputs('down');
-        } else {
-          navigateInputs('up');
-        }
+        // This navigation is now handled by QueryInput component
+        return;
       }
     };
 
@@ -443,40 +407,19 @@ const Sidebar = ({
         document.removeEventListener('keydown', handleKeyDown, true);
       }
     };
-  }, [mode, currentInputIndex, ocrText, speechText, inputMessage, uploadedImage]);
+  }, [mode, currentInputIndex, currentLocalQuery?.ocr, currentLocalQuery?.text, currentLocalQuery?.image]); // Removed speech dependency
 
-  // Navigation function for input fields
-  const navigateInputs = (direction) => {
-    let nextIndex;
-    
-    if (direction === 'down') {
-      if (currentInputIndex === -1) {
-        // No focus -> go to top (OCR)
-        nextIndex = 0;
-      } else {
-        // Move down cyclically: OCR(0) -> Speech(1) -> Text(2) -> OCR(0)
-        nextIndex = (currentInputIndex + 1) % inputRefs.length;
-      }
-    } else if (direction === 'up') {
-      if (currentInputIndex === -1) {
-        // No focus -> go to bottom (Text)
-        nextIndex = inputRefs.length - 1; // Text (index 2)
-      } else {
-        // Move up cyclically: Text(2) -> Speech(1) -> OCR(0) -> Text(2)
-        nextIndex = currentInputIndex === 0 ? inputRefs.length - 1 : currentInputIndex - 1;
-      }
-    }
-    
-    // Focus on the target input
-    if (inputRefs[nextIndex] && inputRefs[nextIndex].current) {
-      inputRefs[nextIndex].current.focus();
-      setCurrentInputIndex(nextIndex);
-    }
-  };
-
-  // Handle send message
+  // Check if any field has value and send query if ready
   const handleSendMessage = async () => {
-    if (!inputMessage.trim() && !uploadedImage && !ocrText.trim() && !speechText.trim()) return;
+    if (!currentLocalQuery) return;
+    
+    const hasText = currentLocalQuery.text?.trim();
+    const hasOcr = currentLocalQuery.ocr?.trim();
+    // const hasSpeech = currentLocalQuery.speech?.trim(); // Commented out - Speech disabled
+    const hasImage = currentLocalQuery.image || currentLocalQuery.imageFile;
+    
+    if (!hasText && !hasOcr && !hasImage) return; // Removed hasSpeech check
+    
     if (!currentSession) {
       toast.error('No active session. Please create a new session.');
       return;
@@ -491,42 +434,32 @@ const Sidebar = ({
       const queryData = {
         session: currentSession.id,
         stage: stageAtSendTime,
-        text: inputMessage.trim() || null,
-        ocr: ocrText.trim() || null,
-        speech: speechText.trim() || null,
-        image: uploadedImageFile || (imageRemoved ? null : undefined), // Send null if explicitly removed, undefined if unchanged
+        text: hasText || null,
+        ocr: hasOcr || null,
+        // speech: hasSpeech || null, // Commented out - Speech disabled
+        image: currentLocalQuery.imageFile || (currentLocalQuery.imageRemoved ? null : undefined), // Send null if explicitly removed, undefined if unchanged
       };
 
       let response;
       
-      // Check if we're in edit mode (current stage has existing query)
-      if (currentStageQuery) {
+      // Check if we're updating existing query or creating new one
+      if (currentLocalQuery.id) {
         // Update existing query
-        response = await QueryService.updateQuery(currentStageQuery.id, queryData);
+        response = await QueryService.updateQuery(currentLocalQuery.id, queryData);
       } else {
         // Create new query
         response = await QueryService.createQuery(queryData);
       }
 
       if (response.success) {
-        // Clear inputs first
-        setInputMessage('');
-        setOcrText('');
-        setSpeechText('');
-        setUploadedImage(null);
-        setUploadedImageFile(null);
-        setImageRemoved(false); // Reset image removed flag after successful submission
-
-        // Reset file input
-        if (fileInputRef.current) {
-          fileInputRef.current.value = '';
-        }
+        // Reset current local query for next input
+        setCurrentLocalQuery(createLocalQuery());
 
         // Reload queries to get fresh data with proper formatting
         // This will also load frames automatically from backend
         await loadQueries(currentSession.id);
 
-        toast.success(currentStageQuery ? 'Query updated successfully!' : 'Query created successfully!');
+        toast.success(currentLocalQuery.id ? 'Query updated successfully!' : 'Query created successfully!');
         
         // Note: We don't change the current stage after creating a new query
         // The new stage is available for future use but we stay on current stage
@@ -550,12 +483,14 @@ const Sidebar = ({
 
   // Check if any field has value and send query if ready
   const handleSendQueryIfReady = () => {
-    const hasTextInput = inputMessage.trim().length > 0;
-    const hasOcrInput = ocrText.trim().length > 0;
-    const hasSpeechInput = speechText.trim().length > 0;
-    const hasImageInput = uploadedImage !== null;
+    if (!currentLocalQuery) return;
+    
+    const hasTextInput = currentLocalQuery.text?.trim()?.length > 0;
+    const hasOcrInput = currentLocalQuery.ocr?.trim()?.length > 0;
+    // const hasSpeechInput = currentLocalQuery.speech?.trim()?.length > 0; // Commented out - Speech disabled
+    const hasImageInput = currentLocalQuery.image !== null || currentLocalQuery.imageFile !== null;
 
-    if (hasTextInput || hasOcrInput || hasSpeechInput || hasImageInput) {
+    if (hasTextInput || hasOcrInput || hasImageInput) { // Removed hasSpeechInput
       handleSendMessage();
     }
   };
@@ -577,18 +512,9 @@ const Sidebar = ({
         // Reload queries to get updated list with adjusted stages
         await loadQueries(currentSession.id);
         
-        // Clear inputs since the query was deleted
-        setInputMessage('');
-        setOcrText('');
-        setSpeechText('');
-        setUploadedImage(null);
-        setUploadedImageFile(null);
+        // Reset current local query to empty state
+        setCurrentLocalQuery(createLocalQuery({ stage: stage }));
         setCurrentStageQuery(null);
-        
-        // Reset file input
-        if (fileInputRef.current) {
-          fileInputRef.current.value = '';
-        }
 
         toast.success('Query deleted successfully!');
       } else {
@@ -614,28 +540,6 @@ const Sidebar = ({
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
-    }
-  };
-
-  const handleImageUpload = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      setUploadedImageFile(file);
-      setImageRemoved(false); // Reset flag when new image is uploaded
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        setUploadedImage(e.target.result);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleRemoveImage = () => {
-    setUploadedImage(null);
-    setUploadedImageFile(null);
-    setImageRemoved(true); // Mark that user explicitly removed the image
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
     }
   };
 
@@ -709,97 +613,38 @@ const Sidebar = ({
     }
   };
 
-  const handleTranslateOcr = async () => {
-    if (!ocrText.trim()) return;
-    
-    setIsTranslating(true);
-    try {
-      // Detect if text is Vietnamese, then translate to English, otherwise to Vietnamese
-      const detectedLang = await translatorService.detectLanguage(ocrText);
-      const targetLang = (detectedLang === 'vi') ? 'en' : 'vi';
-      
-      const translated = await translatorService.translateText(ocrText, targetLang);
-      if (translated && translated !== ocrText) {
-        setOcrText(translated);
-        toast.success('Text translated successfully!');
-      }
-    } catch (error) {
-      console.log('Translation error:', error);
-      toast.error('Failed to translate text');
-    } finally {
-      setIsTranslating(false);
-    }
-  };
-
-  const handleTranslateSpeech = async () => {
-    if (!speechText.trim()) return;
-    
-    setIsTranslating(true);
-    try {
-      // Detect if text is Vietnamese, then translate to English, otherwise to Vietnamese
-      const detectedLang = await translatorService.detectLanguage(speechText);
-      const targetLang = (detectedLang === 'vi') ? 'en' : 'vi';
-      
-      const translated = await translatorService.translateText(speechText, targetLang);
-      if (translated && translated !== speechText) {
-        setSpeechText(translated);
-        toast.success('Text translated successfully!');
-      }
-    } catch (error) {
-      console.log('Translation error:', error);
-      toast.error('Failed to translate text');
-    } finally {
-      setIsTranslating(false);
-    }
-  };
-
-  const handleTranslateText = async (targetLang) => {
-    if (!inputMessage.trim()) return;
-    
-    setIsTranslating(true);
-    try {
-      const translated = await translatorService.translateText(inputMessage, targetLang);
-      if (translated && translated !== inputMessage) {
-        setInputMessage(translated);
-        const langName = targetLang === 'en' ? 'English' : 'Vietnamese';
-        toast.success(`Text translated to ${langName}!`);
-      }
-    } catch (error) {
-      console.log('Translation error:', error);
-      toast.error('Failed to translate text');
-    } finally {
-      setIsTranslating(false);
-    }
-  };
-
-  // Handle translation for the currently focused input
   const handleTranslateFocusedInput = async (targetLang) => {
     if (currentInputIndex === -1) {
       toast.info('Please focus on an input field first');
       return;
     }
 
+    if (!currentLocalQuery) {
+      toast.info('No query to translate');
+      return;
+    }
+
     let textToTranslate = '';
-    let setTranslatedText = null;
+    let fieldKey = '';
     let fieldName = '';
 
     // Determine which input is focused
     switch (currentInputIndex) {
       case 0: // OCR
-        textToTranslate = ocrText.trim();
-        setTranslatedText = setOcrText;
+        textToTranslate = currentLocalQuery.ocr?.trim() || '';
+        fieldKey = 'ocr';
         fieldName = 'OCR text';
         break;
-      case 1: // Speech
-        textToTranslate = speechText.trim();
-        setTranslatedText = setSpeechText;
-        fieldName = 'Speech text';
-        break;
-      case 2: // Text
-        textToTranslate = inputMessage.trim();
-        setTranslatedText = setInputMessage;
+      case 1: // Text (Speech removed, Text is now index 1)
+        textToTranslate = currentLocalQuery.text?.trim() || '';
+        fieldKey = 'text';
         fieldName = 'Text';
         break;
+      // case 1: // Speech - COMMENTED OUT (Speech input disabled)
+      //   textToTranslate = currentLocalQuery.speech?.trim() || '';
+      //   fieldKey = 'speech';
+      //   fieldName = 'Speech text';
+      //   break;
       default:
         toast.info('Please focus on an input field first');
         return;
@@ -814,7 +659,7 @@ const Sidebar = ({
     try {
       const translated = await translatorService.translateText(textToTranslate, targetLang);
       if (translated && translated !== textToTranslate) {
-        setTranslatedText(translated);
+        updateCurrentLocalQuery({ [fieldKey]: translated });
         const langName = targetLang === 'en' ? 'English' : 'Vietnamese';
         toast.success(`${fieldName} translated to ${langName}!`);
       } else {
@@ -885,39 +730,6 @@ const Sidebar = ({
     return timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
-  const handleMicrophoneClick = () => {
-    if (isRecording) {
-      // Stop recording
-      setIsRecording(false);
-      // Here you would implement actual recording stop logic
-    } else {
-      // Start recording
-      setIsRecording(true);
-      // Here you would implement actual recording start logic
-    }
-  };
-
-
-
-  // Track focus changes to update currentInputIndex
-  const handleInputFocus = (index) => {
-    setCurrentInputIndex(index);
-  };
-
-  const handleInputBlur = () => {
-    // Don't reset immediately, keep track for navigation
-    // Only reset if no navigation happens within a short time
-    setTimeout(() => {
-      // Check if any input still has focus
-      const anyInputFocused = inputRefs.some(ref => 
-        ref.current && document.activeElement === ref.current
-      );
-      if (!anyInputFocused) {
-        setCurrentInputIndex(-1);
-      }
-    }, 50);
-  };
-
   // Handle add session button
   const handleAddSession = async () => {
     try {
@@ -954,6 +766,16 @@ const Sidebar = ({
     setStage(newStage);
     // Update URL params
     updateUrlParams({ stage: newStage });
+    
+    // Load the query for the new stage into currentLocalQuery
+    const stageQuery = localQueries.find(q => q.stage === newStage);
+    if (stageQuery) {
+      // Load existing query for editing
+      setCurrentLocalQuery({ ...stageQuery });
+    } else {
+      // Create new query for this stage
+      setCurrentLocalQuery(createLocalQuery({ stage: newStage }));
+    }
   };
 
   // Handle viewMode change from external components  
@@ -963,12 +785,8 @@ const Sidebar = ({
     updateUrlParams({ viewmode: newViewMode });
   };
 
-  // Filter queries by current stage for display
-  // Show all queries in session, but highlight current stage query
-  const filteredQueries = queries; // Show all queries instead of filtering by stage
-  
   // Calculate max stage from existing queries + 1 for new stage
-  const maxStageFromQueries = queries.length > 0 ? Math.max(...queries.map(q => q.stage)) : 0;
+  const maxStageFromQueries = localQueries.length > 0 ? Math.max(...localQueries.map(q => q.stage)) : 0;
   const availableStages = maxStageFromQueries + 1; // Always allow one more stage for new query
   
   // Check if current stage has existing query (edit mode vs create mode)
@@ -1260,239 +1078,34 @@ const Sidebar = ({
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        <div className="sidebar__messages">
-          {loading ? (
-            <div className="sidebar__loading">
-              <div className="sidebar__spinner"></div>
-              <span>Loading queries...</span>
-            </div>
-          ) : filteredQueries.length > 0 ? (
-            filteredQueries.map((query) => (
-              <div 
-                key={query.id} 
-                className={`sidebar__message sidebar__message--query ${
-                  query.stage === stage ? 'sidebar__message--current-stage' : ''
-                }`}
-                onClick={() => {
-                  // Switch to this query's stage when clicked
-                  if (query.stage !== stage) {
-                    handleInternalStageChange(query.stage);
-                  }
-                }}
-                style={{ cursor: 'pointer' }}
-              >
-                <div className="sidebar__message-content">
-                  {/* Text field */}
-                  {hasValidValue(query.text) && (
-                    <div className="sidebar__message-field">
-                      <strong>Text:</strong> {query.text}
-                    </div>
-                  )}
-                  
-                  {/* OCR field */}
-                  {hasValidValue(query.ocr) && (
-                    <div className="sidebar__message-field">
-                      <strong>OCR:</strong> {query.ocr}
-                    </div>
-                  )}
-                  
-                  {/* Speech field */}
-                  {hasValidValue(query.speech) && (
-                    <div className="sidebar__message-field">
-                      <strong>Speech:</strong> {query.speech}
-                    </div>
-                  )}
-                  
-                  {/* Image field */}
-                  {hasValidValue(query.image) && (
-                    <div className="sidebar__message-field sidebar__message-image">
-                      <img src={query.image} alt="Query image" className="sidebar__query-image" />
-                    </div>
-                  )}
-                  
-                  {/* Meta info */}
-                  {/* <div className="sidebar__message-meta">
-                    <span className="sidebar__message-stage">Stage {query.stage}</span>
-                    <span className="sidebar__message-date">
-                      {(() => {
-                        try {
-                          const date = new Date(query.created_at);
-                          return isNaN(date.getTime()) ? 
-                            'Invalid Date' : 
-                            date.toLocaleString('en-US', {
-                              month: '2-digit',
-                              day: '2-digit', 
-                              year: 'numeric',
-                              hour: '2-digit',
-                              minute: '2-digit',
-                              hour12: true
-                            });
-                        } catch (error) {
-                          return 'Date Error';
-                        }
-                      })()}
-                    </span>
-                  </div> */}
-                </div>
+        <SidebarQueries
+          loading={loading}
+          filteredQueries={localQueries}
+          stage={stage}
+          onStageChange={handleInternalStageChange}
+          onDeleteQuery={handleDeleteQuery}
+          messagesEndRef={messagesEndRef}
+        />
 
-                {/* Delete button for individual query */}
-                <button 
-                  onClick={() => handleDeleteQuery(query.id)}
-                  className="sidebar__delete-query"
-                  title="Delete this query"
-                >
-                  <svg 
-                    width="14" 
-                    height="14" 
-                    viewBox="0 0 24 24" 
-                    fill="none" 
-                    xmlns="http://www.w3.org/2000/svg"
-                    className="sidebar__delete-query-icon"
-                  >
-                    <path 
-                      d="M3 6.52381C3 6.12932 3.32671 5.80952 3.72973 5.80952H8.51787C8.52437 4.9683 8.61554 3.81504 9.45037 3.01668C10.1074 2.38839 11.0081 2 12 2C12.9919 2 13.8926 2.38839 14.5496 3.01668C15.3844 3.81504 15.4756 4.9683 15.4821 5.80952H20.2703C20.6733 5.80952 21 6.12932 21 6.52381C21 6.9183 20.6733 7.2381 20.2703 7.2381H3.72973C3.32671 7.2381 3 6.9183 3 6.52381Z" 
-                      fill="currentColor"
-                    />
-                    <path 
-                      fillRule="evenodd" 
-                      clipRule="evenodd" 
-                      d="M11.5956 22H12.4044C15.1871 22 16.5785 22 17.4831 21.1141C18.3878 20.2281 18.4803 18.7749 18.6654 15.8685L18.9321 11.6806C19.0326 10.1036 19.0828 9.31511 18.6289 8.81545C18.1751 8.31579 17.4087 8.31579 15.876 8.31579H8.12404C6.59127 8.31579 5.82488 8.31579 5.37105 8.81545C4.91722 9.31511 4.96744 10.1036 5.06788 11.6806L5.33459 15.8685C5.5197 18.7749 5.61225 20.2281 6.51689 21.1141C7.42153 22 8.81289 22 11.5956 22ZM10.2463 12.1885C10.2051 11.7546 9.83753 11.4381 9.42537 11.4815C9.01321 11.5249 8.71251 11.9117 8.75372 12.3456L9.25372 17.6087C9.29494 18.0426 9.66247 18.3591 10.0746 18.3157C10.4868 18.2724 10.7875 17.8855 10.7463 17.4516L10.2463 12.1885ZM14.5746 11.4815C14.9868 11.5249 15.2875 11.9117 15.2463 12.3456L14.7463 17.6087C14.7051 18.0426 14.3375 18.3591 13.9254 18.3157C13.5132 18.2724 13.2125 17.8855 13.2537 17.4516L13.7537 12.1885C13.7949 11.7546 14.1625 11.4381 14.5746 11.4815Z" 
-                      fill="currentColor"
-                    />
-                  </svg>
-                </button>
-              </div>
-            ))
-          ) : (
-            <div className="sidebar__empty">
-              <p>No queries in Stage {stage}. Start by entering text, uploading an image, or using voice input.</p>
-            </div>
-          )}
-          <div ref={messagesEndRef} />
-        </div>
-
-        <div className="sidebar__input">
-          {/* Stage Indicator */}
-          {/* <div className="sidebar__stage-indicator">
-            <span className="sidebar__stage-text">Creating query for Stage {stage}</span>
-          </div> */}
-
-          {/* Hidden file input for image paste */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            onChange={handleImageUpload}
-            className="sidebar__file-input"
-            id="image-upload"
-            style={{ display: 'none' }}
+          <QueryInput
+            currentLocalQuery={currentLocalQuery}
+            updateCurrentLocalQuery={updateCurrentLocalQuery}
+            isRecording={isRecording}
+            setIsRecording={setIsRecording}
+            isTranslating={isTranslating}
+            setIsTranslating={setIsTranslating}
+            currentInputIndex={currentInputIndex}
+            setCurrentInputIndex={setCurrentInputIndex}
+            loading={loading}
+            onSendMessage={handleSendMessage}
+            onKeyPress={handleKeyPress}
+            onPaste={handlePaste}
+            onDragOver={handleDragOver}
+            onDragEnter={handleDragEnter}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
           />
 
-          {/* Image Preview - Moved to top */}
-          {uploadedImage && (
-            <div className="sidebar__image-preview">
-              <img src={uploadedImage} alt="Uploaded" className="sidebar__preview-img" />
-              <button onClick={handleRemoveImage} className="sidebar__remove-image">×</button>
-            </div>
-          )}
-
-          {/* OCR Text Input Section */}
-          <div className="sidebar__input-section">
-            <label className="sidebar__input-label">OCR:</label>
-            <div className="sidebar__input-container">
-              <textarea
-                ref={ocrTextareaRef}
-                value={ocrText}
-                onChange={(e) => setOcrText(e.target.value)}
-                placeholder="OCR text from images..."
-                className="sidebar__input-field"
-                rows={1}
-                onFocus={() => handleInputFocus(0)}
-                onBlur={handleInputBlur}
-              />
-              {ocrText.trim() && (
-                <button 
-                  onClick={handleTranslateOcr}
-                  disabled={isTranslating}
-                  className="sidebar__translate-btn"
-                  title="Translate to English"
-                >
-                  {isTranslating ? '...' : '🌐'}
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Speech Text Input Section */}
-          <div className="sidebar__input-section">
-            <label className="sidebar__input-label">Speech:</label>
-            <div className="sidebar__input-container">
-              <textarea
-                ref={speechTextareaRef}
-                value={speechText}
-                onChange={(e) => setSpeechText(e.target.value)}
-                placeholder="Speech to text result..."
-                className="sidebar__input-field"
-                rows={1}
-                onFocus={() => handleInputFocus(1)}
-                onBlur={handleInputBlur}
-              />
-              {speechText.trim() && (
-                <button 
-                  onClick={handleTranslateSpeech}
-                  disabled={isTranslating}
-                  className="sidebar__translate-btn"
-                  title="Translate to English"
-                >
-                  {isTranslating ? '...' : '🌐'}
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Main Chat Input - Text input with Send and Mic only */}
-          <div className="sidebar__input-container sidebar__main-input-container">
-            <textarea
-              ref={textareaRef}
-              value={inputMessage}
-              onChange={(e) => {
-                setInputMessage(e.target.value);
-                // Trigger resize on next tick to ensure DOM is updated
-                setTimeout(() => adjustTextareaHeight(), 0);
-              }}
-              onInput={() => {
-                // Also trigger on input event for better responsiveness
-                setTimeout(() => adjustTextareaHeight(), 0);
-              }}
-              onKeyPress={handleKeyPress}
-              placeholder="Type your query here..."
-              className="sidebar__input-field"
-              rows={1}
-              onFocus={() => handleInputFocus(2)}
-              onBlur={handleInputBlur}
-            />
-            <div className="sidebar__input-actions">
-              <button
-              onClick={handleMicrophoneClick}
-              className={`sidebar__mic-btn ${isRecording ? 'recording' : ''}`}
-              title={isRecording ? "Stop recording" : "Start recording"}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M12 1c-1.66 0-3 1.34-3 3v8c0 1.66 1.34 3 3 3s3-1.34 3-3V4c0-1.66-1.34-3-3-3zm5.91 9.38c0 3.45-2.79 6.26-6.26 6.26S5.39 13.83 5.39 10.38H3.61c0 4.7 3.41 8.6 7.87 9.48v2.05c0 .55.45 1 1 1s1-.45 1-1v-2.05c4.46-.88 7.87-4.78 7.87-9.48h-1.78z"/>
-              </svg>
-            </button>
-
-            <button 
-              onClick={handleSendMessage} 
-              disabled={loading || (!inputMessage.trim() && !uploadedImage && !ocrText.trim() && !speechText.trim())}
-              className="sidebar__send-btn"
-            >
-              <img src="/assets/send-alt-1-svgrepo-com.svg" alt="Send" />
-            </button>
-            </div>
-            
-          </div>
-        </div>
       </div>
         </>
       )}
