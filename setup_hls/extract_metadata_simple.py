@@ -6,7 +6,7 @@ from pathlib import Path
 
 # Configuration
 INPUT_PATH = "/media/hkduy/ssd_duy_deptrai/storage/videos"  # Path to input videos
-OUTPUT_PATH = "/media/hkduy/ssd_duy_deptrai/storage/frames"  # Path to save metadata
+OUTPUT_PATH = "/media/hkduy/ssd_duy_deptrai/storage/cframes"  # Path to save metadata
 
 def extract_video_metadata(video_path):
     """Extract metadata from a video file"""

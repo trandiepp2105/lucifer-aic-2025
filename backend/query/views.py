@@ -192,7 +192,7 @@ class QueryListCreateAPIView(APIView):
         queries_structure_str = json.dumps(queries_structure)
         
         # Default weights - có thể được override bởi request params
-        default_weights = {'text': 0.6, 'ocr': 0.2, 'image': 0.2}
+        default_weights = {'text': 0.4, 'ocr': 0.4, 'image': 0.2}
         
         # Cho phép client gửi custom weights qua query params
         weights = {}
@@ -471,7 +471,7 @@ class QueryListCreateAPIView(APIView):
                 frame_index = filename.replace('.jpg', '')
                 
                 # Build frame URL
-                frame_url = f"{base_url}/media/frames/{video_name}/{frame_index}.jpg"
+                frame_url = f"{base_url}/media/cframes/{video_name}/{frame_index}.webp"
                 
                 frame_data = {
                     'url': frame_url,
