@@ -5,7 +5,8 @@ const QueryItem = ({
   query, 
   isCurrentStage, 
   onStageChange, 
-  onDelete 
+  onDelete,
+  onCreateQuery 
 }) => {
   // Helper function to check if a field has a valid value
   const hasValidValue = (value) => {
@@ -17,6 +18,11 @@ const QueryItem = ({
            value.trim() !== '';
   };
 
+  // Check if query has content to allow creating new query after it
+  const hasContent = () => {
+    return hasValidValue(query.text) || hasValidValue(query.ocr) || hasValidValue(query.image);
+  };
+
   const handleClick = () => {
     if (query.stage !== isCurrentStage && onStageChange) {
       onStageChange(query.stage);
@@ -26,7 +32,7 @@ const QueryItem = ({
   const handleDelete = (e) => {
     e.stopPropagation();
     if (onDelete) {
-      onDelete(query.id);
+      onDelete(query.stage); // Pass stage instead of ID for local management
     }
   };
 
@@ -86,11 +92,13 @@ const QueryItem = ({
           <button 
             onClick={(e) => {
               e.stopPropagation();
-              // TODO: Implement create query function
-              console.log('Create query clicked');
+              if (hasContent() && onCreateQuery) {
+                onCreateQuery(query.stage);
+              }
             }}
-            className="sidebar__action-btn sidebar__action-btn--create"
-            title="Create new query"
+            className={`sidebar__action-btn sidebar__action-btn--create ${!hasContent() ? 'disabled' : ''}`}
+            title={hasContent() ? "Create new query after this" : "Add content to create new query"}
+            disabled={!hasContent()}
           >
             <svg 
               width="12" 

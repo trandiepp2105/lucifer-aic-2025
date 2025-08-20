@@ -18,7 +18,7 @@ const DisplayListFrame = ({
   currentStage = 1, 
   viewMode = 'gallery', 
   onViewModeChange, 
-  availableStages = 1,
+  availableStages = [1],
   queryMode = 'kis', // Add queryMode prop
   onSend, // Add onSend prop
   sendingFrames = new Set(), // Add sendingFrames prop
@@ -246,7 +246,7 @@ const DisplayListFrame = ({
       <div className="display-frame__header">
         <div className="display-frame__stage-selector">
           <div className="display-frame__stages">
-            {Array.from({ length: availableStages }, (_, i) => i + 1).map((stage) => (
+            {(Array.isArray(availableStages) ? availableStages : Array.from({ length: availableStages }, (_, i) => i + 1)).map((stage) => (
               <button
                 key={stage}
                 className={`display-frame__stage ${currentStage === stage ? 'display-frame__stage--active' : ''}`}

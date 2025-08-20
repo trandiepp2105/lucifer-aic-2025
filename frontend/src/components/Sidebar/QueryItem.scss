@@ -136,6 +136,19 @@
       border-color: #28a745;
       color: #155724;
     }
+
+    &.disabled {
+      color: #6c757d;
+      opacity: 0.5;
+      cursor: not-allowed;
+      
+      &:hover {
+        background: rgba(255, 255, 255, 0.95);
+        border-color: #dee2e6;
+        color: #6c757d;
+        transform: none;
+      }
+    }
   }
 
   &--delete {

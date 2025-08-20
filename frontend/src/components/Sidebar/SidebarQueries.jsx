@@ -8,6 +8,7 @@ const SidebarQueries = ({
   stage,
   onStageChange,
   onDeleteQuery,
+  onCreateQuery,
   messagesEndRef
 }) => {
   return (
@@ -20,11 +21,12 @@ const SidebarQueries = ({
       ) : filteredQueries.length > 0 ? (
         filteredQueries.map((query) => (
           <QueryItem
-            key={query.id}
+            key={query.id || `stage-${query.stage}`}
             query={query}
             isCurrentStage={query.stage === stage}
             onStageChange={onStageChange}
             onDelete={onDeleteQuery}
+            onCreateQuery={onCreateQuery}
           />
         ))
       ) : (
