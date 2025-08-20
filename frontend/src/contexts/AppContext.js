@@ -1,10 +1,15 @@
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
 import { TeamAnswerService } from '../services/TeamAnswerService';
+import { QueryService } from '../services/QueryService';
+
+// Store session param from URL for validation (outside of state)
+let urlSessionParam = null;
 
 // Function to get initial state from URL
 const getInitialStateFromURL = () => {
   const defaultState = {
     session: null,        // số
+    sessionLoading: true, // loading state for session validation
     queryMode: 'kis',     // 'kis' hoặc 'qa'
     round: 'final',     // 'prelims' hoặc 'final'
     viewMode: 'gallery',  // 'gallery' hoặc 'samevideo'
@@ -30,9 +35,11 @@ const getInitialStateFromURL = () => {
   const urlParams = new URLSearchParams(window.location.search);
   const urlState = { ...defaultState };
   
+  // Set session from URL immediately, store for validation
   const sessionParam = urlParams.get('session');
   if (sessionParam) {
-    urlState.session = parseInt(sessionParam, 10);
+    urlState.session = sessionParam; // Set immediately for components
+    urlSessionParam = sessionParam; // Also store globally for validation
   }
   
   const queryModeParam = urlParams.get('querymode');
@@ -81,7 +88,6 @@ const getInitialStateFromURL = () => {
     urlState.queryIndex = getDefaultQueryIndex(urlState.round);
   }
 
-  console.log('AppContext: Initial state from URL:', urlState);
   return urlState;
 };
 
@@ -91,6 +97,7 @@ const initialState = getInitialStateFromURL();
 // Action types
 const ActionTypes = {
   SET_SESSION: 'SET_SESSION',
+  SET_SESSION_LOADING: 'SET_SESSION_LOADING',
   SET_QUERY_MODE: 'SET_QUERY_MODE',
   SET_ROUND: 'SET_ROUND',
   SET_VIEW_MODE: 'SET_VIEW_MODE',
@@ -108,7 +115,9 @@ const ActionTypes = {
 const appReducer = (state, action) => {
   switch (action.type) {
     case ActionTypes.SET_SESSION:
-      return { ...state, session: action.payload };
+      return { ...state, session: action.payload, sessionLoading: false };
+    case ActionTypes.SET_SESSION_LOADING:
+      return { ...state, sessionLoading: action.payload };
     case ActionTypes.SET_QUERY_MODE:
       return { ...state, queryMode: action.payload };
     case ActionTypes.SET_ROUND:
@@ -188,6 +197,46 @@ export const AppProvider = ({ children }) => {
   // Load initial state from URL - REMOVED since we read URL in initialState
   // This prevents race condition between default state and URL params
   
+  // Session validation and initialization
+  useEffect(() => {
+    const initializeSession = async () => {
+      // Check if there's a session in current state (from URL)
+      if (state.session) {
+        dispatch({ type: ActionTypes.SET_SESSION_LOADING, payload: true });
+        
+        try {
+          const response = await QueryService.validateSession(state.session);
+          if (response.success && response.data) {
+            dispatch({ type: ActionTypes.SET_SESSION_LOADING, payload: false });
+            return;
+          }
+        } catch (error) {
+          console.error('Session validation error:', error);
+        }
+      }
+      
+      // Create new session if no valid session found
+      dispatch({ type: ActionTypes.SET_SESSION_LOADING, payload: true });
+      
+      try {
+        const response = await QueryService.createSession();
+        if (response.success && response.data) {
+          const newSessionId = response.data.data.id;
+          dispatch({ type: ActionTypes.SET_SESSION, payload: newSessionId });
+        } else {
+          console.error('Failed to create session');
+        }
+      } catch (error) {
+        console.error('Error creating session:', error);
+      }
+      
+      dispatch({ type: ActionTypes.SET_SESSION_LOADING, payload: false });
+      urlSessionParam = null; // Clear after use
+    };
+    
+    initializeSession();
+  }, []); // Empty dependency array - only run once on mount
+  
   // Remove auto-detect from here - will be handled in HomePage
   // useEffect(() => {
   //   const detectQueryMode = () => {
@@ -198,8 +247,7 @@ export const AppProvider = ({ children }) => {
 
   // Update URL when state changes - with proper dependencies
   useEffect(() => {
-    updateUrlState({
-      session: state.session,
+    const urlStateToUpdate = {
       queryMode: state.queryMode,
       round: state.round,
       viewMode: state.viewMode,
@@ -208,7 +256,14 @@ export const AppProvider = ({ children }) => {
       queryIndex: state.queryIndex,
       k: state.k,
       searchUrl: state.searchUrl,
-    });
+    };
+    
+    // Only include session if it's not null - let Sidebar manage session in URL
+    if (state.session !== null) {
+      urlStateToUpdate.session = state.session;
+    }
+    
+    updateUrlState(urlStateToUpdate);
   }, [state.session, state.queryMode, state.round, state.viewMode, state.stage, state.section, state.queryIndex, state.k, state.searchUrl]);
 
   // Actions

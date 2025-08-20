@@ -115,8 +115,8 @@ const VideoPlayer = ({ isOpen, onClose, currentFrame, onFrameSelect, onSubmit, o
         // Create new frame URL by replacing frame_index in the original URL
         const baseUrl = baseCenterFrame.thumbnail || baseCenterFrame.url;
         const newUrl = baseUrl.replace(
-          `/${centerFrameIndex}.jpg`, 
-          `/${targetFrameIndex}.jpg`
+          `/${centerFrameIndex}.webp`, 
+          `/${targetFrameIndex}.webp`
         );
         
         frameData = {

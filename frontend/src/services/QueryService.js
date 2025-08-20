@@ -489,6 +489,52 @@ class QueryServiceClass {
     }
   }
 
+  /**
+   * Batch update queries for a session
+   * @param {number} sessionId - Session ID
+   * @param {Array} queries - Array of query objects
+   * @returns {Promise<Object>} Response with updated queries from server
+   */
+  async batchUpdateQueries(sessionId, queries) {
+    try {
+      const requestBody = {
+        session: sessionId,
+        localQueries: queries  // Changed from 'queries' to 'localQueries' to match backend expectation
+      };
+      
+      const response = await fetch(`${this.baseURL}/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestBody)
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.error('Bad request details:', { 
+          status: response.status, 
+          statusText: response.statusText,
+          responseData: data 
+        });
+        return {
+          success: false,
+          error: data.detail || data.error || data.message || `HTTP ${response.status}: ${response.statusText}`,
+          status: response.status,
+          responseData: data
+        };
+      }
+
+      return {
+        success: true,
+        data: data
+      };
+    } catch (error) {
+      return handleApiError(error);
+    }
+  }
+
 }
 
 // Export singleton instance

@@ -242,6 +242,13 @@ class QueryListCreateAPIView(APIView):
                 files_to_send.append(('image_files', (filename, f, 'image/jpeg')))
 
             # Gửi request POST tới search_url/search
+            if not search_url:
+                return Response({
+                    'message': 'No search URL provided',
+                    'frames': [],
+                    'data': sorted_queries_serializer.data,
+                }, status=status.HTTP_200_OK)
+                
             search_endpoint = f"{search_url.rstrip('/')}/search"
             
             # Use helper method to create configured session
@@ -301,52 +308,164 @@ class QueryListCreateAPIView(APIView):
                 f.close()    
 
     @swagger_auto_schema(
-        operation_summary="Create a new query",
-        operation_description="Create a new query with optional image upload.",
-        request_body=QueryCreateSerializer,
+        operation_summary="Synchronize local queries with server",
+        operation_description="Batch create/update/delete queries based on localQueries from frontend.",
+        request_body=openapi.Schema(
+            type=openapi.TYPE_OBJECT,
+            properties={
+                'session': openapi.Schema(type=openapi.TYPE_INTEGER, description="Session ID"),
+                'localQueries': openapi.Schema(
+                    type=openapi.TYPE_ARRAY,
+                    items=openapi.Schema(
+                        type=openapi.TYPE_OBJECT,
+                        properties={
+                            'id': openapi.Schema(type=openapi.TYPE_INTEGER, description="Query ID (optional for new queries)"),
+                            'session': openapi.Schema(type=openapi.TYPE_INTEGER),
+                            'text': openapi.Schema(type=openapi.TYPE_STRING),
+                            'ocr': openapi.Schema(type=openapi.TYPE_STRING),
+                            'speech': openapi.Schema(type=openapi.TYPE_STRING),
+                            'image': openapi.Schema(type=openapi.TYPE_STRING),
+                            'stage': openapi.Schema(type=openapi.TYPE_INTEGER),
+                        }
+                    )
+                )
+            }
+        ),
         responses={
-            201: openapi.Response(
-                description="Query created successfully",
+            200: openapi.Response(
+                description="Queries synchronized successfully",
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
                         'message': openapi.Schema(type=openapi.TYPE_STRING),
                         'data': openapi.Schema(
-                            type=openapi.TYPE_OBJECT,
-                            properties={
-                                'id': openapi.Schema(type=openapi.TYPE_INTEGER),
-                                'text': openapi.Schema(type=openapi.TYPE_STRING),
-                                'ocr': openapi.Schema(type=openapi.TYPE_STRING),
-                                'speech': openapi.Schema(type=openapi.TYPE_STRING),
-                                'image': openapi.Schema(type=openapi.TYPE_STRING),
-                                'time': openapi.Schema(type=openapi.TYPE_STRING),
-                                'background_sound': openapi.Schema(type=openapi.TYPE_STRING),
-                                'stage': openapi.Schema(type=openapi.TYPE_INTEGER),
-                            }
-                        ),
+                            type=openapi.TYPE_ARRAY,
+                            items=openapi.Schema(
+                                type=openapi.TYPE_OBJECT,
+                                properties={
+                                    'id': openapi.Schema(type=openapi.TYPE_INTEGER),
+                                    'session': openapi.Schema(type=openapi.TYPE_INTEGER),
+                                    'text': openapi.Schema(type=openapi.TYPE_STRING),
+                                    'ocr': openapi.Schema(type=openapi.TYPE_STRING),
+                                    'speech': openapi.Schema(type=openapi.TYPE_STRING),
+                                    'image': openapi.Schema(type=openapi.TYPE_STRING),
+                                    'stage': openapi.Schema(type=openapi.TYPE_INTEGER),
+                                }
+                            )
+                        )
                     }
                 )
             ),
-            400: openapi.Response(description="Validation error")
+            400: openapi.Response(description="Validation error"),
+            404: openapi.Response(description="Session not found")
         }
     )
     def post(self, request):
-        """Create a new query"""
-        serializer = QueryCreateSerializer(data=request.data)
-        if serializer.is_valid():
-            query = serializer.save()
+        """Synchronize localQueries with server database"""
+        try:
+            print(f"POST request data: {request.data}")
+            session_id = request.data.get('session')
+            local_queries = request.data.get('localQueries', [])
             
-            response_serializer = QuerySerializer(query, context={'request': request})
+            if not session_id:
+                return Response({
+                    'message': 'Session ID is required',
+                    'errors': {'session': ['This field is required.']}
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Get session
+            try:
+                session = QuerySession.objects.get(id=session_id)
+            except QuerySession.DoesNotExist:
+                return Response({
+                    'message': 'Session not found',
+                    'errors': {'session': ['Session does not exist.']}
+                }, status=status.HTTP_404_NOT_FOUND)
+            
+            # Get all existing queries for this session
+            server_queries = Query.objects.filter(session=session).order_by('stage')
+            server_queries_dict = {q.id: q for q in server_queries}
+            
+            # Track operations
+            updated_queries = []
+            created_queries = []
+            local_query_ids = set()
+            
+            # Process each local query
+            for local_query_data in local_queries:
+                query_id = local_query_data.get('id')
+                
+                if query_id and query_id in server_queries_dict:
+                    # UPDATE: Query exists on server, check for changes
+                    server_query = server_queries_dict[query_id]
+                    local_query_ids.add(query_id)
+                    
+                    # Check if any field has changed
+                    changes = {}
+                    fields_to_check = ['text', 'ocr', 'speech', 'image', 'stage']
+                    
+                    for field in fields_to_check:
+                        local_value = local_query_data.get(field)
+                        server_value = getattr(server_query, field)
+                        
+                        # Handle None values and empty strings
+                        local_value = local_value if local_value not in [None, 'null', ''] else None
+                        server_value = server_value if server_value not in [None, 'null', ''] else None
+                        
+                        if local_value != server_value:
+                            changes[field] = local_value
+                    
+                    if changes:
+                        # Update the query
+                        for field, value in changes.items():
+                            setattr(server_query, field, value)
+                        server_query.save()
+                        updated_queries.append(server_query)
+                        
+                elif not query_id or query_id not in server_queries_dict:
+                    # CREATE: New query (no ID or ID doesn't exist on server)
+                    serializer = QueryCreateSerializer(data={
+                        'session': session_id,
+                        'text': local_query_data.get('text'),
+                        'ocr': local_query_data.get('ocr'), 
+                        'speech': local_query_data.get('speech'),
+                        'image': local_query_data.get('image'),
+                        'stage': local_query_data.get('stage', 1),
+                    })
+                    
+                    if serializer.is_valid():
+                        new_query = serializer.save()
+                        created_queries.append(new_query)
+                    else:
+                        return Response({
+                            'message': 'Failed to create query',
+                            'errors': serializer.errors
+                        }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # DELETE: Server queries not present in local queries
+            server_query_ids_to_delete = set(server_queries_dict.keys()) - local_query_ids
+            deleted_count = 0
+            
+            if server_query_ids_to_delete:
+                deleted_count = Query.objects.filter(
+                    id__in=server_query_ids_to_delete,
+                    session=session
+                ).delete()[0]
+            
+            # Get final state from database
+            final_queries = Query.objects.filter(session=session).order_by('stage')
+            response_serializer = QuerySerializer(final_queries, many=True, context={'request': request})
             
             return Response({
-                'message': 'Query created successfully',
+                'message': f'Synchronized successfully. Created: {len(created_queries)}, Updated: {len(updated_queries)}, Deleted: {deleted_count}',
                 'data': response_serializer.data
-            }, status=status.HTTP_201_CREATED)
-        
-        return Response({
-            'message': 'Failed to create query',
-            'errors': serializer.errors
-        }, status=status.HTTP_400_BAD_REQUEST)
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            return Response({
+                'message': 'Error synchronizing queries',
+                'errors': {'detail': [str(e)]}
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     def _flatten_temporal_results(
         self, temporal_results: List[List[Tuple[str, float]]],
@@ -378,10 +497,8 @@ class QueryListCreateAPIView(APIView):
             List of search results or empty list if error
         """
         try:
-            # Sử dụng sync method 
-            results = search_service.search_ocr(ocr_text, size=k)
-
-            return results
+            # Return empty list since search service is not configured
+            return []
             
         except Exception as e:
             # Log error but don't fail the request
@@ -447,7 +564,8 @@ class QueryListCreateAPIView(APIView):
             return []
         
         # Get SERVER_IP from environment, fallback to request host
-        server_ip = os.environ.get('SERVER_IP')
+        # server_ip = os.environ.get('SERVER_IP')
+        server_ip = "172.23.190.19"
         if server_ip:
             base_url = f"http://{server_ip}"
         else:
@@ -471,7 +589,7 @@ class QueryListCreateAPIView(APIView):
                 frame_index = filename.replace('.jpg', '')
                 
                 # Build frame URL
-                frame_url = f"{base_url}/media/frames/{video_name}/{frame_index}.jpg"
+                frame_url = f"{base_url}/media/cframes/{video_name}/{frame_index}.webp"
                 
                 frame_data = {
                     'url': frame_url,
