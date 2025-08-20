@@ -158,7 +158,7 @@ const Sidebar = ({
         session: targetSessionId,
         viewmode: viewMode,
         k: k,
-        searchUrl: searchUrl
+        search_url: searchUrl
       });
 
       if (response.success) {
@@ -213,6 +213,14 @@ const Sidebar = ({
       const queriesToSync = localQueries
         .filter(query => query.id || queryHasContent(query))
         .map(query => {
+          console.log('🔍 Processing query for sync:', {
+            stage: query.stage,
+            hasImageFile: !!query.imageFile,
+            imageFileSize: query.imageFile?.size,
+            hasImage: !!query.image,
+            imageRemoved: query.imageRemoved
+          });
+          
           const syncQuery = {
             stage: query.stage,
             time: query.time || new Date().toISOString()
@@ -243,17 +251,23 @@ const Sidebar = ({
       if (response.success) {
         // Handle image uploads first if any
         const localQueriesWithImages = localQueries.filter(q => q.imageFile);
+        console.log('🔍 Found queries with images:', localQueriesWithImages.length);
         if (localQueriesWithImages.length > 0) {
           for (const imageQuery of localQueriesWithImages) {
+            console.log('🔍 Processing image for query stage:', imageQuery.stage, 'imageFile:', !!imageQuery.imageFile);
             // Find the synced query by stage since it might have a new ID
-            const syncedQuery = response.data.find(q => q.stage === imageQuery.stage);
+            const syncedQuery = response.data.data.find(q => q.stage === imageQuery.stage);
             if (syncedQuery) {
-              const imageFormData = new FormData();
-              imageFormData.append('image', imageQuery.imageFile);
+              console.log('🔍 Found synced query with ID:', syncedQuery.id, 'uploading image...');
               
-              const imageResponse = await QueryService.updateQuery(syncedQuery.id, imageFormData);
+              // Send image as object with image property, not as FormData directly
+              const imageResponse = await QueryService.updateQuery(syncedQuery.id, {
+                image: imageQuery.imageFile
+              });
               if (!imageResponse.success) {
                 console.error('❌ Image upload failed for query:', syncedQuery.id);
+              } else {
+                console.log('✅ Image upload successful for query:', syncedQuery.id);
               }
             }
           }
@@ -422,8 +436,14 @@ const Sidebar = ({
       setIsTranslating(true);
       const translatedText = await translatorService.translateText(inputValue, targetLanguage);
       
+      // Update the DOM element
       activeElement.value = translatedText;
       
+      // Trigger React onChange event to sync state
+      const event = new Event('input', { bubbles: true });
+      activeElement.dispatchEvent(event);
+      
+      // Also update the local query directly
       if (activeElement.id === 'text-input') {
         updateCurrentLocalQuery({ text: translatedText });
       } else if (activeElement.id === 'ocr-input') {

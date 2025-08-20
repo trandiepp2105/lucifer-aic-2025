@@ -14,12 +14,7 @@ const QueryInput = ({
   setCurrentInputIndex,
   loading,
   onSendMessage,
-  onKeyPress,
-  onPaste,
-  onDragOver,
-  onDragEnter,
-  onDragLeave,
-  onDrop
+  onKeyPress
 }) => {
   const toast = useToast();
   const fileInputRef = useRef(null);
@@ -154,9 +149,15 @@ const QueryInput = ({
 
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
+    console.log('🔍 handleImageUpload called with file:', file);
     if (file) {
       const reader = new FileReader();
       reader.onload = (e) => {
+        console.log('🔍 Image loaded, updating query with:', {
+          imageSize: file.size,
+          imageType: file.type,
+          imageName: file.name
+        });
         updateCurrentLocalQuery({
           image: e.target.result,
           imageFile: file,
@@ -256,14 +257,83 @@ const QueryInput = ({
     }, 50);
   };
 
+  // Handle image paste from clipboard (Ctrl+V)
+  const handlePaste = (e) => {
+    const items = e.clipboardData.items;
+    for (let item of items) {
+      if (item.type.indexOf('image') !== -1) {
+        const file = item.getAsFile();
+        if (file) {
+          handleImageUpload({ target: { files: [file] } });
+          e.preventDefault();
+          break;
+        }
+      }
+    }
+  };
+
+  // Handle drop events for drag & drop from frame items
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  };
+
+  const handleDragEnter = (e) => {
+    e.preventDefault();
+    // Add visual feedback for drop zone
+    e.currentTarget.classList.add('sidebar__drop-zone--active');
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    // Remove visual feedback only if leaving the drop zone completely
+    if (!e.currentTarget.contains(e.relatedTarget)) {
+      e.currentTarget.classList.remove('sidebar__drop-zone--active');
+    }
+  };
+
+  const handleDrop = async (e) => {
+    e.preventDefault();
+    e.currentTarget.classList.remove('sidebar__drop-zone--active');
+    
+    try {
+      // Check if it's a frame drag from the main area
+      const dragData = JSON.parse(e.dataTransfer.getData('application/json'));
+      
+      if (dragData.type === 'frame-image' && dragData.url) {
+        // Convert frame URL to blob and set as uploaded image
+        const response = await fetch(dragData.url);
+        const blob = await response.blob();
+        
+        // Create file object from blob
+        const file = new File([blob], `${dragData.frame.filename}.jpg`, { type: 'image/jpeg' });
+        handleImageUpload({ target: { files: [file] } });
+        
+        toast.success(`Image from ${dragData.frame.filename} added to query`);
+      }
+    } catch (error) {
+      // If JSON parsing fails, try to handle as file drop
+      const files = Array.from(e.dataTransfer.files);
+      const imageFiles = files.filter(file => file.type.startsWith('image/'));
+      
+      if (imageFiles.length > 0) {
+        handleImageUpload({ target: { files: [imageFiles[0]] } });
+        toast.success('Image added to query');
+      } else {
+        console.error('Error handling dropped item:', error);
+        toast.error('Failed to add image from drop');
+      }
+    }
+  };
+
   return (
     <div 
-      className="sidebar__input"
-      onPaste={onPaste}
-      onDragOver={onDragOver}
-      onDragEnter={onDragEnter}
-      onDragLeave={onDragLeave}
-      onDrop={onDrop}
+      className="sidebar__input sidebar__drop-zone"
+      onPaste={handlePaste}
+      onDragOver={handleDragOver}
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
     >
       {/* Hidden file input for image paste */}
       <input
@@ -289,6 +359,7 @@ const QueryInput = ({
         <label className="sidebar__input-label">OCR:</label>
         <div className="sidebar__input-container">
           <textarea
+            id="ocr-input"
             ref={ocrTextareaRef}
             value={getSafeValue(currentLocalQuery?.ocr)}
             onChange={(e) => updateCurrentLocalQuery({ ocr: e.target.value })}
@@ -343,6 +414,7 @@ const QueryInput = ({
       {/* Main Chat Input - Text input with Send and Mic only */}
       <div className="sidebar__input-container sidebar__main-input-container">
         <textarea
+          id="text-input"
           ref={textareaRef}
           value={getSafeValue(currentLocalQuery?.text)}
           onChange={(e) => {

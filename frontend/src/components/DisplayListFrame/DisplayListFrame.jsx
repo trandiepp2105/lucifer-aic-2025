@@ -157,7 +157,7 @@ const DisplayListFrame = ({
       <div className="display-frame__gallery">
         {frames.map((frame, index) => (
           <FrameItem
-            key={`${frame.video_name}-${frame.frame_index}-${index}`}
+            key={`gallery-${frame.video_name}-${frame.frame_index}-${index}`}
             frame={frame}
             isSelected={
               selectedFrame && 
@@ -205,7 +205,7 @@ const DisplayListFrame = ({
               <div className="display-frame__video-grid">
                 {videoFrames.map((frame, frameIndex) => (
                   <FrameItem
-                    key={`${frame.video_name}-${frame.frame_index}-${frameIndex}`}
+                    key={`${videoIndex}-${frame.video_name}-${frame.frame_index}-${frameIndex}`}
                     frame={frame}
                     isSelected={
                       selectedFrame && 

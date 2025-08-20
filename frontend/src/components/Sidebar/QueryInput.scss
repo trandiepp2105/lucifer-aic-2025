@@ -260,3 +260,29 @@
     cursor: not-allowed;
   }
 }
+
+// Drop zone styles
+.sidebar__drop-zone {
+  position: relative;
+  transition: background-color 0.2s ease;
+  
+  &--active {
+    background-color: rgba(0, 123, 255, 0.1);
+    border-color: #007bff;
+    
+    &::after {
+      content: "Drop image here";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0, 123, 255, 0.9);
+      color: white;
+      padding: 1rem 2rem;
+      border-radius: 8px;
+      font-weight: 500;
+      z-index: 1000;
+      pointer-events: none;
+    }
+  }
+}
