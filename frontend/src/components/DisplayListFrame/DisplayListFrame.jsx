@@ -18,7 +18,7 @@ const DisplayListFrame = ({
   currentStage = 1, 
   viewMode = 'gallery', 
   onViewModeChange, 
-  availableStages = 1,
+  availableStages = [1],
   queryMode = 'kis', // Add queryMode prop
   onSend, // Add onSend prop
   sendingFrames = new Set(), // Add sendingFrames prop
@@ -157,7 +157,7 @@ const DisplayListFrame = ({
       <div className="display-frame__gallery">
         {frames.map((frame, index) => (
           <FrameItem
-            key={`${frame.video_name}-${frame.frame_index}-${index}`}
+            key={`gallery-${frame.video_name}-${frame.frame_index}-${index}`}
             frame={frame}
             isSelected={
               selectedFrame && 
@@ -200,12 +200,12 @@ const DisplayListFrame = ({
           const videoName = videoFrames[0]?.video_name || `Video ${videoIndex + 1}`;
 
           return (
-            <div key={videoName} className="display-frame__video-section">
+            <div className="display-frame__video-section">
               {videoIndex > 0 && <div className="display-frame__video-separator"></div>}
               <div className="display-frame__video-grid">
                 {videoFrames.map((frame, frameIndex) => (
                   <FrameItem
-                    key={`${frame.video_name}-${frame.frame_index}-${frameIndex}`}
+                    key={`samevideo-${videoIndex}-${frame.video_name}-${frame.frame_index}-${frameIndex}`}
                     frame={frame}
                     isSelected={
                       selectedFrame && 
@@ -246,7 +246,7 @@ const DisplayListFrame = ({
       <div className="display-frame__header">
         <div className="display-frame__stage-selector">
           <div className="display-frame__stages">
-            {Array.from({ length: availableStages }, (_, i) => i + 1).map((stage) => (
+            {(Array.isArray(availableStages) ? availableStages : Array.from({ length: availableStages }, (_, i) => i + 1)).map((stage) => (
               <button
                 key={stage}
                 className={`display-frame__stage ${currentStage === stage ? 'display-frame__stage--active' : ''}`}

@@ -1,0 +1,288 @@
+// QueryInput component styles
+.sidebar__input {
+  border-top: 1px solid #e9ecef;
+  padding: 0.5rem;
+  background: #f8f9fa;
+}
+
+.sidebar__input-container {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+  background: white;
+  border-radius: 8px;
+  padding: 0.5rem;
+  border: 1px solid #dee2e6;
+
+  &:focus-within {
+    border-color: #007bff;
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+  }
+}
+
+.sidebar__main-input-container {
+  flex-direction: column !important;
+  align-items: stretch !important;
+  padding-bottom: 0.125rem;
+  gap: 0;
+  min-height: auto !important;
+  height: auto !important;
+  
+  // Ensure textarea can expand
+  .sidebar__input-field {
+    flex-grow: 1;
+    flex-shrink: 0;
+    flex-basis: auto;
+  }
+}
+
+.sidebar__input-field {
+  width: 100%;
+  flex: 1;
+  background: none;
+  border: none;
+  color: #333;
+  font-size: 0.9rem;
+  resize: none;
+  
+  height: auto !important; // Allow inline style to override
+  min-height: 20px !important;
+  max-height: 150px !important;
+  outline: none;
+  font-family: inherit;
+  overflow-y: auto;
+  transition: height 0.1s ease, opacity 0.2s ease;
+  line-height: 1.4;
+
+  // Specific rule for main input container textarea
+  .sidebar__main-input-container & {
+    height: auto !important;
+    min-height: 20px !important;
+    max-height: 150px !important;
+    flex-shrink: 0;
+  }
+
+  &::placeholder {
+    color: #6c757d;
+  }
+
+  &:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+    
+    &::placeholder {
+      color: #007acc;
+      font-style: italic;
+    }
+  }
+}
+
+.sidebar__input-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+  
+  .sidebar__main-input-container & {
+    justify-content: flex-end;
+    padding-top: 0.25rem;
+  }
+}
+
+.sidebar__input-section {
+  margin-bottom: 0.25rem;
+  
+  &:last-of-type {
+    margin-bottom: 0;
+  }
+}
+
+.sidebar__input-label {
+  display: block;
+  font-size: 0.625rem;
+  font-weight: 500;
+  color: #495057;
+  margin-bottom: 0.25rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+// Image preview styles
+.sidebar__image-preview {
+  padding: 0.25rem;
+  border-top: 1px solid #e9ecef;
+  border-bottom: 1px solid #e9ecef;
+  position: relative;
+  background: #f8f9fa;
+  margin-bottom: 0.125rem; // Add space between image preview and OCR section
+  
+  img {
+    max-width: 100px;
+    max-height: 100px;
+    border-radius: 8px;
+    object-fit: cover;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+}
+
+.sidebar__remove-image {
+  position: absolute;
+  top: 0.2rem;
+  right: 0.8rem;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &:hover {
+    background: rgba(0, 0, 0, 0.9);
+  }
+}
+
+.sidebar__file-input {
+  display: none;
+}
+
+// Button styles
+.sidebar__send-btn {
+  background: none;
+  border: none;
+  color: #6c757d;
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: 4px;
+  font-size: 1rem;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  img {
+    width: 16px;
+    height: 16px;
+    filter: brightness(0) saturate(100%) invert(47%) sepia(6%) saturate(815%) hue-rotate(202deg) brightness(90%) contrast(86%);
+    transition: filter 0.2s ease;
+  }
+
+  &:hover:not(:disabled) {
+    background: #e9ecef;
+    
+    img {
+      filter: brightness(0) saturate(100%) invert(31%) sepia(96%) saturate(1328%) hue-rotate(204deg) brightness(99%) contrast(101%);
+    }
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    
+    img {
+      filter: brightness(0) saturate(100%) invert(47%) sepia(6%) saturate(815%) hue-rotate(202deg) brightness(60%) contrast(86%);
+    }
+  }
+}
+
+.sidebar__mic-btn {
+  background: none;
+  border: none;
+  color: #6c757d;
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: 4px;
+  font-size: 1rem;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  svg {
+    width: 16px;
+    height: 16px;
+    fill: currentColor;
+  }
+
+  &:hover:not(:disabled) {
+    background: #e9ecef;
+    color: #007acc;
+  }
+
+  &.recording {
+    background: #dc3545;
+    color: white;
+    
+    &:hover {
+      background: #c82333;
+    }
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.sidebar__translate-btn {
+  background: none;
+  border: none;
+  color: #6c757d;
+  cursor: pointer;
+  padding: 0.125rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &:hover:not(:disabled) {
+    background: #e9ecef;
+    color: #007acc;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+// Drop zone styles
+.sidebar__drop-zone {
+  position: relative;
+  transition: background-color 0.2s ease;
+  
+  &--active {
+    background-color: rgba(0, 123, 255, 0.1);
+    border-color: #007bff;
+    
+    &::after {
+      content: "Drop image here";
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0, 123, 255, 0.9);
+      color: white;
+      padding: 1rem 2rem;
+      border-radius: 8px;
+      font-weight: 500;
+      z-index: 1000;
+      pointer-events: none;
+    }
+  }
+}

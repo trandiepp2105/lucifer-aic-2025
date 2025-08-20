@@ -43,7 +43,7 @@ const HomePage = () => {
   const [showTeamAnswer, setShowTeamAnswer] = useState(true); // Show team answer panel by default
   const [showAnswer, setShowAnswer] = useState(true); // Show answer panel by default
   const [frames, setFrames] = useState([]); // Add frames state
-  const [availableStages, setAvailableStages] = useState(1); // Add available stages state
+  const [availableStages, setAvailableStages] = useState([1]); // Add available stages state as array
   const [sendingFrames, setSendingFrames] = useState(new Set()); // Track sending frames
   
   // Centralized data management for TeamAnswer and Answer
