@@ -1,4 +1,10 @@
 import React from 'react';
+import {
+  useSortable
+} from '@dnd-kit/sortable';
+import {
+  CSS,
+} from '@dnd-kit/utilities';
 import './QueryItem.scss';
 
 const QueryItem = ({ 
@@ -6,8 +12,27 @@ const QueryItem = ({
   isCurrentStage, 
   onStageChange, 
   onDelete,
-  onCreateQuery 
+  onCreateQuery,
+  isDraggable = false,
+  isBeingDragged = false
 }) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ 
+    id: query.id || `stage-${query.stage}`,
+    disabled: !isDraggable
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
   // Helper function to check if a field has a valid value
   const hasValidValue = (value) => {
     return value !== null && 
@@ -24,6 +49,9 @@ const QueryItem = ({
   };
 
   const handleClick = () => {
+    // Don't change stage when dragging
+    if (isDragging) return;
+    
     if (query.stage !== isCurrentStage && onStageChange) {
       onStageChange(query.stage);
     }
@@ -38,13 +66,60 @@ const QueryItem = ({
 
   return (
     <div 
+      ref={setNodeRef}
+      style={style}
       className={`sidebar__message sidebar__message--query ${
         isCurrentStage ? 'sidebar__message--current-stage' : ''
-      }`}
+      } ${isDragging || isBeingDragged ? 'sidebar__message--dragging' : ''}`}
       onClick={handleClick}
-      style={{ cursor: 'pointer' }}
+      data-draggable={isDraggable}
+      {...(isDraggable ? attributes : {})}
+      {...(isDraggable ? listeners : {})}
     >
+      {/* Drag handle - visual indicator only */}
+      {isDraggable && (
+        <div className="sidebar__drag-handle">
+          <svg 
+            width="16" 
+            height="16" 
+            viewBox="0 0 24 24" 
+            fill="none" 
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path 
+              d="M8 6C8 6.55228 7.55228 7 7 7C6.44772 7 6 6.55228 6 6C6 5.44772 6.44772 5 7 5C7.55228 5 8 5.44772 8 6Z" 
+              fill="currentColor"
+            />
+            <path 
+              d="M8 12C8 12.5523 7.55228 13 7 13C6.44772 13 6 12.5523 6 12C6 11.4477 6.44772 11 7 11C7.55228 11 8 11.4477 8 12Z" 
+              fill="currentColor"
+            />
+            <path 
+              d="M8 18C8 18.5523 7.55228 19 7 19C6.44772 19 6 18.5523 6 18C6 17.4477 6.44772 17 7 17C7.55228 17 8 17.4477 8 18Z" 
+              fill="currentColor"
+            />
+            <path 
+              d="M14 6C14 6.55228 13.5523 7 13 7C12.4477 7 12 6.55228 12 6C12 5.44772 12.4477 5 13 5C13.5523 5 14 5.44772 14 6Z" 
+              fill="currentColor"
+            />
+            <path 
+              d="M14 12C14 12.5523 13.5523 13 13 13C12.4477 13 12 12.5523 12 12C12 11.4477 12.4477 11 13 11C13.5523 11 14 11.4477 14 12Z" 
+              fill="currentColor"
+            />
+            <path 
+              d="M14 18C14 18.5523 13.5523 19 13 19C12.4477 19 12 18.5523 12 18C12 17.4477 12.4477 17 13 17C13.5523 17 14 17.4477 14 18Z" 
+              fill="currentColor"
+            />
+          </svg>
+        </div>
+      )}
+
       <div className="sidebar__message-content">
+        {/* Stage indicator */}
+        <div className="sidebar__stage-indicator">
+          Stage {query.stage}
+        </div>
+        
         {/* Check if query has any content */}
         {(() => {
           const hasText = hasValidValue(query.text);

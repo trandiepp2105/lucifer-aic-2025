@@ -1,6 +1,7 @@
 // QueryItem component styles
 .sidebar__message {
   display: flex;
+  position: relative;
   
   &--query {
     justify-content: flex-start;
@@ -9,11 +10,24 @@
     transition: all 0.2s ease;
     cursor: pointer;
     
+    // When draggable, show grab cursor
+    &[data-draggable="true"] {
+      cursor: grab;
+      
+      &:active {
+        cursor: grabbing;
+      }
+    }
+    
     &:hover {
       transform: translateX(2px);
       
       .sidebar__message-content {
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+      }
+      
+      .sidebar__drag-handle {
+        opacity: 1;
       }
     }
     
@@ -35,6 +49,41 @@
       background: #f8fbff;
       box-shadow: 0 2px 8px rgba(0, 123, 255, 0.2);
     }
+  }
+
+  &--dragging {
+    z-index: 1000;
+    
+    .sidebar__message-content {
+      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+      transform: rotate(3deg);
+    }
+  }
+}
+
+// Drag handle - visual indicator only
+.sidebar__drag-handle {
+  position: absolute;
+  left: -24px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  opacity: 0.7;
+  transition: all 0.2s ease;
+  color: #6c757d;
+  z-index: 10;
+  pointer-events: none; // Don't interfere with drag events
+
+  svg {
+    width: 12px;
+    height: 12px;
   }
 }
 
@@ -189,4 +238,58 @@
 .sidebar__delete-query-icon {
   width: 12px;
   height: 12px;
+}
+
+// Stage indicator
+.sidebar__stage-indicator {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #6c757d;
+  background: #f8f9fa;
+  padding: 2px 8px;
+  border-radius: 12px;
+  display: inline-block;
+  margin-bottom: 4px;
+  border: 1px solid #e9ecef;
+}
+
+.sidebar__message--current-stage {
+  .sidebar__stage-indicator {
+    background: #e7f3ff;
+    color: #007bff;
+    border-color: #b3d7ff;
+  }
+}
+
+.sidebar__message--dragging {
+  .sidebar__stage-indicator {
+    background: #fff3cd;
+    color: #856404;
+    border-color: #ffeaa7;
+  }
+}
+
+// Additional drag & drop styles for sidebar messages container
+.sidebar__messages {
+  position: relative;
+  padding-left: 30px; // Make room for drag handles
+}
+
+// Responsive: hide drag handles on smaller screens
+@media (max-width: 768px) {
+  .sidebar__messages {
+    padding-left: 16px;
+  }
+  
+  .sidebar__drag-handle {
+    display: none;
+  }
+}
+
+// Drag overlay styles
+.dnd-sortable-drag-overlay {
+  .sidebar__message-content {
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3) !important;
+    transform: rotate(2deg) !important;
+  }
 }

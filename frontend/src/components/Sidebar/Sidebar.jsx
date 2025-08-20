@@ -703,6 +703,38 @@ const Sidebar = ({
     }, 100);
   };
 
+  // Handle reordering queries via drag & drop
+  const handleReorderQueries = useCallback(async (reorderedQueries) => {
+    // Update stages based on new order
+    const updatedQueries = reorderedQueries.map((query, index) => ({
+      ...query,
+      stage: index + 1 // Reassign stages based on new order (1-based)
+    }));
+    
+    // Update local state
+    setLocalQueries(updatedQueries);
+    
+    // Update current local query if it was reordered
+    if (currentLocalQuery) {
+      const updatedCurrentQuery = updatedQueries.find(q => 
+        q.id === currentLocalQuery.id || 
+        (q.text === currentLocalQuery.text && q.ocr === currentLocalQuery.ocr && q.image === currentLocalQuery.image)
+      );
+      
+      if (updatedCurrentQuery && updatedCurrentQuery.stage !== stage) {
+        // Navigate to the new stage of the current query
+        handleInternalStageChange(updatedCurrentQuery.stage);
+        setCurrentLocalQuery({ ...updatedCurrentQuery });
+      }
+    }
+    
+    // Sync to backend immediately after reorder
+    setTimeout(async () => {
+      await syncSpecificQueries(updatedQueries);
+      toast.success('Queries reordered', 2000);
+    }, 100);
+  }, [currentLocalQuery, stage, handleInternalStageChange, syncSpecificQueries, toast]);
+
   // Handle add session button
   const handleAddSession = async () => {
     try {
@@ -927,6 +959,7 @@ const Sidebar = ({
               onStageChange={handleInternalStageChange}
               onDeleteQuery={handleDeleteQuery}
               onCreateQuery={handleCreateQuery}
+              onReorderQueries={handleReorderQueries}
               messagesEndRef={messagesEndRef}
             />
             
