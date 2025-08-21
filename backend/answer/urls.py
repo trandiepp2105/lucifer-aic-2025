@@ -1,6 +1,13 @@
 from django.urls import path
 from . import views
 from .sse_views import TeamAnswerSSEView
+from .team_trake_sse_views import (
+    TeamTRAKEAnswerSSEView,
+    TeamTRAKEAnswerListCreateSSEAPIView,
+    TeamTRAKEAnswerBulkDeleteSSEAPIView,
+    TeamTRAKEAnswerGroupDeleteSSEAPIView,
+    TeamTRAKEAnswerUpdateGroupAPIView
+)
 
 urlpatterns = [
     # Answer endpoints
@@ -16,6 +23,13 @@ urlpatterns = [
     
     # SSE endpoint for real-time team answer updates
     path('api/team-answers/sse/', TeamAnswerSSEView.as_view(), name='team-answer-sse'),
+    
+    # TeamTRAKEAnswer endpoints with SSE
+    path('api/team-trake-answers/', TeamTRAKEAnswerListCreateSSEAPIView.as_view(), name='team-trake-answer-list-create'),
+    path('api/team-trake-answers/bulk-delete/', TeamTRAKEAnswerBulkDeleteSSEAPIView.as_view(), name='team-trake-answer-bulk-delete'),
+    path('api/team-trake-answers/group-delete/', TeamTRAKEAnswerGroupDeleteSSEAPIView.as_view(), name='team-trake-answer-group-delete'),
+    path('api/team-trake-answers/update-group/', TeamTRAKEAnswerUpdateGroupAPIView.as_view(), name='team-trake-answer-update-group'),
+    path('api/team-trake-answers/sse/', TeamTRAKEAnswerSSEView.as_view(), name='team-trake-answer-sse'),
 ]
 
 # Available endpoints:
@@ -37,3 +51,10 @@ urlpatterns = [
 
 # Real-time Updates:
 # GET /api/team-answers/sse/ - Subscribe to real-time team answer updates via Server-Sent Events
+
+# TeamTRAKEAnswer Management (SSE-enabled):
+# GET /api/team-trake-answers/?query_index={id} - List TeamTRAKEAnswer grouped by group for specific query_index
+# POST /api/team-trake-answers/ - Create multiple TeamTRAKEAnswer from list of items (broadcasts via SSE)
+# DELETE /api/team-trake-answers/bulk-delete/ - Bulk delete TeamTRAKEAnswer by IDs (broadcasts via SSE)
+# DELETE /api/team-trake-answers/group-delete/ - Delete all TeamTRAKEAnswer in a specific group (broadcasts via SSE)
+# GET /api/team-trake-answers/sse/ - Subscribe to real-time TeamTRAKEAnswer updates via Server-Sent Events

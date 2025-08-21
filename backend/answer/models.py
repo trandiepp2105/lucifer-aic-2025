@@ -98,3 +98,49 @@ class TeamAnswer(models.Model):
 
     def __str__(self):
         return f"TeamAnswer {self.id} - {self.video_name} Frame {self.frame_index} Query {self.query_index} ({self.round})"
+
+class TeamTRAKEAnswer(models.Model):
+    """Model for storing TRAKE team answers with group support"""
+    
+    # Round choices
+    ROUND_CHOICES = [
+        ('prelims', 'Prelims'),
+        ('final', 'Final'),
+    ]
+    
+    id = models.AutoField(primary_key=True)
+    video_name = models.CharField(
+        max_length=500,
+        help_text="Name of the video"
+    )
+    frame_index = models.IntegerField(
+        help_text="Frame index in the video"
+    )
+    url = models.TextField(
+        help_text="URL of the frame image"
+    )
+    query_index = models.IntegerField(
+        default=0,
+        help_text="Query index number (default: 0)"
+    )
+    # round = models.CharField(
+    #     max_length=10,
+    #     choices=ROUND_CHOICES,
+    #     default='prelims',
+    #     help_text="Round type: prelims or final"
+    # )
+    group = models.IntegerField(
+        default=0,
+        help_text="Group identifier for grouping multiple TeamTRAKEAnswer instances"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'team_trake_answer'
+        ordering = ['-created_at']
+        verbose_name = 'Team TRAKE Answer'
+        verbose_name_plural = 'Team TRAKE Answers'
+
+    def __str__(self):
+        return f"TeamTRAKEAnswer {self.id} - {self.video_name} Frame {self.frame_index} Query {self.query_index} Group {self.group}"

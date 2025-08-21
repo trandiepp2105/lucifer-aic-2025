@@ -594,7 +594,7 @@ class QueryListCreateAPIView(APIView):
                 frame_data = {
                     'url': frame_url,
                     'video_name': video_name,
-                    'frame_index': frame_index,
+                    'frame_index': int(frame_index),
                     'score': score
                 }
                 return frame_data
@@ -706,8 +706,16 @@ class QueryListCreateAPIView(APIView):
         elif view_mode == 'samevideo':
             # Same video mode needs list of lists grouped by video
             if results and len(results) > 0 and isinstance(results[0], list):
-                # Already list of lists, return as is
-                return results
+                # Already list of lists, sort each sublist by frame_index
+                sorted_results = []
+                for sublist in results:
+                    if isinstance(sublist, list):
+                        # Sort each sublist by frame_index ascending
+                        sorted_sublist = sorted(sublist, key=lambda x: x.get('frame_index', 0) if isinstance(x, dict) else 0)
+                        sorted_results.append(sorted_sublist)
+                    else:
+                        sorted_results.append(sublist)
+                return sorted_results
             else:
                 # Flat array, need to group by video while preserving rank
                 if not results:
@@ -727,11 +735,12 @@ class QueryListCreateAPIView(APIView):
                 
                 # Sort by first occurrence index to maintain rank order
                 video_order.sort(key=lambda x: x[1])
-                
-                # Build result as list of lists
+                # Build result as list of lists, with each sublist sorted by frame_index
                 grouped_results = []
                 for video_name, _ in video_order:
-                    grouped_results.append(video_groups[video_name])
+                    # Sort frames within each video group by frame_index ascending
+                    sorted_group = sorted(video_groups[video_name], key=lambda x: x.get('frame_index', 0) if isinstance(x, dict) else 0)
+                    grouped_results.append(sorted_group)
                 
                 return grouped_results
         
