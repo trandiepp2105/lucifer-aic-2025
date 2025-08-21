@@ -5,11 +5,12 @@ import FrameItem from '../FrameItem/FrameItem';
 import SubmissionModal from '../SubmissionModal/SubmissionModal';
 import TeamAnswerModal from '../TeamAnswerModal/TeamAnswerModal';
 import ImageZoomModal from '../ImageZoomModal/ImageZoomModal';
+import PreviewTRAKEAnswer from './PreviewTRAKEAnswer';
 import { useApp } from '../../contexts/AppContext';
 import { useFrameActions } from '../../hooks/useFrameActions';
 import './VideoPlayer.scss';
 
-const VideoPlayer = ({ isOpen, onClose, currentFrame, onFrameSelect, onSubmit, onSend, sendingFrames = new Set(), allTeamAnswers = [] }) => {
+const VideoPlayer = ({ isOpen, onClose, currentFrame, onFrameSelect, onSubmit, onSend, sendingFrames = new Set(), allTeamAnswers = [], allTRAKEAnswers = [], searchResults = [] }) => {
   const { queryMode } = useApp();
   
   // Use the shared frame actions hook
@@ -1095,6 +1096,19 @@ const VideoPlayer = ({ isOpen, onClose, currentFrame, onFrameSelect, onSubmit, o
               )}
             </div>
           </div>
+
+          {/* Preview TRAKE Answer Section */}
+          <PreviewTRAKEAnswer 
+            isVisible={true}
+            className="video-player__preview-trake-section"
+            allTeamAnswers={allTeamAnswers}
+            allTRAKEAnswers={allTRAKEAnswers}
+            onFrameSelect={onFrameSelect}
+            onFrameDoubleClick={onFrameSelect} // Use the same handler for double click
+            onSubmit={onSubmit}
+            selectedFrame={currentFrame}
+            searchResults={searchResults} // Pass search results for TRAKE mode
+          />
         </div>
       </div>
 

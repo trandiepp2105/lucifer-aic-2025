@@ -28,6 +28,7 @@ import { useToast } from '../Toast/ToastProvider';
 import { TeamAnswerService } from '../../services';
 import { apiConfig } from '../../services/apiConfig';
 import './TeamAnswer.scss';
+import TeamTRAKEAnswerList from './TeamTRAKEAnswerList';
 
 const TeamAnswer = ({ 
   selectedFrame, 
@@ -37,8 +38,12 @@ const TeamAnswer = ({
   onFrameDoubleClick, 
   onSubmit,
   allTeamAnswers = [], // Get from props instead of local state
+  allTRAKEAnswers = [], // Add TRAKE answers prop
   setAllTeamAnswers,  // Setter from parent
-  onRefresh           // Refresh function from parent
+  setAllTRAKEAnswers, // Add TRAKE answers setter
+  onRefresh,          // Refresh function from parent
+  activeGroup,        // Add activeGroup prop
+  onSetActiveGroup    // Add onSetActiveGroup prop
 }) => {
   const selectedFrameRef = useRef(null);
   const teamAnswerRef = useRef(null);
@@ -49,6 +54,7 @@ const TeamAnswer = ({
   const [showDeleteAllModal, setShowDeleteAllModal] = useState(false);
   const [editingItem, setEditingItem] = useState(null); // For edit modal
   const [sseConnected, setSseConnected] = useState(false);
+  const [traKEsseConnected, setTRAKEsseConnected] = useState(false); // Add TRAKE SSE state
   
   // Image zoom state
   const [zoomImageUrl, setZoomImageUrl] = useState('');
@@ -76,6 +82,7 @@ const TeamAnswer = ({
   
   // SSE connection ref
   const eventSourceRef = useRef(null);
+  const trakeEventSourceRef = useRef(null); // Add TRAKE SSE ref
   
   // Get app context for queryIndex, round and queryMode
   const { queryIndex, round, queryMode } = useApp();
@@ -191,6 +198,122 @@ const TeamAnswer = ({
       eventSourceRef.current.close();
       eventSourceRef.current = null;
       setSseConnected(false);
+    }
+  };
+
+  // Initialize TRAKE SSE connection
+  const initializeTRAKESSE = () => {
+    console.log('🔗 Initializing TRAKE SSE connection...');
+    try {
+      // Close existing connection if any
+      if (trakeEventSourceRef.current) {
+        trakeEventSourceRef.current.close();
+        trakeEventSourceRef.current = null;
+      }
+
+      // Create new EventSource connection for TRAKE
+      const sseUrl = `${apiConfig.baseURL}/team-trake-answers/sse/`;
+      console.log('🔗 TRAKE SSE URL:', sseUrl);
+      
+      const eventSource = new EventSource(sseUrl);
+      trakeEventSourceRef.current = eventSource;
+
+      // Handle incoming messages
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+
+          switch (data.type) {
+            case 'connected':
+              setTRAKEsseConnected(true);
+              toast.success('TRAKE real-time updates connected', 500);
+              break;
+
+            case 'create':
+              // Refresh TRAKE data when new answers are created
+              if (onRefresh) {
+                onRefresh();
+              }
+              toast.success('New TRAKE answers added', 500);
+              break;
+
+            case 'bulk_delete':
+              // Refresh TRAKE data when answers are deleted
+              if (onRefresh) {
+                onRefresh();
+              }
+              toast.info(`${data.deleted_count} TRAKE answer(s) removed`, 500);
+              break;
+
+            case 'group_delete':
+              // Refresh TRAKE data when entire group is deleted
+              if (onRefresh) {
+                onRefresh();
+              }
+              toast.info(`Group ${data.group} deleted (${data.deleted_count} items)`, 500);
+              break;
+
+            case 'group_update':
+              // Refresh TRAKE data when group assignments are updated
+              if (onRefresh) {
+                onRefresh();
+              }
+              toast.success('Group order updated', 500);
+              break;
+
+            case 'heartbeat':
+              // Ignore heartbeat messages
+              break;
+
+            case 'error':
+              console.error('❌ TRAKE SSE Error:', data.message);
+              toast.error(data.message, 500);
+              break;
+
+            default:
+              console.log('Unknown TRAKE SSE message type:', data.type);
+              break;
+          }
+        } catch (error) {
+          console.error('Error parsing TRAKE SSE message:', error, event.data);
+        }
+      };
+
+      // Handle connection open
+      eventSource.onopen = (event) => {
+        console.log('🟢 TRAKE SSE connection opened');
+        setTRAKEsseConnected(true);
+        // Fetch initial TRAKE data when connection is established
+        if (onRefresh) {
+          console.log('📡 Fetching initial TRAKE data with queryIndex:', queryIndex);
+          // Call onRefresh with no parameters - the HomePage onRefresh handler will handle queryIndex
+          onRefresh();
+        }
+      };
+
+      // Handle connection errors
+      eventSource.onerror = (event) => {
+        console.log('🔴 TRAKE SSE connection error:', event);
+        setTRAKEsseConnected(false);
+        
+        if (eventSource.readyState === EventSource.CLOSED) {
+          toast.warning('TRAKE real-time connection lost', 500);
+        }
+      };
+
+    } catch (error) {
+      console.error('Failed to initialize TRAKE SSE:', error);
+      setTRAKEsseConnected(false);
+    }
+  };
+
+  // Close TRAKE SSE connection
+  const closeTRAKESSE = () => {
+    console.log('🔴 Closing TRAKE SSE connection...');
+    if (trakeEventSourceRef.current) {
+      trakeEventSourceRef.current.close();
+      trakeEventSourceRef.current = null;
+      setTRAKEsseConnected(false);
     }
   };
 
@@ -419,7 +542,7 @@ const TeamAnswer = ({
     if (isVisible && onRefresh) {
       onRefresh();
     }
-  }, [isVisible, queryIndex, round, onRefresh]); // Add onRefresh dependency
+  }, [isVisible, queryIndex, round]); // Remove onRefresh dependency to prevent infinite calls
 
   // Auto scroll to selected frame when component becomes visible
   useEffect(() => {
@@ -455,7 +578,7 @@ const TeamAnswer = ({
 
   // Initialize SSE connection when component mounts
   useEffect(() => {
-    // Initialize SSE connection
+    // Always initialize regular TeamAnswer SSE
     initializeSSE();
 
     // Cleanup on unmount
@@ -463,6 +586,24 @@ const TeamAnswer = ({
       closeSSE();
     };
   }, []); // Empty dependency array - only run on mount/unmount
+
+  // Initialize TRAKE SSE connection based on queryMode
+  useEffect(() => {
+    if (queryMode === 'tra') {
+      console.log('🔗 Initializing TRAKE SSE connection for queryMode:', queryMode);
+      initializeTRAKESSE();
+    } else {
+      console.log('🔗 Closing TRAKE SSE connection for queryMode:', queryMode);
+      closeTRAKESSE();
+    }
+
+    // Cleanup when queryMode changes or component unmounts
+    return () => {
+      if (queryMode === 'tra') {
+        closeTRAKESSE();
+      }
+    };
+  }, [queryMode]); // Re-run when queryMode changes
 
   if (!isVisible) {
     return (
@@ -499,13 +640,40 @@ const TeamAnswer = ({
       />
       <div className="team-answer__header">
         <div className="team-answer__status">
-          <span 
-            className={`team-answer__sse-indicator ${sseConnected ? 'connected' : 'disconnected'}`}
-            title={sseConnected ? 'Real-time updates connected' : 'Real-time updates disconnected'}
-          >
-            {sseConnected ? '🟢' : '🔴'}
-          </span>
+          {queryMode === 'tra' ? (
+            <span 
+              className={`team-answer__sse-indicator ${traKEsseConnected ? 'connected' : 'disconnected'}`}
+              title={traKEsseConnected ? 'TRAKE real-time updates connected' : 'TRAKE real-time updates disconnected'}
+            >
+              {traKEsseConnected ? '🟢' : '🔴'}
+            </span>
+          ) : (
+            <span 
+              className={`team-answer__sse-indicator ${sseConnected ? 'connected' : 'disconnected'}`}
+              title={sseConnected ? 'Real-time updates connected' : 'Real-time updates disconnected'}
+            >
+              {sseConnected ? '🟢' : '🔴'}
+            </span>
+          )}
         </div>
+        {/* <div className="team-answer__title">
+          {queryMode === 'tra' ? (
+            <span>
+              <span className="team-answer__icon">🎯</span>
+              TRAKE Answers ({Array.isArray(allTRAKEAnswers) ? 
+                (allTRAKEAnswers.length > 0 && allTRAKEAnswers[0].hasOwnProperty('group') ? 
+                  allTRAKEAnswers.length : 
+                  Object.keys(allTRAKEAnswers.reduce((groups, item) => ({ ...groups, [item.group || 1]: true }), {})).length
+                ) : 0
+              } groups)
+            </span>
+          ) : (
+            <span>
+              <span className="team-answer__icon">👥</span>
+              Team Answers ({teamAnswers.length})
+            </span>
+          )}
+        </div> */}
         <button 
           className="team-answer__reload"
           onClick={onRefresh}
@@ -540,57 +708,76 @@ const TeamAnswer = ({
       </div>
       
       <div className="team-answer__content">
-        {loading && (
-          <div className="team-answer__loading">
-            <p>Loading team answers...</p>
-          </div>
-        )}
-        
-        {!loading && teamAnswers.length === 0 && (
-          <div className="team-answer__empty">
-            <p>No team answers found</p>
-          </div>
-        )}
-         {!loading && teamAnswers.length > 0 && (
-          <div className="team-answer__list">
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragEnd={handleDragEnd}
-              modifiers={[restrictToVerticalAxis, restrictToParentElement]}
-            >
-              <SortableContext
-                items={teamAnswers.map(item => item.id)}
-                strategy={verticalListSortingStrategy}
-              >
-                <div className="team-answer__grid">
-                  {teamAnswers.map((teamAnswer) => {
-                    const isSelected = selectedFrame && 
-                      selectedFrame.video_name === teamAnswer.video_name && 
-                      parseInt(selectedFrame.frame_index) === parseInt(teamAnswer.frame_index);
-                    
-                    return (
-                      <SortableTeamAnswerItem
-                        key={teamAnswer.id}
-                        teamAnswer={teamAnswer}
-                        isSelected={isSelected}
-                        selectedFrameRef={isSelected ? selectedFrameRef : null}
-                        onFrameSelect={onFrameSelect}
-                        onFrameDoubleClick={handleFrameDoubleClickInternal}
-                        onSubmit={onSubmit}
-                        queryMode={queryMode}
-                        handleEditTeamAnswer={handleEditTeamAnswer}
-                        handleDeleteTeamAnswer={handleDeleteTeamAnswer}
-                        handleFrameZoom={handleFrameZoom}
-                        deletingFrames={deletingFrames}
-                        sortingItems={sortingItems}
-                      />
-                    );
-                  })}
-                </div>
-              </SortableContext>
-            </DndContext>
-          </div>
+        {queryMode === 'tra' ? (
+          // Render TRAKE answers for TRA mode
+          <TeamTRAKEAnswerList
+            selectedFrame={selectedFrame}
+            isVisible={true}
+            onToggle={onToggle}
+            onFrameSelect={onFrameSelect}
+            onFrameDoubleClick={onFrameDoubleClick}
+            allTRAKEAnswers={allTRAKEAnswers}
+            setAllTRAKEAnswers={setAllTRAKEAnswers}
+            onRefresh={onRefresh}
+            activeGroup={activeGroup}
+            onSetActiveGroup={onSetActiveGroup}
+          />
+        ) : (
+          // Render regular team answers for KIS/QA modes
+          <>
+            {loading && (
+              <div className="team-answer__loading">
+                <p>Loading team answers...</p>
+              </div>
+            )}
+            
+            {!loading && teamAnswers.length === 0 && (
+              <div className="team-answer__empty">
+                <p>No team answers found</p>
+              </div>
+            )}
+             {!loading && teamAnswers.length > 0 && (
+              <div className="team-answer__list">
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={handleDragEnd}
+                  modifiers={[restrictToVerticalAxis, restrictToParentElement]}
+                >
+                  <SortableContext
+                    items={teamAnswers.map(item => item.id)}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    <div className="team-answer__grid">
+                      {teamAnswers.map((teamAnswer) => {
+                        const isSelected = selectedFrame && 
+                          selectedFrame.video_name === teamAnswer.video_name && 
+                          parseInt(selectedFrame.frame_index) === parseInt(teamAnswer.frame_index);
+                        
+                        return (
+                          <SortableTeamAnswerItem
+                            key={teamAnswer.id}
+                            teamAnswer={teamAnswer}
+                            isSelected={isSelected}
+                            selectedFrameRef={isSelected ? selectedFrameRef : null}
+                            onFrameSelect={onFrameSelect}
+                            onFrameDoubleClick={handleFrameDoubleClickInternal}
+                            onSubmit={onSubmit}
+                            queryMode={queryMode}
+                            handleEditTeamAnswer={handleEditTeamAnswer}
+                            handleDeleteTeamAnswer={handleDeleteTeamAnswer}
+                            handleFrameZoom={handleFrameZoom}
+                            deletingFrames={deletingFrames}
+                            sortingItems={sortingItems}
+                          />
+                        );
+                      })}
+                    </div>
+                  </SortableContext>
+                </DndContext>
+              </div>
+            )}
+          </>
         )}
       </div>
 

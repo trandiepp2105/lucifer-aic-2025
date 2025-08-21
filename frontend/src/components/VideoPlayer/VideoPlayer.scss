@@ -23,9 +23,9 @@
 
 .video-player-container {
   position: relative;
-  width: 90vw;
+  width: 95vw;
   max-width: 1400px;
-  max-height: 90vh;
+  max-height: 98vh;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -60,7 +60,7 @@
   display: flex;
   width: 100%;
   height: 80vh;
-  gap: 1rem;
+  gap: 0.5rem;
   background: #000;
   border-radius: 8px;
   overflow: hidden;

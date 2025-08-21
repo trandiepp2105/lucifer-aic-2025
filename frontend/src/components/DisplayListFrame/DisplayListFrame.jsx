@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import VideoPlayer from '../VideoPlayer/VideoPlayer';
 import FrameItem from '../FrameItem/FrameItem';
 import SubmissionModal from '../SubmissionModal/SubmissionModal';
@@ -8,6 +8,7 @@ import { useApp } from '../../contexts/AppContext';
 import { useToast } from '../Toast/ToastProvider';
 import { useFrameActions } from '../../hooks/useFrameActions';
 import { TeamAnswerService } from '../../services/TeamAnswerService';
+import { TeamTRAKEAnswerService } from '../../services/TeamTRAKEAnswerService';
 import './DisplayListFrame.scss';
 
 const DisplayListFrame = ({ 
@@ -22,7 +23,10 @@ const DisplayListFrame = ({
   queryMode = 'kis', // Add queryMode prop
   onSend, // Add onSend prop
   sendingFrames = new Set(), // Add sendingFrames prop
-  allTeamAnswers = [] // Add allTeamAnswers prop for validation
+  allTeamAnswers = [], // Add allTeamAnswers prop for validation
+  allTRAKEAnswers = [], // Add allTRAKEAnswers prop
+  onClearFrames, // Add callback to clear frames when viewMode changes
+  activeGroup, // Add activeGroup prop
 }) => {
   const [isVideoPlayerOpen, setIsVideoPlayerOpen] = useState(false);
   const [isImageZoomOpen, setIsImageZoomOpen] = useState(false);
@@ -47,7 +51,16 @@ const DisplayListFrame = ({
   }, [isVideoPlayerOpen, isSubmissionModalOpen, isTeamAnswerModalOpen, frameToSubmit]);
   
   // Get app context for round and queryIndex
-  const { round, queryIndex, validateQueryModeConsistency } = useApp();
+  const { 
+    round, 
+    queryIndex, 
+    validateQueryModeConsistency, 
+    tempTrakeItems, 
+    clearTempTrakeItems,
+    addTempTrakeItem,
+    removeTempTrakeItem,
+    session
+  } = useApp();
   const toast = useToast();
   
   // Debug queryMode prop
@@ -110,9 +123,75 @@ const DisplayListFrame = ({
   };
 
   const handleViewModeChange = (newViewMode) => {
+    // Clear frames when switching view modes to prevent data structure mismatch
+    if (onClearFrames) {
+      onClearFrames();
+    }
+    
     if (onViewModeChange) {
       onViewModeChange(newViewMode);
     }
+  };
+
+  // Handle push TRAKE group
+  const handlePushTrakeGroup = async () => {
+    if (!tempTrakeItems || tempTrakeItems.length === 0) {
+      toast.error('No items selected for TRAKE group');
+      return;
+    }
+
+    if (!session) {
+      toast.error('Session not available');
+      return;
+    }
+
+    try {
+      // Prepare the data for submission
+      const traKeAnswers = tempTrakeItems.map(item => ({
+        video_name: item.video_name,
+        frame_index: item.frame_index,
+        url: item.url,
+        query_index: queryIndex,
+        // Include activeGroup if available, otherwise backend will auto-assign
+        ...(activeGroup && { group: activeGroup })
+      }));
+
+      // Submit the TRAKE group
+      const response = await TeamTRAKEAnswerService.createBulk(traKeAnswers);
+      
+      // Clear temp items on success
+      clearTempTrakeItems();
+      
+      // Show appropriate success message based on backend response
+      if (response.stats) {
+        const { created, skipped } = response.stats;
+        if (created > 0 && skipped > 0) {
+          toast.success(`Added ${created} new items to group ${response.group}, skipped ${skipped} existing items`);
+        } else if (created > 0) {
+          toast.success(`Successfully added ${created} items to group ${response.group}`);
+        } else {
+          toast.info(`All items already exist in group ${response.group}`);
+        }
+      } else {
+        toast.success(`Successfully submitted TRAKE group with ${tempTrakeItems.length} items`);
+      }
+    } catch (error) {
+      console.error('Error submitting TRAKE group:', error);
+      // Handle specific validation errors
+      if (error.message && error.message.includes('same video name')) {
+        toast.error('All selected frames must be from the same video');
+      } else if (error.message && error.message.includes('video name')) {
+        toast.error('Video name validation failed');
+      } else {
+        toast.error('Failed to submit TRAKE group');
+      }
+    }
+  };
+
+  // Handle submit TRAKE (placeholder for future implementation)
+  const handleSubmitTrake = async () => {
+    // TODO: Implement submit TRAKE functionality
+    toast.info('Submit TRAKE functionality will be implemented later');
   };
 
   // Keyboard navigation
@@ -152,29 +231,53 @@ const DisplayListFrame = ({
       );
     }
 
+    // Ensure frames is a flat array for gallery view
+    // Filter out any undefined, null, or non-object items
+    const validFrames = frames.filter(frame => 
+      frame && 
+      typeof frame === 'object' && 
+      frame.video_name && 
+      frame.frame_index !== undefined
+    );
+
+    if (validFrames.length === 0) {
+      return (
+        <div className="display-frame__empty">
+          <p>No valid frames found. Try performing a new search.</p>
+        </div>
+      );
+    }
+
     // Gallery mode - render flat grid, pass frames directly to FrameItem
     return (
       <div className="display-frame__gallery">
-        {frames.map((frame, index) => (
-          <FrameItem
-            key={`gallery-${frame.video_name}-${frame.frame_index}-${index}`}
-            frame={frame}
-            isSelected={
-              selectedFrame && 
-              selectedFrame.video_name === frame.video_name && 
-              parseInt(selectedFrame.frame_index) === parseInt(frame.frame_index)
-            }
-            onClick={handleFrameClick}
-            onDoubleClick={handleFrameDoubleClick}
-            onSubmit={handleSubmitFrame}
-            onSend={handleSendFrame}
-            onZoom={handleFrameZoom}
-            showFilename={true}
-            className="display-frame__item"
-            isSending={sendingFrames.has(`${frame.video_name}-${frame.frame_index}`)}
-            enableDrag={true}
-          />
-        ))}
+        {validFrames.map((frame, index) => {
+          const isChecked = queryMode === 'tra' ? isFrameInTempTrake(frame) : false;
+          
+          return (
+            <FrameItem
+              key={`gallery-${frame.video_name}-${frame.frame_index}-${index}`}
+              frame={frame}
+              isSelected={
+                selectedFrame && 
+                selectedFrame.video_name === frame.video_name && 
+                parseInt(selectedFrame.frame_index) === parseInt(frame.frame_index)
+              }
+              onClick={handleFrameClick}
+              onDoubleClick={handleFrameDoubleClick}
+              onSubmit={handleSubmitFrame}
+              onSend={queryMode === 'tra' ? undefined : handleSendFrame}
+              onZoom={handleFrameZoom}
+              showFilename={true}
+              className="display-frame__item"
+              isSending={sendingFrames.has(`${frame.video_name}-${frame.frame_index}`)}
+              enableDrag={true}
+              showCheckbox={queryMode === 'tra'}
+              isChecked={isChecked}
+              onCheckboxChange={handleCheckboxChange}
+            />
+          );
+        })}
       </div>
     );
   };
@@ -188,45 +291,71 @@ const DisplayListFrame = ({
       );
     }
 
+    // Ensure frames is array of arrays for samevideo view
+    // Filter out any invalid video groups
+    const validVideoGroups = frames.filter(videoFrames => 
+      Array.isArray(videoFrames) && 
+      videoFrames.length > 0 && 
+      videoFrames.every(frame => 
+        frame && 
+        typeof frame === 'object' && 
+        frame.video_name && 
+        frame.frame_index !== undefined
+      )
+    );
+
+    if (validVideoGroups.length === 0) {
+      return (
+        <div className="display-frame__empty">
+          <p>No valid video groups found. Try performing a new search.</p>
+        </div>
+      );
+    }
+
     return (
       <div className="display-frame__samevideo-gallery">
-        {frames.map((videoFrames, videoIndex) => {
-          // videoFrames is an array of frames from the same video
-          if (!Array.isArray(videoFrames) || videoFrames.length === 0) {
-            return null;
-          }
-
+        {validVideoGroups.map((videoFrames, videoIndex) => {
           // Get video name from the first frame
           const videoName = videoFrames[0]?.video_name || `Video ${videoIndex + 1}`;
 
           return (
-            <div className="display-frame__video-section">
+            <div 
+              key={`video-${videoIndex}-${videoName}`}
+              className="display-frame__video-section"
+            >
               {videoIndex > 0 && <div className="display-frame__video-separator"></div>}
               <div className="display-frame__video-grid">
-                {videoFrames.map((frame, frameIndex) => (
-                  <FrameItem
-                    key={`samevideo-${videoIndex}-${frame.video_name}-${frame.frame_index}-${frameIndex}`}
-                    frame={frame}
-                    isSelected={
-                      selectedFrame && 
-                      selectedFrame.video_name === frame.video_name && 
-                      parseInt(selectedFrame.frame_index) === parseInt(frame.frame_index)
-                    }
-                    onClick={handleFrameClick}
-                    onDoubleClick={handleFrameDoubleClick}
-                    onSubmit={handleSubmitFrame}
-                    onSend={handleSendFrame}
-                    onZoom={handleFrameZoom}
-                    showFilename={true}
-                    className="display-frame__item"
-                    isSending={sendingFrames.has(`${frame.video_name}-${frame.frame_index}`)}
-                    enableDrag={true}
-                  />
-                ))}
+                {videoFrames.map((frame, frameIndex) => {
+                  const isChecked = queryMode === 'tra' ? isFrameInTempTrake(frame) : false;
+                  
+                  return (
+                    <FrameItem
+                      key={`samevideo-${videoIndex}-${frame.video_name}-${frame.frame_index}-${frameIndex}`}
+                      frame={frame}
+                      isSelected={
+                        selectedFrame && 
+                        selectedFrame.video_name === frame.video_name && 
+                        parseInt(selectedFrame.frame_index) === parseInt(frame.frame_index)
+                      }
+                      onClick={handleFrameClick}
+                      onDoubleClick={handleFrameDoubleClick}
+                      onSubmit={handleSubmitFrame}
+                      onSend={queryMode === 'tra' ? undefined : handleSendFrame}
+                      onZoom={handleFrameZoom}
+                      showFilename={true}
+                      className="display-frame__item"
+                      isSending={sendingFrames.has(`${frame.video_name}-${frame.frame_index}`)}
+                      enableDrag={true}
+                      showCheckbox={queryMode === 'tra'}
+                      isChecked={isChecked}
+                      onCheckboxChange={handleCheckboxChange}
+                    />
+                  );
+                })}
               </div>
             </div>
           );
-        }).filter(Boolean)} {/* Filter out null items */}
+        })}
       </div>
     );
   };
@@ -240,6 +369,30 @@ const DisplayListFrame = ({
       </div>
     </div>
   );
+
+  // Check if a frame is in temp TRAKE items
+  const isFrameInTempTrake = useCallback((frame) => {
+    return tempTrakeItems.some(item => 
+      item.video_name === frame.video_name && 
+      item.frame_index === frame.frame_index
+    );
+  }, [tempTrakeItems]);
+
+  // Handle checkbox change for TRAKE mode
+  const handleCheckboxChange = useCallback((frame, isChecked) => {
+    if (isChecked) {
+      addTempTrakeItem({
+        video_name: frame.video_name,
+        frame_index: frame.frame_index,
+        url: frame.url,
+      });
+    } else {
+      removeTempTrakeItem({
+        video_name: frame.video_name,
+        frame_index: frame.frame_index,
+      });
+    }
+  }, [addTempTrakeItem, removeTempTrakeItem]);
 
   return (
     <div className="display-frame">
@@ -257,6 +410,29 @@ const DisplayListFrame = ({
             ))}
           </div>
         </div>
+        
+        {/* TRAKE Actions - only show in TRA mode when temp items exist */}
+        {queryMode === 'tra' && tempTrakeItems && tempTrakeItems.length > 0 && (
+          <div className="display-frame__trake-actions">
+            <button
+              className="display-frame__push-trake-btn"
+              onClick={handlePushTrakeGroup}
+              title={`Push TRAKE group with ${tempTrakeItems.length} items`}
+            >
+              <img src="/assets/team.svg" alt="Team" />
+              <span>TEAM ({tempTrakeItems.length})</span>
+            </button>
+            <button
+              className="display-frame__submit-trake-btn"
+              onClick={handleSubmitTrake}
+              title={`Submit TRAKE with ${tempTrakeItems.length} items`}
+            >
+              <img src="/assets/send.svg" alt="Submit" />
+              <span>SUBMIT ({tempTrakeItems.length})</span>
+            </button>
+          </div>
+        )}
+        
         <div className="display-frame__controls">
           <button
             className={`display-frame__view-btn ${viewMode === 'gallery' ? 'display-frame__view-btn--active' : ''}`}
@@ -289,6 +465,8 @@ const DisplayListFrame = ({
           onSend={handleSendFrame}
           sendingFrames={sendingFrames}
           allTeamAnswers={allTeamAnswers}
+          allTRAKEAnswers={allTRAKEAnswers}
+          searchResults={frames} // Pass search results for TRAKE mode
         />
       )}
 

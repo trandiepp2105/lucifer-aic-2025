@@ -96,6 +96,74 @@
     }
   }
 
+  // Push TRAKE Group Button Styles
+  &__trake-actions {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    flex: 1;
+  }
+
+  &__push-trake-btn,
+  &__submit-trake-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border: none;
+    padding: 6px 12px;
+    border-radius: 4px;
+    color: white;
+    font-size: 0.75rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+
+    img {
+      width: 12px;
+      height: 12px;
+      filter: brightness(0) invert(1); // Make icon white
+    }
+
+    span {
+      white-space: nowrap;
+    }
+
+    &:active {
+      transform: translateY(0);
+    }
+  }
+
+  &__push-trake-btn {
+    background: #28a745;
+    box-shadow: 0 2px 4px rgba(40, 167, 69, 0.2);
+
+    &:hover {
+      background: #218838;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 8px rgba(40, 167, 69, 0.3);
+    }
+
+    &:active {
+      box-shadow: 0 2px 4px rgba(40, 167, 69, 0.2);
+    }
+  }
+
+  &__submit-trake-btn {
+    background: #007bff;
+    box-shadow: 0 2px 4px rgba(0, 123, 255, 0.2);
+
+    &:hover {
+      background: #0056b3;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 8px rgba(0, 123, 255, 0.3);
+    }
+
+    &:active {
+      box-shadow: 0 2px 4px rgba(0, 123, 255, 0.2);
+    }
+  }
+
   &__content {
     flex: 1;
     overflow-y: auto;

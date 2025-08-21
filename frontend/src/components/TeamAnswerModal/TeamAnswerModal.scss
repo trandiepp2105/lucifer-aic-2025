@@ -93,8 +93,10 @@
     overflow: hidden;
     
     .frame-item__thumbnail {
+      aspect-ratio: 533 / 300; // Maintain aspect ratio of 533:300
       img {
-        width: 100%;
+        // width: 100%;
+        height: 100%;
         object-fit: cover;
       }
     }

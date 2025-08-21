@@ -15,7 +15,10 @@ const FrameItem = ({
   size = 'normal', // 'normal', 'small', 'large'
   disabled = false, // Add disabled prop for Send button
   isSending = false, // Add isSending prop for loading state
-  enableDrag = false // Add enableDrag prop for drag & drop functionality
+  enableDrag = false, // Add enableDrag prop for drag & drop functionality
+  showCheckbox = false, // Add checkbox support for TRAKE mode
+  isChecked = false, // Checkbox state
+  onCheckboxChange, // Checkbox change handler
 }) => {
   const handleClick = (e) => {
     // Check for Ctrl+Click to trigger zoom
@@ -48,6 +51,13 @@ const FrameItem = ({
     e.stopPropagation();
     if (onSend && !disabled && !isSending) {
       onSend(frame);
+    }
+  };
+
+  const handleCheckboxChange = (e) => {
+    e.stopPropagation();
+    if (onCheckboxChange) {
+      onCheckboxChange(frame, e.target.checked);
     }
   };
 
@@ -99,6 +109,14 @@ const FrameItem = ({
       classes.push(`frame-item--${size}`);
     }
     
+    // Add classes for checkbox state
+    if (showCheckbox) {
+      classes.push('frame-item--has-checkbox');
+      if (isChecked) {
+        classes.push('frame-item--checked');
+      }
+    }
+    
     return classes.join(' ');
   };
 
@@ -138,30 +156,44 @@ const FrameItem = ({
       </div>
       
       {/* Action buttons - only show if handlers are provided */}
-      {(onSubmit || onSend) && (
+      {(onSubmit || onSend || showCheckbox) && (
         <div className="frame-item__actions">
-          {onSend && (
-            <button 
-              className={`frame-item__action-btn frame-item__action-btn--send ${disabled || isSending ? 'frame-item__action-btn--disabled' : ''}`}
-              onClick={handleSend}
-              title={isSending ? "Sending..." : "Send this frame"}
-              disabled={disabled || isSending}
-            >
-              {isSending ? (
-                <span className="frame-item__spinner">⟳</span>
-              ) : (
-                <img src="/assets/team.svg" alt="Send" />
+          {showCheckbox ? (
+            <label className="frame-item__checkbox-wrapper">
+              <input
+                type="checkbox"
+                className="frame-item__checkbox"
+                checked={isChecked}
+                onChange={handleCheckboxChange}
+              />
+              <span className="frame-item__checkbox-custom"></span>
+            </label>
+          ) : (
+            <>
+              {onSend && (
+                <button 
+                  className={`frame-item__action-btn frame-item__action-btn--send ${disabled || isSending ? 'frame-item__action-btn--disabled' : ''}`}
+                  onClick={handleSend}
+                  title={isSending ? "Sending..." : "Send this frame"}
+                  disabled={disabled || isSending}
+                >
+                  {isSending ? (
+                    <span className="frame-item__spinner">⟳</span>
+                  ) : (
+                    <img src="/assets/team.svg" alt="Send" />
+                  )}
+                </button>
               )}
-            </button>
-          )}
-          {onSubmit && (
-            <button 
-              className="frame-item__action-btn frame-item__action-btn--submit"
-              onClick={handleSubmit}
-              title="Submit this frame"
-            >
-              <img src="/assets/submit.svg" alt="Submit" />
-            </button>
+              {onSubmit && (
+                <button 
+                  className="frame-item__action-btn frame-item__action-btn--submit"
+                  onClick={handleSubmit}
+                  title="Submit this frame"
+                >
+                  <img src="/assets/submit.svg" alt="Submit" />
+                </button>
+              )}
+            </>
           )}
         </div>
       )}

@@ -153,6 +153,13 @@ const ActivityBar = ({ onSectionChange, activeSection, onRoundChange, onQueryMod
             >
               Q&A
             </button>
+            <button
+              className={`activity-bar__query-mode-tab ${currentQueryMode === 'tra' ? 'activity-bar__query-mode-tab--active' : ''}`}
+              onClick={() => handleQueryModeClick('tra')}
+              title="TRAKE Mode"
+            >
+              TRA
+            </button>
           </div>
         </div>
         

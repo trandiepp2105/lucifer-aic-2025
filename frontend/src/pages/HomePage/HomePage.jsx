@@ -11,6 +11,7 @@ import SubmissionModal from '../../components/SubmissionModal/SubmissionModal';
 import { useApp } from '../../contexts/AppContext';
 import { useToast } from '../../components/Toast/ToastProvider';
 import { TeamAnswerService, AnswerService } from '../../services';
+import { TeamTRAKEAnswerService } from '../../services/TeamTRAKEAnswerService';
 import './HomePage.scss';
 
 const HomePage = () => {
@@ -49,8 +50,11 @@ const HomePage = () => {
   // Centralized data management for TeamAnswer and Answer
   const [allTeamAnswers, setAllTeamAnswers] = useState([]);
   const [allAnswers, setAllAnswers] = useState([]);
+  const [allTRAKEAnswers, setAllTRAKEAnswers] = useState([]); // Add TRAKE answers state
   const [isLoadingTeamAnswers, setIsLoadingTeamAnswers] = useState(false);
   const [isLoadingAnswers, setIsLoadingAnswers] = useState(false);
+  const [isLoadingTRAKEAnswers, setIsLoadingTRAKEAnswers] = useState(false); // Add TRAKE loading state
+  const [activeGroup, setActiveGroup] = useState(null); // Add active group state for TRAKE
   
   // Local state for UI components (not managed by AppContext)
   const [selectedFrame, setSelectedFrame] = useState(null);
@@ -157,6 +161,41 @@ const HomePage = () => {
     }
   }, [toast]);
 
+  const fetchAllTRAKEAnswers = useCallback(async (currentQueryIndex) => {
+    console.log('🎯 fetchAllTRAKEAnswers called with queryIndex:', currentQueryIndex);
+    
+    if (currentQueryIndex === null || currentQueryIndex === undefined) {
+      console.log('❌ No queryIndex provided, skipping fetch');
+      return;
+    }
+    
+    setIsLoadingTRAKEAnswers(true);
+    try {
+      console.log('📡 Making API call to fetch TRAKE answers...');
+      const response = await TeamTRAKEAnswerService.getTRAKEAnswers(currentQueryIndex);
+      console.log('📡 TRAKE answers response:', response);
+      
+      if (response && response.data) {
+        setAllTRAKEAnswers(response.data || []);
+        console.log('✅ TRAKE answers set:', response.data.length, 'groups');
+      } else {
+        console.error('Failed to fetch TRAKE answers:', response);
+        toast.error('Failed to load TRAKE answers');
+        setAllTRAKEAnswers([]);
+      }
+    } catch (error) {
+      console.error('Error fetching TRAKE answers:', error);
+      if (error.message.includes('same video name')) {
+        toast.error('All items must have the same video name');
+      } else {
+        toast.error('Error loading TRAKE answers');
+      }
+      setAllTRAKEAnswers([]);
+    } finally {
+      setIsLoadingTRAKEAnswers(false);
+    }
+  }, [toast]);
+
   // Get unique query indexes from data
   const getUniqueQueryIndexes = useCallback((data) => {
     const queryIndexes = [...new Set(data.map(item => item.query_index))];
@@ -205,8 +244,12 @@ const HomePage = () => {
     setSection(sectionId);
     
     // Fetch data when switching to relevant sections
-    if (sectionId === 'team-answer' && allTeamAnswers.length === 0 && !isLoadingTeamAnswers) {
-      fetchAllTeamAnswers();
+    if (sectionId === 'team-answer') {
+      if (queryMode === 'tra' && queryIndex && allTRAKEAnswers.length === 0 && !isLoadingTRAKEAnswers) {
+        fetchAllTRAKEAnswers(queryIndex);
+      } else if (queryMode !== 'tra' && allTeamAnswers.length === 0 && !isLoadingTeamAnswers) {
+        fetchAllTeamAnswers();
+      }
     } else if (sectionId === 'answer' && allAnswers.length === 0 && !isLoadingAnswers) {
       fetchAllAnswers();
     }
@@ -364,6 +407,7 @@ const HomePage = () => {
     detectQueryMode();
   }, [queryIndex, round, allTeamAnswers, queryMode, setQueryMode]); // Depend on allTeamAnswers
 
+  // Fetch TRAKE answers when queryIndex changes in TRA mode
   return (
     <div className="home-page">
       <div className="home-page__main">
@@ -392,6 +436,8 @@ const HomePage = () => {
           queryMode={queryMode}
           sendingFrames={sendingFrames}
           allTeamAnswers={allTeamAnswers}
+          allTRAKEAnswers={allTRAKEAnswers}
+          activeGroup={activeGroup}
         />
         {/* <NeighboringFrames 
           selectedFrame={selectedFrame}
@@ -413,8 +459,10 @@ const HomePage = () => {
             onFrameDoubleClick={handleFrameDoubleClick}
             onSubmit={handleSubmitFrame}
             allTeamAnswers={allTeamAnswers}
+            allTRAKEAnswers={allTRAKEAnswers}
             setAllTeamAnswers={setAllTeamAnswers}
-            onRefresh={fetchAllTeamAnswers}
+            setAllTRAKEAnswers={setAllTRAKEAnswers}
+            onRefresh={queryMode === 'tra' ? () => fetchAllTRAKEAnswers(queryIndex) : fetchAllTeamAnswers}
           />
         )}
         {section === 'answer' && (
@@ -437,8 +485,12 @@ const HomePage = () => {
             onFrameDoubleClick={handleFrameDoubleClick}
             onSubmit={handleSubmitFrame}
             allTeamAnswers={allTeamAnswers}
+            allTRAKEAnswers={allTRAKEAnswers}
             setAllTeamAnswers={setAllTeamAnswers}
-            onRefresh={fetchAllTeamAnswers}
+            setAllTRAKEAnswers={setAllTRAKEAnswers}
+            onRefresh={queryMode === 'tra' ? () => fetchAllTRAKEAnswers(queryIndex) : fetchAllTeamAnswers}
+            activeGroup={activeGroup}
+            onSetActiveGroup={setActiveGroup}
           />
         )}
       </div>
