@@ -27,9 +27,9 @@ import { TeamTRAKEAnswerService } from '../../services/TeamTRAKEAnswerService';
 import './TeamTRAKEAnswerList.scss';
 
 // Sortable Group Item Component
-const SortableGroupItem = ({ group, onDeleteItem, onDeleteGroup, onFrameSelect, onFrameDoubleClick, selectedFrame, activeGroup, onSetActiveGroup }) => {
+const SortableGroupItem = ({ group, onDeleteItem, onDeleteGroup, onFrameSelect, onFrameDoubleClick, selectedFrame, activeGroup, onSetActiveGroup, onSubmitGroup }) => {
   const { queryIndex } = useApp(); // Get queryIndex from App context
-  const { submitTRAKEAnswer } = useSubmission(); // Use submission hook
+  const { submitTRAKEAnswer, openSubmissionModal } = useSubmission(); // Use submission hook
   const {
     attributes,
     listeners,
@@ -132,15 +132,19 @@ const SortableGroupItem = ({ group, onDeleteItem, onDeleteGroup, onFrameSelect, 
   };
 
   const handleSubmitGroup = () => {
-    // Convert group items to the format expected by submission service
     const frameList = group.items.map(item => ({
       video_name: item.video_name,
       frame_index: item.frame_index,
       group: group.group
     }));
-
-    // Use submission modal for confirmation
-    submitTRAKEAnswer(frameList);
+    if (!frameList.length) {
+      toast.error('No frames to submit in this group');
+      return;
+    }
+    // Gọi callback từ props
+    if (onSubmitGroup) {
+      onSubmitGroup(frameList);
+    }
   };
 
   return (

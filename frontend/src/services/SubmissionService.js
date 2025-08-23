@@ -2,7 +2,7 @@ import { apiConfig } from './apiConfig';
 
 class SubmissionService {
   constructor() {
-    this.baseURL = `${apiConfig.baseURL}/submissions`;
+    this.baseURL = `${apiConfig.baseURL}/submit`;
   }
 
   /**

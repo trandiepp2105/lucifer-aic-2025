@@ -38,9 +38,13 @@ export const useSubmission = () => {
     }
   };
 
-  const handleSubmissionConfirm = async () => {
-    const { type, frameData, qaText } = submissionModal;
-    
+  const handleSubmissionConfirm = async (newQAText) => {
+    const { type, frameData } = submissionModal;
+    let qaText = submissionModal.qaText;
+    if (type === 'qa' && typeof newQAText === 'string') {
+      qaText = newQAText;
+    }
+
     if (!type || !frameData) {
       toast.error('Invalid submission data');
       return;

@@ -9,6 +9,7 @@ import { useToast } from '../Toast/ToastProvider';
 import { useFrameActions } from '../../hooks/useFrameActions';
 import { TeamAnswerService } from '../../services/TeamAnswerService';
 import { TeamTRAKEAnswerService } from '../../services/TeamTRAKEAnswerService';
+import { useSubmission } from '../../hooks/useSubmission';
 import './DisplayListFrame.scss';
 
 const DisplayListFrame = ({ 
@@ -35,6 +36,7 @@ const DisplayListFrame = ({
   // Use the shared frame actions hook
   const {
     submissionModal,
+    openSubmissionModal,
     closeSubmissionModal,
     handleSubmissionConfirm,
     isTeamAnswerModalOpen,
@@ -46,7 +48,7 @@ const DisplayListFrame = ({
     submitKISAnswer,
     submitQAAnswer,
     submitTRAKEAnswer
-  } = useFrameActions(queryMode, allTeamAnswers);
+  } = useSubmission();
   
   // Debug modal states
   useEffect(() => {
@@ -134,6 +136,11 @@ const DisplayListFrame = ({
     if (onViewModeChange) {
       onViewModeChange(newViewMode);
     }
+  };
+
+  // Hàm mở modal xác nhận submit group TRAKE
+  const handleSubmitTrakeGroup = (frameList) => {
+    openSubmissionModal('trake', frameList);
   };
 
   // Handle push TRAKE group

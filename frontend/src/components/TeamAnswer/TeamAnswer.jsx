@@ -62,8 +62,12 @@ const TeamAnswer = ({
   // Submission logic with confirmation modal
   const {
     submissionModal,
+    openSubmissionModal,
     closeSubmissionModal,
-    handleSubmissionConfirm
+    handleSubmissionConfirm,
+    submitKISAnswer,
+    submitQAAnswer,
+    submitTRAKEAnswer
   } = useSubmission();
   
   const teamAnswerRef = useRef(null);
@@ -539,6 +543,17 @@ const TeamAnswer = ({
     }
   };
 
+  // Sửa hàm onSubmit cho QA mode
+  const handleFrameSubmit = useCallback((frame) => {
+    if (queryMode === 'qa') {
+      submitQAAnswer(frame, frame.qa || '');
+    } else if (queryMode === 'kis') {
+      submitKISAnswer(frame);
+    } else if (queryMode === 'trake') {
+      submitTRAKEAnswer([frame]);
+    }
+  }, [queryMode, submitQAAnswer, submitKISAnswer, submitTRAKEAnswer]);
+
   // DnD Kit drag handlers
   const handleDragEnd = async (event) => {
     const { active, over } = event;
@@ -810,7 +825,7 @@ const TeamAnswer = ({
                             selectedFrameRef={isSelected ? selectedFrameRef : null}
                             onFrameSelect={onFrameSelect}
                             onFrameDoubleClick={handleFrameDoubleClickInternal}
-                            onSubmit={onSubmit}
+                            onSubmit={handleFrameSubmit} // Sửa lại ở đây
                             queryMode={queryMode}
                             handleEditTeamAnswer={handleEditTeamAnswer}
                             handleDeleteTeamAnswer={handleDeleteTeamAnswer}

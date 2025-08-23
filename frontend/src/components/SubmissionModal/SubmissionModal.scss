@@ -117,6 +117,36 @@
     word-break: break-word;
   }
 
+  // QA input textarea
+  &__qa-input {
+    width: 100%;
+    min-height: 2.5rem;
+    font-size: 1rem;
+    padding: 0.75rem;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.5rem;
+    background: #f9fafb;
+    color: #374151;
+    margin-top: 0.5rem;
+    margin-bottom: 0.5rem;
+    resize: vertical;
+    transition: border-color 0.2s;
+
+    &:focus {
+      outline: none;
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+      background: #fff;
+    }
+
+    &:disabled {
+      background: #f3f4f6;
+      color: #9ca3af;
+      opacity: 0.7;
+      cursor: not-allowed;
+    }
+  }
+
   // TRAKE frames section
   &__trake-frames {
     margin-bottom: 20px;
@@ -161,7 +191,7 @@
     text-align: center;
 
     .submission-modal__frame {
-      width: 120px;
+      width: 140px;
       box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
       border-radius: 8px;
       overflow: hidden;
@@ -308,4 +338,8 @@
       width: 100%;
     }
   }
+}
+
+.submission-modal--trake {
+  max-width: 650px;
 }

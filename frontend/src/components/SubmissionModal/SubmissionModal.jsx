@@ -130,7 +130,7 @@ const SubmissionModal = ({
 
   return (
     <div className="submission-modal__backdrop" onClick={handleBackdropClick}>
-      <div className="submission-modal">
+      <div className={`submission-modal submission-modal--${submissionType}`}>
         <div className="submission-modal__header">
           <h3 className="submission-modal__title">{getSubmissionTitle()}</h3>
           <button 
