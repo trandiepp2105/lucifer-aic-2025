@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
 import VideoPlayer from '../VideoPlayer/VideoPlayer';
 import FrameItem from '../FrameItem/FrameItem';
 import SubmissionModal from '../SubmissionModal/SubmissionModal';
@@ -11,7 +11,7 @@ import { TeamAnswerService } from '../../services/TeamAnswerService';
 import { TeamTRAKEAnswerService } from '../../services/TeamTRAKEAnswerService';
 import './DisplayListFrame.scss';
 
-const DisplayListFrame = ({ 
+const DisplayListFrame = forwardRef(({ 
   onFrameSelect, 
   selectedFrame, 
   onStageChange, 
@@ -27,7 +27,7 @@ const DisplayListFrame = ({
   allTRAKEAnswers = [], // Add allTRAKEAnswers prop
   onClearFrames, // Add callback to clear frames when viewMode changes
   activeGroup, // Add activeGroup prop
-}) => {
+}, ref) => {
   const [isVideoPlayerOpen, setIsVideoPlayerOpen] = useState(false);
   const [isImageZoomOpen, setIsImageZoomOpen] = useState(false);
   const [frameToZoom, setFrameToZoom] = useState(null);
@@ -74,6 +74,18 @@ const DisplayListFrame = ({
   
   // Ref for content container to control scrolling (where the actual scrollbar is)
   const contentRef = useRef(null);
+
+  // Expose methods to parent component via ref
+  useImperativeHandle(ref, () => ({
+    scrollToTop: () => {
+      if (contentRef.current) {
+        contentRef.current.scrollTo({
+          top: 0,
+          behavior: 'smooth'
+        });
+      }
+    }
+  }), []);
 
   // Auto-scroll to top when new data arrives
   useEffect(() => {
@@ -438,7 +450,7 @@ const DisplayListFrame = ({
   }, [addTempTrakeItem, removeTempTrakeItem]);
 
   return (
-    <div className="display-frame">
+    <div ref={ref} className="display-frame">
       <div className="display-frame__header">
         <div className="display-frame__stage-selector">
           <div className="display-frame__stages">
@@ -548,6 +560,8 @@ const DisplayListFrame = ({
       />
     </div>
   );
-};
+});
+
+DisplayListFrame.displayName = 'DisplayListFrame';
 
 export default DisplayListFrame;

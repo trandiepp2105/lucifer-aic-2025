@@ -82,6 +82,8 @@ const HomePage = () => {
   
   // Ref to store the loadQueries function from Sidebar
   const loadQueriesRef = useRef(null);
+  // Ref for DisplayListFrame to control scrolling
+  const displayListFrameRef = useRef(null);
 
   // Register callback for viewMode changes
   const isInitialMount = useRef(true);
@@ -104,6 +106,43 @@ const HomePage = () => {
   const registerLoadQueries = useCallback((loadQueriesFunction) => {
     loadQueriesRef.current = loadQueriesFunction;
   }, []);
+
+  // Function to scroll DisplayListFrame to top
+  const scrollDisplayListFrameToTop = useCallback(() => {
+    if (displayListFrameRef.current && displayListFrameRef.current.scrollToTop) {
+      displayListFrameRef.current.scrollToTop();
+      console.log('📜 Scrolled DisplayListFrame to top via ref method');
+    } else if (displayListFrameRef.current) {
+      // Fallback: manual scroll if ref method not available
+      const frameContent = displayListFrameRef.current.querySelector('.display-frame__content');
+      if (frameContent) {
+        frameContent.scrollTo({
+          top: 0,
+          behavior: 'smooth'
+        });
+        console.log('📜 Fallback: Scrolled DisplayListFrame content to top');
+      } else {
+        displayListFrameRef.current.scrollTo({
+          top: 0,
+          behavior: 'smooth'
+        });
+        console.log('📜 Fallback: Scrolled DisplayListFrame container to top');
+      }
+    }
+  }, []);
+
+  // Enhanced function to load queries and scroll to top
+  const loadQueriesWithScroll = useCallback(async () => {
+    if (loadQueriesRef.current) {
+      console.log('📜 Loading queries with scroll to top...');
+      // Execute the original loadQueries function
+      await loadQueriesRef.current();
+      // After queries are loaded, scroll to top
+      setTimeout(() => {
+        scrollDisplayListFrameToTop();
+      }, 100); // Small delay to ensure content is rendered
+    }
+  }, [scrollDisplayListFrameToTop]);
 
   const handleSessionChange = useCallback((sessionId) => {
     setSession(sessionId);
@@ -324,6 +363,7 @@ const HomePage = () => {
           onAvailableStagesChange={handleAvailableStagesChange}
           onSessionChange={handleSessionChange}
           onLoadQueriesRegister={registerLoadQueries}
+          onLoadQueries={loadQueriesWithScroll} // Add enhanced load queries function
         />;
       case 'history':
         return <HistoryPanel />;
@@ -357,6 +397,7 @@ const HomePage = () => {
           onAvailableStagesChange={handleAvailableStagesChange}
           onSessionChange={handleSessionChange}
           onLoadQueriesRegister={registerLoadQueries}
+          onLoadQueries={loadQueriesWithScroll} // Add enhanced load queries function
         />;
     }
   };
@@ -405,6 +446,7 @@ const HomePage = () => {
         />
         {renderSidePanel()}
         <DisplayListFrame 
+          ref={displayListFrameRef}
           onFrameSelect={handleFrameSelect}
           selectedFrame={selectedFrame}
           onStageChange={handleStageChange}
