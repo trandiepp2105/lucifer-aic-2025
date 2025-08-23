@@ -27,15 +27,15 @@ const VideoPlayer = ({
   
   // Use the shared frame actions hook
   const {
-    isSubmissionModalOpen,
+    submissionModal,
+    closeSubmissionModal,
+    handleSubmissionConfirm,
     isTeamAnswerModalOpen,
     frameToSubmit,
     handleSendFrame,
     handleSubmitFrame,
     handleTeamAnswerModalClose,
-    handleTeamAnswerComplete,
-    handleSubmissionModalClose,
-    handleSubmissionComplete
+    handleTeamAnswerComplete
   } = useFrameActions(queryMode, allTeamAnswers);
   
   const videoRef = useRef(null);
@@ -1155,13 +1155,15 @@ const VideoPlayer = ({
       </div>
 
       {/* SubmissionModal overlay within VideoPlayer - render at body level */}
-      {isSubmissionModalOpen && frameToSubmit && createPortal(
+      {submissionModal.isOpen && createPortal(
         <SubmissionModal
-          isOpen={isSubmissionModalOpen}
-          onClose={handleSubmissionModalClose}
-          onSubmit={handleSubmissionComplete}
-          frame={frameToSubmit}
-          queryMode={queryMode}
+          isOpen={submissionModal.isOpen}
+          onClose={closeSubmissionModal}
+          onConfirm={handleSubmissionConfirm}
+          submissionType={submissionModal.type}
+          frameData={submissionModal.frameData}
+          qaText={submissionModal.qaText}
+          isSubmitting={submissionModal.isSubmitting}
         />,
         document.body
       )}
@@ -1173,6 +1175,7 @@ const VideoPlayer = ({
           onClose={handleTeamAnswerModalClose}
           onSubmit={handleTeamAnswerComplete}
           frame={frameToSubmit}
+          allTeamAnswers={allTeamAnswers}
         />,
         document.body
       )}

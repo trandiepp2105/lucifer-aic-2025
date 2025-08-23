@@ -9,7 +9,6 @@ import { useToast } from '../Toast/ToastProvider';
 import { useFrameActions } from '../../hooks/useFrameActions';
 import { TeamAnswerService } from '../../services/TeamAnswerService';
 import { TeamTRAKEAnswerService } from '../../services/TeamTRAKEAnswerService';
-import { useSubmission } from '../../hooks/useSubmission';
 import './DisplayListFrame.scss';
 
 const DisplayListFrame = ({ 
@@ -48,7 +47,7 @@ const DisplayListFrame = ({
     submitKISAnswer,
     submitQAAnswer,
     submitTRAKEAnswer
-  } = useSubmission();
+  } = useFrameActions(queryMode, allTeamAnswers);
   
   // Debug modal states
   useEffect(() => {

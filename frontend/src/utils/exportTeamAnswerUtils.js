@@ -165,7 +165,7 @@ export class ExportTeamAnswerUtils {
     
     // Download
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-    const filename = `team-answers-export-${timestamp}.zip`;
+    const filename = `lucifer-top-1.zip`;
     saveAs(blob, filename);
   }
 }
