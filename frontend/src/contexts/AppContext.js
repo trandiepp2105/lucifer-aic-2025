@@ -11,7 +11,7 @@ const getInitialStateFromURL = () => {
     session: null,        // số
     sessionLoading: true, // loading state for session validation
     queryMode: 'kis',     // 'kis', 'qa', hoặc 'tra'
-    round: 'final',     // 'prelims' hoặc 'final'
+    round: 'prelims',     // 'prelims' hoặc 'final'
     viewMode: 'gallery',  // 'gallery' hoặc 'samevideo'
     stage: 1,             // số
     section: 'chat',      // 'chat' hoặc 'history'
