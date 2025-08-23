@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../../contexts/AppContext';
+import { useToast } from '../Toast/ToastProvider';
+import { QueryModeUtils } from '../../utils/queryModeUtils';
 import './ActivityBar.scss';
 
 const ActivityBar = ({ onSectionChange, activeSection, onRoundChange, onQueryModeChange, onCsvFormatChange, onKChange, selectedRound = 'prelims', selectedQueryMode = 'kis', csvFilenameFormat = 'query-{query_index}-{type}', selectedK = 50 }) => {
@@ -10,8 +12,9 @@ const ActivityBar = ({ onSectionChange, activeSection, onRoundChange, onQueryMod
   const [currentK, setCurrentK] = useState(selectedK);
   const settingsRef = useRef(null);
   
-  // Use AppContext for search URL
-  const { searchUrl, setSearchUrl } = useApp();
+  // Use AppContext for search URL and queryIndex
+  const { searchUrl, setSearchUrl, queryIndex } = useApp();
+  const toast = useToast();
 
   // Update internal state when props change
   useEffect(() => {
@@ -82,11 +85,30 @@ const ActivityBar = ({ onSectionChange, activeSection, onRoundChange, onQueryMod
     handleRoundChange(round);
   };
 
-  const handleQueryModeChange = (mode) => {
-    setCurrentQueryMode(mode);
-    // Notify parent component about query mode change
-    if (onQueryModeChange) {
-      onQueryModeChange(mode);
+  const handleQueryModeChange = async (mode) => {
+    try {
+      // Validate mode switch against current query index data
+      const validation = await QueryModeUtils.validateModeSwitch(mode, queryIndex);
+      
+      if (validation.allowed) {
+        setCurrentQueryMode(mode);
+        // Notify parent component about query mode change
+        if (onQueryModeChange) {
+          onQueryModeChange(mode);
+        }
+        if (validation.message) {
+          toast.success(validation.message);
+        }
+      } else {
+        // Keep current mode, show error
+        if (validation.message) {
+          toast.error(validation.message);
+        }
+        console.warn(`Mode switch blocked: ${validation.message}`);
+      }
+    } catch (error) {
+      console.error('Error validating mode switch:', error);
+      toast.error('Error validating mode switch');
     }
   };
 
@@ -152,6 +174,13 @@ const ActivityBar = ({ onSectionChange, activeSection, onRoundChange, onQueryMod
               title="Q&A Mode"
             >
               Q&A
+            </button>
+            <button
+              className={`activity-bar__query-mode-tab ${currentQueryMode === 'tra' ? 'activity-bar__query-mode-tab--active' : ''}`}
+              onClick={() => handleQueryModeClick('tra')}
+              title="TRAKE Mode"
+            >
+              TRA
             </button>
           </div>
         </div>

@@ -1,0 +1,171 @@
+import JSZip from 'jszip';
+import { saveAs } from 'file-saver';
+import { apiConfig } from '../services/apiConfig';
+
+/**
+ * Export team answers and TRAKE answers to files
+ */
+export class ExportTeamAnswerUtils {
+  
+  /**
+   * Export all team answers and TRAKE answers
+   */
+  static async exportAllAnswers() {
+    try {
+      console.log('Starting export process...');
+      
+      // Fetch both team answers and TRAKE answers in parallel
+      const [teamAnswers, trakeData] = await Promise.all([
+        this.fetchTeamAnswers(),
+        this.fetchTRAKEAnswers()
+      ]);
+
+      console.log('Raw fetched data:', { teamAnswers, trakeData });
+
+      const files = [];
+
+      // Process team answers (qa/kis types)
+      if (Array.isArray(teamAnswers) && teamAnswers.length > 0) {
+        const teamFiles = this.createTeamAnswerFiles(teamAnswers);
+        files.push(...teamFiles);
+      }
+
+      // Process TRAKE answers (trake type) - using original format
+      if (trakeData && Array.isArray(trakeData.data)) {
+        const trakeFiles = this.createTRAKEAnswerFiles(trakeData.data);
+        files.push(...trakeFiles);
+      }
+      
+      // Create and download ZIP
+      await this.downloadAsZip(files);
+      
+      return { success: true, message: `Exported ${files.length} query files` };
+    } catch (error) {
+      console.error('Error exporting answers:', error);
+      throw new Error(`Export failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Fetch all team answers
+   */
+  static async fetchTeamAnswers() {
+    const response = await fetch(`${apiConfig.baseURL}/team-answers/`);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch team answers: ${response.status}`);
+    }
+    const result = await response.json();
+    return result.data; // Extract data array from response
+  }
+
+  /**
+   * Fetch all TRAKE answers
+   */
+  static async fetchTRAKEAnswers() {
+    const response = await fetch(`${apiConfig.baseURL}/team-trake-answers/`);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch TRAKE answers: ${response.status}`);
+    }
+    return await response.json(); // Return original format
+  }
+
+  /**
+   * Create files from team answers (qa/kis types)
+   */
+  static createTeamAnswerFiles(teamAnswers) {
+    const files = [];
+    
+    // Group by query_index
+    const groupedByQuery = {};
+    teamAnswers.forEach(item => {
+      const queryIndex = item.query_index || 0;
+      if (!groupedByQuery[queryIndex]) {
+        groupedByQuery[queryIndex] = [];
+      }
+      groupedByQuery[queryIndex].push(item);
+    });
+
+    // Create file for each query_index
+    Object.keys(groupedByQuery)
+      .sort((a, b) => parseInt(a) - parseInt(b))
+      .forEach(queryIndex => {
+        const items = groupedByQuery[queryIndex];
+        if (items.length === 0) return;
+
+        // Determine type from first item
+        const firstItem = items[0];
+        const type = firstItem.qa ? 'qa' : 'kis';
+        const filename = `query-${queryIndex}-${type}.txt`;
+        
+        let content = '';
+        if (type === 'kis') {
+          content = items
+            .map(item => `${item.video_name},${item.frame_index}`)
+            .join('\n');
+        } else if (type === 'qa') {
+          content = items
+            .map(item => `${item.video_name},${item.frame_index},${item.qa}`)
+            .join('\n');
+        }
+
+        files.push({ filename, content });
+      });
+
+    return files;
+  }
+
+  /**
+   * Create files from TRAKE answers (trake type)
+   */
+  static createTRAKEAnswerFiles(trakeData) {
+    const files = [];
+    
+    // trakeData is array of {query_index, data: [groups]}
+    trakeData.forEach(queryData => {
+      const queryIndex = queryData.query_index;
+      const groups = queryData.data;
+      
+      if (!groups || groups.length === 0) return;
+
+      const filename = `query-${queryIndex}-trake.txt`;
+      
+      // Sort groups by group number
+      const sortedGroups = [...groups].sort((a, b) => a.group - b.group);
+      
+      const content = sortedGroups.map(group => {
+        // Sort items by frame_index within each group
+        const sortedItems = [...group.items].sort((a, b) => a.frame_index - b.frame_index);
+        
+        // Get video_name from first item (all items in group have same video_name)
+        const videoName = sortedItems[0].video_name;
+        const frameIndexes = sortedItems.map(item => item.frame_index);
+        
+        return `${videoName},${frameIndexes.join(',')}`;
+      }).join('\n');
+
+      files.push({ filename, content });
+    });
+
+    return files;
+  }
+
+  /**
+   * Create and download ZIP file
+   */
+  static async downloadAsZip(files) {
+    const zip = new JSZip();
+
+    // Add files to ZIP
+    files.forEach(file => {
+      zip.file(file.filename, file.content);
+    });
+
+    // Generate ZIP blob
+    const blob = await zip.generateAsync({ type: 'blob' });
+    
+    // Download
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+    const filename = `team-answers-export-${timestamp}.zip`;
+    saveAs(blob, filename);
+  }
+}

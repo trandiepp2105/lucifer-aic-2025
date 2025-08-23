@@ -10,13 +10,14 @@ const getInitialStateFromURL = () => {
   const defaultState = {
     session: null,        // số
     sessionLoading: true, // loading state for session validation
-    queryMode: 'kis',     // 'kis' hoặc 'qa'
+    queryMode: 'kis',     // 'kis', 'qa', hoặc 'tra'
     round: 'final',     // 'prelims' hoặc 'final'
     viewMode: 'gallery',  // 'gallery' hoặc 'samevideo'
     stage: 1,             // số
     section: 'chat',      // 'chat' hoặc 'history'
     k: 50,                // top k results (1-200)
     searchUrl: '',        // search server endpoint
+    tempTrakeItems: [],   // temporary TRAKE items for collection before submission
   };
 
   // Determine queryIndex based on round
@@ -43,7 +44,7 @@ const getInitialStateFromURL = () => {
   }
   
   const queryModeParam = urlParams.get('querymode');
-  if (queryModeParam && ['kis', 'qa'].includes(queryModeParam)) {
+  if (queryModeParam && ['kis', 'qa', 'tra'].includes(queryModeParam)) {
     urlState.queryMode = queryModeParam;
   }
   
@@ -109,6 +110,9 @@ const ActionTypes = {
   UPDATE_FROM_URL: 'UPDATE_FROM_URL',
   RESET_STATE: 'RESET_STATE',
   AUTO_DETECT_QUERY_MODE: 'AUTO_DETECT_QUERY_MODE',
+  ADD_TEMP_TRAKE_ITEM: 'ADD_TEMP_TRAKE_ITEM',
+  REMOVE_TEMP_TRAKE_ITEM: 'REMOVE_TEMP_TRAKE_ITEM',
+  CLEAR_TEMP_TRAKE_ITEMS: 'CLEAR_TEMP_TRAKE_ITEMS',
 };
 
 // Reducer
@@ -140,6 +144,24 @@ const appReducer = (state, action) => {
       return { ...state, searchUrl: action.payload };
     case ActionTypes.AUTO_DETECT_QUERY_MODE:
       return { ...state, queryMode: action.payload };
+    case ActionTypes.ADD_TEMP_TRAKE_ITEM:
+      // Check if item already exists (by video_name and frame_index)
+      const exists = state.tempTrakeItems.some(item => 
+        item.video_name === action.payload.video_name && 
+        item.frame_index === action.payload.frame_index
+      );
+      if (exists) return state;
+      return { ...state, tempTrakeItems: [...state.tempTrakeItems, action.payload] };
+    case ActionTypes.REMOVE_TEMP_TRAKE_ITEM:
+      return { 
+        ...state, 
+        tempTrakeItems: state.tempTrakeItems.filter(item => 
+          !(item.video_name === action.payload.video_name && 
+            item.frame_index === action.payload.frame_index)
+        )
+      };
+    case ActionTypes.CLEAR_TEMP_TRAKE_ITEMS:
+      return { ...state, tempTrakeItems: [] };
     case ActionTypes.UPDATE_FROM_URL:
       return { ...state, ...action.payload };
     case ActionTypes.RESET_STATE:
@@ -278,6 +300,9 @@ export const AppProvider = ({ children }) => {
     setK: (k) => dispatch({ type: ActionTypes.SET_K, payload: k }),
     setSearchUrl: (url) => dispatch({ type: ActionTypes.SET_SEARCH_URL, payload: url }),
     resetState: (keepState = {}) => dispatch({ type: ActionTypes.RESET_STATE, payload: keepState }),
+    addTempTrakeItem: (item) => dispatch({ type: ActionTypes.ADD_TEMP_TRAKE_ITEM, payload: item }),
+    removeTempTrakeItem: (item) => dispatch({ type: ActionTypes.REMOVE_TEMP_TRAKE_ITEM, payload: item }),
+    clearTempTrakeItems: () => dispatch({ type: ActionTypes.CLEAR_TEMP_TRAKE_ITEMS }),
   };
 
   // Utility function to validate queryMode consistency (will use allTeamAnswers from caller)

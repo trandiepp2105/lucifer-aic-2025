@@ -202,29 +202,30 @@
   &__query-mode-tabs {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 3px;
     background: #3e3e3e;
-    border-radius: 6px;
-    padding: 2px;
+    border-radius: 8px;
+    padding: 3px;
     width: 100%;
-    height: 80px;
+    height: 110px; // Increased height to accommodate 3 tabs
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2);
   }
 
   &__query-mode-tab {
     background: transparent;
     border: none;
-    padding: 8px 4px;
-    border-radius: 4px;
-    font-size: 0.6rem;
-    font-weight: 600;
-    color: #888;
+    padding: 6px 4px;
+    border-radius: 5px;
+    font-size: 0.65rem; // Slightly larger font
+    font-weight: 700; // Bolder text
+    color: #aaa; // Lighter default color
     cursor: pointer;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     white-space: nowrap;
     text-align: center;
     position: relative;
     overflow: hidden;
-    letter-spacing: 0.3px;
+    letter-spacing: 0.4px; // Increased letter spacing
     writing-mode: vertical-rl;
     text-orientation: mixed;
     transform: rotate(180deg);
@@ -232,7 +233,9 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    // margin: 0 auto;
+    min-height: 28px; // Ensure minimum height for better visibility
+    border: 1px solid transparent; // Add border for better definition
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3); // Add text shadow for better readability
 
     &::before {
       content: '';
@@ -241,14 +244,16 @@
       left: 0;
       right: 0;
       bottom: 0;
-      background: rgba(255, 255, 255, 0.1);
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.05));
       opacity: 0;
-      transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      transition: opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
     &:hover {
       color: #007bff;
-      transform: rotate(180deg);
+      background: rgba(0, 123, 255, 0.1);
+      border-color: rgba(0, 123, 255, 0.3);
+      transform: rotate(180deg) scale(1.02); // Subtle scale effect
       
       &::before {
         opacity: 1;
@@ -256,19 +261,25 @@
     }
 
     &--active {
-      background: #fff;
+      background: linear-gradient(135deg, #fff, #f8f9fa);
       color: #007bff;
-      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
-      transform: rotate(180deg);
+      border-color: rgba(0, 123, 255, 0.2);
+      box-shadow: 
+        0 2px 8px rgba(0, 0, 0, 0.15),
+        inset 0 1px 0 rgba(255, 255, 255, 0.8);
+      transform: rotate(180deg) scale(1.05); // Slightly larger when active
+      text-shadow: none; // Remove text shadow for active state
       
       &::before {
         opacity: 0;
       }
       
       &:hover {
-        transform: rotate(180deg);
-        background: #f8f9fa;
-        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+        transform: rotate(180deg) scale(1.05);
+        background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+        box-shadow: 
+          0 3px 12px rgba(0, 0, 0, 0.2),
+          inset 0 1px 0 rgba(255, 255, 255, 0.9);
       }
     }
   }
@@ -491,22 +502,28 @@
     &__query-mode-tabs {
       flex-direction: row;
       width: auto;
-      min-width: 80px;
+      min-width: 100px; // Increased width to fit 3 tabs better
+      height: auto;
+      gap: 3px;
     }
 
     &__query-mode-tab {
-      padding: 3px 6px;
-      font-size: 0.6rem;
+      padding: 4px 8px; // Better padding for horizontal layout
+      font-size: 0.65rem;
+      writing-mode: initial; // Reset writing mode for horizontal layout
+      text-orientation: initial;
+      transform: none; // Remove rotation for horizontal layout
+      min-width: 28px; // Ensure tabs are wide enough
       
       &:hover {
-        transform: translateY(-1px);
+        transform: translateY(-1px) scale(1.02);
       }
       
       &--active {
-        transform: translateY(-1px);
+        transform: translateY(-1px) scale(1.05);
         
         &:hover {
-          transform: translateY(-1px);
+          transform: translateY(-1px) scale(1.05);
         }
       }
     }

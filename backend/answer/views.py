@@ -571,7 +571,7 @@ class TeamAnswerDetailAPIView(APIView):
 
 class TeamAnswerBulkDeleteAPIView(APIView):
     """
-    API endpoint for bulk deleting team answers with filtering
+    API endpoint for bulk deleting team answers
     """
     
     @swagger_auto_schema(

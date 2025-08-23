@@ -23,11 +23,15 @@ import ConfirmationModal from '../ConfirmationModal';
 import TeamAnswerModal from '../TeamAnswerModal/TeamAnswerModal';
 import ImageZoomModal from '../ImageZoomModal/ImageZoomModal';
 import VideoPlayer from '../VideoPlayer/VideoPlayer';
+import SubmissionModal from '../SubmissionModal/SubmissionModal';
 import { useApp } from '../../contexts/AppContext';
+import { useTeamTRAKEAnswer } from '../../contexts/TeamTRAKEAnswerContext';
 import { useToast } from '../Toast/ToastProvider';
+import { useSubmission } from '../../hooks/useSubmission';
 import { TeamAnswerService } from '../../services';
 import { apiConfig } from '../../services/apiConfig';
 import './TeamAnswer.scss';
+import TeamTRAKEAnswerList from './TeamTRAKEAnswerList';
 
 const TeamAnswer = ({ 
   selectedFrame, 
@@ -38,9 +42,34 @@ const TeamAnswer = ({
   onSubmit,
   allTeamAnswers = [], // Get from props instead of local state
   setAllTeamAnswers,  // Setter from parent
-  onRefresh           // Refresh function from parent
+  onRefresh,          // Refresh function from parent
+  isCompact = false,  // Add compact mode prop
+  className = ''      // Add className prop
 }) => {
   const selectedFrameRef = useRef(null);
+  
+  // Use TRAKE context for TRAKE-related state
+  const {
+    allTRAKEAnswers,
+    setAllTRAKEAnswers,
+    activeGroup,
+    setActiveGroup,
+    isLoadingTRAKEAnswers,
+    fetchAllTRAKEAnswers,
+    deleteAllTRAKEAnswers
+  } = useTeamTRAKEAnswer();
+  
+  // Submission logic with confirmation modal
+  const {
+    submissionModal,
+    openSubmissionModal,
+    closeSubmissionModal,
+    handleSubmissionConfirm,
+    submitKISAnswer,
+    submitQAAnswer,
+    submitTRAKEAnswer
+  } = useSubmission();
+  
   const teamAnswerRef = useRef(null);
   
   const [loading, setLoading] = useState(false);
@@ -49,6 +78,7 @@ const TeamAnswer = ({
   const [showDeleteAllModal, setShowDeleteAllModal] = useState(false);
   const [editingItem, setEditingItem] = useState(null); // For edit modal
   const [sseConnected, setSseConnected] = useState(false);
+  const [traKEsseConnected, setTRAKEsseConnected] = useState(false); // Add TRAKE SSE state
   
   // Image zoom state
   const [zoomImageUrl, setZoomImageUrl] = useState('');
@@ -76,6 +106,7 @@ const TeamAnswer = ({
   
   // SSE connection ref
   const eventSourceRef = useRef(null);
+  const trakeEventSourceRef = useRef(null); // Add TRAKE SSE ref
   
   // Get app context for queryIndex, round and queryMode
   const { queryIndex, round, queryMode } = useApp();
@@ -194,6 +225,122 @@ const TeamAnswer = ({
     }
   };
 
+  // Initialize TRAKE SSE connection
+  const initializeTRAKESSE = () => {
+    console.log('🔗 Initializing TRAKE SSE connection...');
+    try {
+      // Close existing connection if any
+      if (trakeEventSourceRef.current) {
+        trakeEventSourceRef.current.close();
+        trakeEventSourceRef.current = null;
+      }
+
+      // Create new EventSource connection for TRAKE
+      const sseUrl = `${apiConfig.baseURL}/team-trake-answers/sse/`;
+      console.log('🔗 TRAKE SSE URL:', sseUrl);
+      
+      const eventSource = new EventSource(sseUrl);
+      trakeEventSourceRef.current = eventSource;
+
+      // Handle incoming messages
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+
+          switch (data.type) {
+            case 'connected':
+              setTRAKEsseConnected(true);
+              toast.success('TRAKE real-time updates connected', 500);
+              break;
+
+            case 'create':
+              // Refresh TRAKE data when new answers are created
+              if (onRefresh) {
+                onRefresh();
+              }
+              toast.success('New TRAKE answers added', 500);
+              break;
+
+            case 'bulk_delete':
+              // Refresh TRAKE data when answers are deleted
+              if (onRefresh) {
+                onRefresh();
+              }
+              toast.info(`${data.deleted_count} TRAKE answer(s) removed`, 500);
+              break;
+
+            case 'group_delete':
+              // Refresh TRAKE data when entire group is deleted
+              if (onRefresh) {
+                onRefresh();
+              }
+              toast.info(`Group ${data.group} deleted (${data.deleted_count} items)`, 500);
+              break;
+
+            case 'group_update':
+              // Refresh TRAKE data when group assignments are updated
+              if (onRefresh) {
+                onRefresh();
+              }
+              toast.success('Group order updated', 500);
+              break;
+
+            case 'heartbeat':
+              // Ignore heartbeat messages
+              break;
+
+            case 'error':
+              console.error('❌ TRAKE SSE Error:', data.message);
+              toast.error(data.message, 500);
+              break;
+
+            default:
+              console.log('Unknown TRAKE SSE message type:', data.type);
+              break;
+          }
+        } catch (error) {
+          console.error('Error parsing TRAKE SSE message:', error, event.data);
+        }
+      };
+
+      // Handle connection open
+      eventSource.onopen = (event) => {
+        console.log('🟢 TRAKE SSE connection opened');
+        setTRAKEsseConnected(true);
+        // Fetch initial TRAKE data when connection is established
+        if (onRefresh) {
+          console.log('📡 Fetching initial TRAKE data with queryIndex:', queryIndex);
+          // Call onRefresh with no parameters - the HomePage onRefresh handler will handle queryIndex
+          onRefresh();
+        }
+      };
+
+      // Handle connection errors
+      eventSource.onerror = (event) => {
+        console.log('🔴 TRAKE SSE connection error:', event);
+        setTRAKEsseConnected(false);
+        
+        if (eventSource.readyState === EventSource.CLOSED) {
+          toast.warning('TRAKE real-time connection lost', 500);
+        }
+      };
+
+    } catch (error) {
+      console.error('Failed to initialize TRAKE SSE:', error);
+      setTRAKEsseConnected(false);
+    }
+  };
+
+  // Close TRAKE SSE connection
+  const closeTRAKESSE = () => {
+    console.log('🔴 Closing TRAKE SSE connection...');
+    if (trakeEventSourceRef.current) {
+      trakeEventSourceRef.current.close();
+      trakeEventSourceRef.current = null;
+      setTRAKEsseConnected(false);
+    }
+  };
+
   // Filter team answers based on current queryIndex and round
   const getFilteredTeamAnswers = useCallback(() => {
     // Use queryIndex directly from AppContext (matches server query_index)
@@ -255,6 +402,16 @@ const TeamAnswer = ({
     setShowDeleteAllModal(true);
   };
 
+  // Handle delete all TRAKE answers for TRA mode
+  const handleDeleteAllTRAKEAnswers = async () => {
+    if (deletingAll) {
+      return;
+    }
+
+    // Show confirmation modal for TRAKE answers
+    setShowDeleteAllModal(true);
+  };
+
   // Handle confirmed delete all team answers
   const handleConfirmDeleteAll = async () => {
     // Use queryIndex directly from AppContext (matches server query_index)
@@ -264,25 +421,39 @@ const TeamAnswer = ({
       setDeletingAll(true);
       setShowDeleteAllModal(false);
       
-      // Show loading toast
-      toast.info('Deleting all team answers...', 500);
-      
-      const response = await TeamAnswerService.deleteAllTeamAnswers({
-        query_index: currentQueryIndex,
-        round: round || 'prelims'
-      });
-      
-      if (response.success) {
-        toast.success('All team answers deleted successfully!', 500);
-        // Refresh the list
-        if (onRefresh) onRefresh();
+      if (queryMode === 'tra') {
+        // Delete all TRAKE answers
+        toast.info('Deleting all TRAKE answers...', 500);
+        
+        const result = await deleteAllTRAKEAnswers(currentQueryIndex);
+        
+        if (result.success) {
+          toast.success('All TRAKE answers deleted successfully!', 500);
+        } else {
+          console.error('Delete all TRAKE failed:', result.error);
+          toast.error(result.error || 'Failed to delete all TRAKE answers', 500);
+        }
       } else {
-        console.error('Delete all failed:', response.error);
-        toast.error(response.error || 'Failed to delete all team answers', 500);
+        // Delete all team answers
+        toast.info('Deleting all team answers...', 500);
+        
+        const response = await TeamAnswerService.deleteAllTeamAnswers({
+          query_index: currentQueryIndex,
+          round: round || 'prelims'
+        });
+        
+        if (response.success) {
+          toast.success('All team answers deleted successfully!', 500);
+          // Refresh the list
+          if (onRefresh) onRefresh();
+        } else {
+          console.error('Delete all failed:', response.error);
+          toast.error(response.error || 'Failed to delete all team answers', 500);
+        }
       }
     } catch (error) {
-      console.error('Error deleting all team answers:', error);
-      toast.error('An error occurred while deleting all team answers', 500);
+      console.error(`Error deleting all ${queryMode === 'tra' ? 'TRAKE' : 'team'} answers:`, error);
+      toast.error(`An error occurred while deleting all ${queryMode === 'tra' ? 'TRAKE' : 'team'} answers`, 500);
     } finally {
       setDeletingAll(false);
     }
@@ -372,6 +543,17 @@ const TeamAnswer = ({
     }
   };
 
+  // Sửa hàm onSubmit cho QA mode
+  const handleFrameSubmit = useCallback((frame) => {
+    if (queryMode === 'qa') {
+      submitQAAnswer(frame, frame.qa || '');
+    } else if (queryMode === 'kis') {
+      submitKISAnswer(frame);
+    } else if (queryMode === 'trake') {
+      submitTRAKEAnswer([frame]);
+    }
+  }, [queryMode, submitQAAnswer, submitKISAnswer, submitTRAKEAnswer]);
+
   // DnD Kit drag handlers
   const handleDragEnd = async (event) => {
     const { active, over } = event;
@@ -419,7 +601,7 @@ const TeamAnswer = ({
     if (isVisible && onRefresh) {
       onRefresh();
     }
-  }, [isVisible, queryIndex, round, onRefresh]); // Add onRefresh dependency
+  }, [isVisible, queryIndex, round]); // Remove onRefresh dependency to prevent infinite calls
 
   // Auto scroll to selected frame when component becomes visible
   useEffect(() => {
@@ -455,7 +637,7 @@ const TeamAnswer = ({
 
   // Initialize SSE connection when component mounts
   useEffect(() => {
-    // Initialize SSE connection
+    // Always initialize regular TeamAnswer SSE
     initializeSSE();
 
     // Cleanup on unmount
@@ -463,6 +645,24 @@ const TeamAnswer = ({
       closeSSE();
     };
   }, []); // Empty dependency array - only run on mount/unmount
+
+  // Initialize TRAKE SSE connection based on queryMode
+  useEffect(() => {
+    if (queryMode === 'tra') {
+      console.log('🔗 Initializing TRAKE SSE connection for queryMode:', queryMode);
+      initializeTRAKESSE();
+    } else {
+      console.log('🔗 Closing TRAKE SSE connection for queryMode:', queryMode);
+      closeTRAKESSE();
+    }
+
+    // Cleanup when queryMode changes or component unmounts
+    return () => {
+      if (queryMode === 'tra') {
+        closeTRAKESSE();
+      }
+    };
+  }, [queryMode]); // Re-run when queryMode changes
 
   if (!isVisible) {
     return (
@@ -486,31 +686,61 @@ const TeamAnswer = ({
   const currentRound = round || 'prelims';
 
   return (
-    <div className="team-answer" ref={teamAnswerRef}>
+    <div className={`team-answer ${isCompact ? 'team-answer--compact' : ''} ${className}`} ref={teamAnswerRef}>
       <ConfirmationModal
         isOpen={showDeleteAllModal}
         onClose={() => setShowDeleteAllModal(false)}
         onConfirm={handleConfirmDeleteAll}
-        title="Delete All Team Answers"
-        message={`Are you sure you want to delete all team answers for query ${currentQueryIndex} in ${currentRound} round? This action cannot be undone.`}
+        title={queryMode === 'tra' ? "Delete All TRAKE Answers" : "Delete All Team Answers"}
+        message={queryMode === 'tra' ? 
+          `Are you sure you want to delete all TRAKE answers for query ${queryIndex}? This action cannot be undone.` :
+          `Are you sure you want to delete all team answers for query ${queryIndex} in ${round || 'prelims'} round? This action cannot be undone.`
+        }
         confirmText="Delete All"
         cancelText="Cancel"
         isLoading={deletingAll}
       />
       <div className="team-answer__header">
         <div className="team-answer__status">
-          <span 
-            className={`team-answer__sse-indicator ${sseConnected ? 'connected' : 'disconnected'}`}
-            title={sseConnected ? 'Real-time updates connected' : 'Real-time updates disconnected'}
-          >
-            {sseConnected ? '🟢' : '🔴'}
-          </span>
+          {queryMode === 'tra' ? (
+            <span 
+              className={`team-answer__sse-indicator ${traKEsseConnected ? 'connected' : 'disconnected'}`}
+              title={traKEsseConnected ? 'TRAKE real-time updates connected' : 'TRAKE real-time updates disconnected'}
+            >
+              {traKEsseConnected ? '🟢' : '🔴'}
+            </span>
+          ) : (
+            <span 
+              className={`team-answer__sse-indicator ${sseConnected ? 'connected' : 'disconnected'}`}
+              title={sseConnected ? 'Real-time updates connected' : 'Real-time updates disconnected'}
+            >
+              {sseConnected ? '🟢' : '🔴'}
+            </span>
+          )}
         </div>
+        {/* <div className="team-answer__title">
+          {queryMode === 'tra' ? (
+            <span>
+              <span className="team-answer__icon">🎯</span>
+              TRAKE Answers ({Array.isArray(allTRAKEAnswers) ? 
+                (allTRAKEAnswers.length > 0 && allTRAKEAnswers[0].hasOwnProperty('group') ? 
+                  allTRAKEAnswers.length : 
+                  Object.keys(allTRAKEAnswers.reduce((groups, item) => ({ ...groups, [item.group || 1]: true }), {})).length
+                ) : 0
+              } groups)
+            </span>
+          ) : (
+            <span>
+              <span className="team-answer__icon">👥</span>
+              Team Answers ({teamAnswers.length})
+            </span>
+          )}
+        </div> */}
         <button 
           className="team-answer__reload"
           onClick={onRefresh}
           disabled={loading}
-          title="Reload team answers"
+          title={queryMode === 'tra' ? "Reload TRAKE answers" : "Reload team answers"}
         >
           {loading ? (
             <span className="team-answer__spinner">⟳</span>
@@ -520,9 +750,9 @@ const TeamAnswer = ({
         </button>
         <button 
           className="team-answer__delete-all"
-          onClick={handleDeleteAllTeamAnswers}
+          onClick={queryMode === 'tra' ? handleDeleteAllTRAKEAnswers : handleDeleteAllTeamAnswers}
           disabled={deletingAll || loading}
-          title="Delete all team answers"
+          title={queryMode === 'tra' ? "Delete all TRAKE answers" : "Delete all team answers"}
         >
           {deletingAll ? (
             <span className="team-answer__spinner">⟳</span>
@@ -540,57 +770,77 @@ const TeamAnswer = ({
       </div>
       
       <div className="team-answer__content">
-        {loading && (
-          <div className="team-answer__loading">
-            <p>Loading team answers...</p>
-          </div>
-        )}
-        
-        {!loading && teamAnswers.length === 0 && (
-          <div className="team-answer__empty">
-            <p>No team answers found</p>
-          </div>
-        )}
-         {!loading && teamAnswers.length > 0 && (
-          <div className="team-answer__list">
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragEnd={handleDragEnd}
-              modifiers={[restrictToVerticalAxis, restrictToParentElement]}
-            >
-              <SortableContext
-                items={teamAnswers.map(item => item.id)}
-                strategy={verticalListSortingStrategy}
-              >
-                <div className="team-answer__grid">
-                  {teamAnswers.map((teamAnswer) => {
-                    const isSelected = selectedFrame && 
-                      selectedFrame.video_name === teamAnswer.video_name && 
-                      parseInt(selectedFrame.frame_index) === parseInt(teamAnswer.frame_index);
-                    
-                    return (
-                      <SortableTeamAnswerItem
-                        key={teamAnswer.id}
-                        teamAnswer={teamAnswer}
-                        isSelected={isSelected}
-                        selectedFrameRef={isSelected ? selectedFrameRef : null}
-                        onFrameSelect={onFrameSelect}
-                        onFrameDoubleClick={handleFrameDoubleClickInternal}
-                        onSubmit={onSubmit}
-                        queryMode={queryMode}
-                        handleEditTeamAnswer={handleEditTeamAnswer}
-                        handleDeleteTeamAnswer={handleDeleteTeamAnswer}
-                        handleFrameZoom={handleFrameZoom}
-                        deletingFrames={deletingFrames}
-                        sortingItems={sortingItems}
-                      />
-                    );
-                  })}
-                </div>
-              </SortableContext>
-            </DndContext>
-          </div>
+        {queryMode === 'tra' ? (
+          // Render TRAKE answers for TRA mode
+          <TeamTRAKEAnswerList
+            selectedFrame={selectedFrame}
+            isVisible={true}
+            onToggle={onToggle}
+            onFrameSelect={onFrameSelect}
+            onFrameDoubleClick={onFrameDoubleClick}
+            allTRAKEAnswers={allTRAKEAnswers}
+            setAllTRAKEAnswers={setAllTRAKEAnswers}
+            onRefresh={fetchAllTRAKEAnswers}
+            activeGroup={activeGroup}
+            onSetActiveGroup={setActiveGroup}
+            isCompact={isCompact}
+          />
+        ) : (
+          // Render regular team answers for KIS/QA modes
+          <>
+            {loading && (
+              <div className="team-answer__loading">
+                <p>Loading team answers...</p>
+              </div>
+            )}
+            
+            {!loading && teamAnswers.length === 0 && (
+              <div className="team-answer__empty">
+                <p>No team answers found</p>
+              </div>
+            )}
+             {!loading && teamAnswers.length > 0 && (
+              <div className="team-answer__list">
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={handleDragEnd}
+                  modifiers={[restrictToVerticalAxis, restrictToParentElement]}
+                >
+                  <SortableContext
+                    items={teamAnswers.map(item => item.id)}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    <div className="team-answer__grid">
+                      {teamAnswers.map((teamAnswer) => {
+                        const isSelected = selectedFrame && 
+                          selectedFrame.video_name === teamAnswer.video_name && 
+                          parseInt(selectedFrame.frame_index) === parseInt(teamAnswer.frame_index);
+                        
+                        return (
+                          <SortableTeamAnswerItem
+                            key={teamAnswer.id}
+                            teamAnswer={teamAnswer}
+                            isSelected={isSelected}
+                            selectedFrameRef={isSelected ? selectedFrameRef : null}
+                            onFrameSelect={onFrameSelect}
+                            onFrameDoubleClick={handleFrameDoubleClickInternal}
+                            onSubmit={handleFrameSubmit} // Sửa lại ở đây
+                            queryMode={queryMode}
+                            handleEditTeamAnswer={handleEditTeamAnswer}
+                            handleDeleteTeamAnswer={handleDeleteTeamAnswer}
+                            handleFrameZoom={handleFrameZoom}
+                            deletingFrames={deletingFrames}
+                            sortingItems={sortingItems}
+                          />
+                        );
+                      })}
+                    </div>
+                  </SortableContext>
+                </DndContext>
+              </div>
+            )}
+          </>
         )}
       </div>
 
@@ -626,6 +876,17 @@ const TeamAnswer = ({
           allTeamAnswers={allTeamAnswers}
         />
       )}
+
+      {/* Submission Modal */}
+      <SubmissionModal
+        isOpen={submissionModal.isOpen}
+        onClose={closeSubmissionModal}
+        onConfirm={handleSubmissionConfirm}
+        submissionType={submissionModal.type}
+        frameData={submissionModal.frameData}
+        qaText={submissionModal.qaText}
+        isSubmitting={submissionModal.isSubmitting}
+      />
     </div>
   );
 };

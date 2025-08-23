@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Answer, TeamAnswer
+from .models import Answer, TeamAnswer, TeamTRAKEAnswer
 
 class AnswerSerializer(serializers.ModelSerializer):
     """Serializer for Answer model"""
@@ -155,3 +155,62 @@ class TeamAnswerCreateSerializer(serializers.ModelSerializer):
             )
         
         return data
+
+
+class TeamTRAKEAnswerSerializer(serializers.ModelSerializer):
+    """Serializer for TeamTRAKEAnswer model"""
+    
+    class Meta:
+        model = TeamTRAKEAnswer
+        fields = [
+            'id', 'video_name', 'frame_index', 'url', 
+            'query_index', 'group', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+    
+    def validate_frame_index(self, value):
+        """Validate frame_index is non-negative"""
+        if value < 0:
+            raise serializers.ValidationError("Frame index must be non-negative")
+        return value
+    
+    def validate_query_index(self, value):
+        """Validate query_index is non-negative"""
+        if value < 0:
+            raise serializers.ValidationError("Query index must be non-negative")
+        return value
+
+class TeamTRAKEAnswerCreateSerializer(serializers.ModelSerializer):
+    """Serializer for creating TeamTRAKEAnswer"""
+    
+    group = serializers.IntegerField(required=False, help_text="Group identifier (auto-generated if not provided)")
+    
+    class Meta:
+        model = TeamTRAKEAnswer
+        fields = ['video_name', 'frame_index', 'url', 'query_index', 'group']
+    
+    def validate_frame_index(self, value):
+        """Validate frame_index is non-negative"""
+        if value < 0:
+            raise serializers.ValidationError("Frame index must be non-negative")
+        return value
+    
+    def validate_query_index(self, value):
+        """Validate query_index is non-negative"""
+        if value < 0:
+            raise serializers.ValidationError("Query index must be non-negative")
+        return value
+
+class TeamTRAKEAnswerBulkCreateSerializer(serializers.Serializer):
+    """Serializer for bulk creating TeamTRAKEAnswer items"""
+    items = serializers.ListField(
+        child=TeamTRAKEAnswerCreateSerializer(),
+        allow_empty=False,
+        help_text="List of TeamTRAKEAnswer items to create"
+    )
+    
+    def validate_items(self, value):
+        """Validate that items list is not empty"""
+        if not value:
+            raise serializers.ValidationError("Items list cannot be empty")
+        return value

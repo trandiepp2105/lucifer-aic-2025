@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useApp } from '../contexts/AppContext';
 import { useToast } from '../components/Toast/ToastProvider';
+import { useSubmission } from './useSubmission';
 import { TeamAnswerService } from '../services/TeamAnswerService';
 
 /**
@@ -9,12 +10,21 @@ import { TeamAnswerService } from '../services/TeamAnswerService';
  * that can be reused across components like DisplayListFrame and VideoPlayer
  */
 export const useFrameActions = (queryMode = 'kis', allTeamAnswers = []) => {
-  const [isSubmissionModalOpen, setIsSubmissionModalOpen] = useState(false);
   const [isTeamAnswerModalOpen, setIsTeamAnswerModalOpen] = useState(false);
   const [frameToSubmit, setFrameToSubmit] = useState(null);
   
   const { round, queryIndex, validateQueryModeConsistency } = useApp();
   const toast = useToast();
+
+  // Use submission hook for submission logic
+  const {
+    submissionModal,
+    closeSubmissionModal,
+    handleSubmissionConfirm,
+    submitKISAnswer,
+    submitQAAnswer,
+    submitTRAKEAnswer
+  } = useSubmission();
 
   const handleSendFrame = async (frame) => {
     const frameId = `${frame.video_name}-${frame.frame_index}`;
@@ -65,8 +75,20 @@ export const useFrameActions = (queryMode = 'kis', allTeamAnswers = []) => {
   };
 
   const handleSubmitFrame = (frame) => {
-    setFrameToSubmit(frame);
-    setIsSubmissionModalOpen(true);
+    // Determine submission type based on queryMode
+    if (queryMode === 'kis') {
+      submitKISAnswer(frame);
+    } else if (queryMode === 'qa') {
+      // For QA, we might need to get QA text from TeamAnswerModal first
+      // Or directly prompt for QA text in submission modal
+      submitQAAnswer(frame, ''); // TODO: Get QA text from user input
+    } else if (queryMode === 'tra') {
+      // This shouldn't happen for single frame, but handle gracefully
+      submitKISAnswer(frame);
+    } else {
+      // Default to KIS
+      submitKISAnswer(frame);
+    }
   };
 
   const handleTeamAnswerModalClose = () => {
@@ -116,21 +138,13 @@ export const useFrameActions = (queryMode = 'kis', allTeamAnswers = []) => {
     }
   };
 
-  const handleSubmissionModalClose = () => {
-    setIsSubmissionModalOpen(false);
-    setFrameToSubmit(null);
-  };
-
-  const handleSubmissionComplete = (submissionData) => {
-    // TODO: Handle submission logic here
-    // You can add API calls or other submission logic
-    console.log('Submission completed:', submissionData);
-    handleSubmissionModalClose();
-  };
-
   return {
-    // State
-    isSubmissionModalOpen,
+    // Submission modal state (from useSubmission hook)
+    submissionModal,
+    closeSubmissionModal,
+    handleSubmissionConfirm,
+    
+    // Team answer modal state
     isTeamAnswerModalOpen,
     frameToSubmit,
     
@@ -139,7 +153,10 @@ export const useFrameActions = (queryMode = 'kis', allTeamAnswers = []) => {
     handleSubmitFrame,
     handleTeamAnswerModalClose,
     handleTeamAnswerComplete,
-    handleSubmissionModalClose,
-    handleSubmissionComplete
+    
+    // Submission actions
+    submitKISAnswer,
+    submitQAAnswer,
+    submitTRAKEAnswer
   };
 };

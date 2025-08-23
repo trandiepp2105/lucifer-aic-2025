@@ -9,8 +9,11 @@ import Answer from '../../components/Answer/Answer';
 import VideoPlayer from '../../components/VideoPlayer/VideoPlayer';
 import SubmissionModal from '../../components/SubmissionModal/SubmissionModal';
 import { useApp } from '../../contexts/AppContext';
+import { useTeamTRAKEAnswer } from '../../contexts/TeamTRAKEAnswerContext';
 import { useToast } from '../../components/Toast/ToastProvider';
+import { useSubmission } from '../../hooks/useSubmission';
 import { TeamAnswerService, AnswerService } from '../../services';
+import { TeamTRAKEAnswerService } from '../../services/TeamTRAKEAnswerService';
 import './HomePage.scss';
 
 const HomePage = () => {
@@ -32,7 +35,27 @@ const HomePage = () => {
     setK,
   } = useApp();
 
+  // Use TRAKE context for TRAKE-related state
+  const {
+    allTRAKEAnswers,
+    setAllTRAKEAnswers,
+    activeGroup,
+    setActiveGroup,
+    isLoadingTRAKEAnswers,
+    fetchAllTRAKEAnswers
+  } = useTeamTRAKEAnswer();
+
   const toast = useToast();
+
+  // Submission logic with confirmation modal
+  const {
+    submissionModal,
+    closeSubmissionModal: closeConfirmationModal,
+    handleSubmissionConfirm,
+    submitKISAnswer,
+    submitQAAnswer,
+    submitTRAKEAnswer
+  } = useSubmission();
 
   // Debug queryMode
   useEffect(() => {
@@ -55,8 +78,6 @@ const HomePage = () => {
   // Local state for UI components (not managed by AppContext)
   const [selectedFrame, setSelectedFrame] = useState(null);
   const [isVideoPlayerOpen, setIsVideoPlayerOpen] = useState(false);
-  const [isSubmissionModalOpen, setIsSubmissionModalOpen] = useState(false);
-  const [frameToSubmit, setFrameToSubmit] = useState(null);
   const [csvFilenameFormat, setCsvFilenameFormat] = useState('query-{query_index}-{type}');
   
   // Ref to store the loadQueries function from Sidebar
@@ -205,8 +226,12 @@ const HomePage = () => {
     setSection(sectionId);
     
     // Fetch data when switching to relevant sections
-    if (sectionId === 'team-answer' && allTeamAnswers.length === 0 && !isLoadingTeamAnswers) {
-      fetchAllTeamAnswers();
+    if (sectionId === 'team-answer') {
+      if (queryMode === 'tra' && queryIndex && allTRAKEAnswers.length === 0 && !isLoadingTRAKEAnswers) {
+        fetchAllTRAKEAnswers(queryIndex);
+      } else if (queryMode !== 'tra' && allTeamAnswers.length === 0 && !isLoadingTeamAnswers) {
+        fetchAllTeamAnswers();
+      }
     } else if (sectionId === 'answer' && allAnswers.length === 0 && !isLoadingAnswers) {
       fetchAllAnswers();
     }
@@ -225,8 +250,17 @@ const HomePage = () => {
   };
 
   const handleSubmitFrame = (frame) => {
-    setFrameToSubmit(frame);
-    setIsSubmissionModalOpen(true);
+    // Determine submission type based on queryMode
+    if (queryMode === 'kis') {
+      submitKISAnswer(frame);
+    } else if (queryMode === 'qa') {
+      // For QA, we need to get the QA text from somewhere
+      // This might need to be handled differently if QA text is entered in a modal
+      submitQAAnswer(frame, ''); // TODO: Get QA text from user input
+    } else {
+      // For other modes, treat as KIS
+      submitKISAnswer(frame);
+    }
   };
 
   const handleSendFrame = async (frame) => {
@@ -274,19 +308,8 @@ const HomePage = () => {
     }
   };
 
-  const handleSubmissionComplete = (submissionData) => {
-    setIsSubmissionModalOpen(false);
-    setFrameToSubmit(null);
-    // TODO: Handle submission logic here
-  };
-
   const closeVideoPlayer = () => {
     setIsVideoPlayerOpen(false);
-  };
-
-  const closeSubmissionModal = () => {
-    setIsSubmissionModalOpen(false);
-    setFrameToSubmit(null);
   };
 
   const renderSidePanel = () => {
@@ -364,6 +387,7 @@ const HomePage = () => {
     detectQueryMode();
   }, [queryIndex, round, allTeamAnswers, queryMode, setQueryMode]); // Depend on allTeamAnswers
 
+  // Fetch TRAKE answers when queryIndex changes in TRA mode
   return (
     <div className="home-page">
       <div className="home-page__main">
@@ -392,6 +416,8 @@ const HomePage = () => {
           queryMode={queryMode}
           sendingFrames={sendingFrames}
           allTeamAnswers={allTeamAnswers}
+          allTRAKEAnswers={allTRAKEAnswers}
+          activeGroup={activeGroup}
         />
         {/* <NeighboringFrames 
           selectedFrame={selectedFrame}
@@ -403,6 +429,9 @@ const HomePage = () => {
           onSend={handleSendFrame}
           queryMode={queryMode}
           sendingFrames={sendingFrames}
+          allTRAKEAnswers={allTRAKEAnswers}
+          setAllTRAKEAnswers={setAllTRAKEAnswers}
+          onGroupUpdated={() => fetchAllTRAKEAnswers(queryIndex)}
         /> */}
         {section === 'team-answer' && (
           <TeamAnswer
@@ -443,21 +472,29 @@ const HomePage = () => {
         )}
       </div>
 
-      {/* <VideoPlayer
+      <VideoPlayer
+        key="video-player"
         isOpen={isVideoPlayerOpen}
         onClose={closeVideoPlayer}
         currentFrame={selectedFrame}
         onFrameSelect={handleFrameSelect}
         onSubmit={handleSubmitFrame}
-        queryMode={queryMode}
+        onSend={handleSendFrame}
         sendingFrames={sendingFrames}
-      /> */}
+        allTeamAnswers={allTeamAnswers}
+        setAllTeamAnswers={setAllTeamAnswers}
+        searchResults={frames} // Pass current search results
+        onRefresh={fetchAllTeamAnswers}
+      />
 
       <SubmissionModal
-        isOpen={isSubmissionModalOpen}
-        onClose={closeSubmissionModal}
-        onSubmit={handleSubmissionComplete}
-        frame={frameToSubmit}
+        isOpen={submissionModal.isOpen}
+        onClose={closeConfirmationModal}
+        onConfirm={handleSubmissionConfirm}
+        submissionType={submissionModal.type}
+        frameData={submissionModal.frameData}
+        qaText={submissionModal.qaText}
+        isSubmitting={submissionModal.isSubmitting}
       />
     </div>
   );

@@ -1,192 +1,181 @@
 import React, { useState, useEffect } from 'react';
 import FrameItem from '../FrameItem/FrameItem';
-import ImageZoomModal from '../ImageZoomModal/ImageZoomModal';
-import { useApp } from '../../contexts/AppContext';
-import { AnswerService } from '../../services/AnswerService';
-import { useToast } from '../Toast/ToastProvider';
 import './SubmissionModal.scss';
 
 const SubmissionModal = ({ 
   isOpen, 
   onClose, 
-  onSubmit, 
-  frame
+  onConfirm, 
+  submissionType, // 'kis', 'qa', 'trake'
+  frameData, // For KIS/QA: single frame object, For TRAKE: array of frames
+  qaText = '', // For QA submission
+  isSubmitting = false 
 }) => {
-  const { round, queryMode, queryIndex } = useApp();
-  const toast = useToast();
-  const [answer, setAnswer] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isImageZoomOpen, setIsImageZoomOpen] = useState(false);
-  const [frameToZoom, setFrameToZoom] = useState(null);
+  const [localQAText, setLocalQAText] = useState(qaText || '');
 
   useEffect(() => {
-    if (isOpen) {
-      setAnswer('');
+    if (isOpen && submissionType === 'qa') {
+      setLocalQAText(qaText || '');
     }
-  }, [isOpen]);
+  }, [isOpen, submissionType, qaText]);
 
-  const handleSubmit = async () => {
-    if (!frame) {
-      toast.error('No frame selected');
-      return;
+  if (!isOpen) return null;
+
+  const handleBackdropClick = (e) => {
+    if (e.target === e.currentTarget && !isSubmitting) {
+      onClose();
     }
+  };
 
-    setIsSubmitting(true);
-
-    try {
-      // Prepare answer data according to backend requirements
-      const answerData = {
-        video_name: frame.video_name,
-        frame_index: frame.frame_index,
-        url: frame.url,
-        round: round,
-      };
-
-      // Add query_index only for prelims round
-      if (round === 'prelims') {
-        answerData.query_index = queryIndex;
-      }
-
-      // Add QA text only for Q&A mode
-      if (queryMode === 'qa' && answer.trim()) {
-        answerData.qa = answer.trim();
-      }
-
-      // Submit to backend
-      const response = await AnswerService.createAnswer(answerData);
-
-      if (response.success) {
-        toast.success('Answer submitted successfully!');
-        
-        // Call parent onSubmit callback if provided
-        if (onSubmit) {
-          onSubmit({
-            frame,
-            answer: queryMode === 'qa' ? answer : null,
-            answerData: response.data
-          });
-        }
-        
-        onClose();
+  const handleConfirm = () => {
+    if (!isSubmitting && onConfirm) {
+      if (submissionType === 'qa') {
+        onConfirm(localQAText);
       } else {
-        toast.error(`Failed to submit answer: ${response.error}`);
+        onConfirm();
       }
-    } catch (error) {
-      toast.error('Error submitting answer');
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
   const handleCancel = () => {
-    setAnswer('');
-    onClose();
-  };
-
-  const handleBackdropClick = (e) => {
-    if (e.target === e.currentTarget) {
-      handleCancel();
+    if (!isSubmitting && onClose) {
+      onClose();
     }
   };
 
-  // Zoom handlers
-  const handleFrameZoom = (frame) => {
-    setFrameToZoom(frame);
-    setIsImageZoomOpen(true);
+  const getSubmissionTitle = () => {
+    switch (submissionType) {
+      case 'kis':
+        return 'Confirm KIS Submission';
+      case 'qa':
+        return 'Confirm QA Submission';
+      case 'trake':
+        return 'Confirm TRAKE Submission';
+      default:
+        return 'Confirm Submission';
+    }
   };
 
-  const handleCloseImageZoom = () => {
-    setIsImageZoomOpen(false);
-    setFrameToZoom(null);
+  const getSubmissionMessage = () => {
+    switch (submissionType) {
+      case 'kis':
+        return 'Are you sure you want to submit this frame for KIS answer?';
+      case 'qa':
+        return 'Are you sure you want to submit this frame with QA text?';
+      case 'trake':
+        return `Are you sure you want to submit ${Array.isArray(frameData) ? frameData.length : 1} frame(s) for TRAKE answer?`;
+      default:
+        return 'Are you sure you want to submit this answer?';
+    }
   };
 
-  if (!isOpen || !frame) {
+  const renderFramePreview = () => {
+    if (submissionType === 'trake' && Array.isArray(frameData)) {
+      // For TRAKE, show horizontal scrollable list of all frames
+      return (
+        <div className="submission-modal__trake-frames">
+          <div className="submission-modal__trake-frames-label">
+            Frames to submit ({frameData.length} total):
+          </div>
+          <div className="submission-modal__trake-frames-list">
+            {frameData.map((frame, index) => (
+              <div key={`${frame.video_name}-${frame.frame_index}`} className="submission-modal__trake-frame-item">
+                <FrameItem
+                  frame={frame}
+                  size="small"
+                  showFilename={true}
+                  className="submission-modal__frame"
+                />
+                <div className="submission-modal__frame-number">#{index + 1}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    } else if (frameData && !Array.isArray(frameData)) {
+      // For KIS/QA, show the single frame
+      return (
+        <div className="submission-modal__single-frame">
+          <FrameItem
+            frame={frameData}
+            size="medium"
+            showFilename={true}
+            className="submission-modal__frame"
+          />
+        </div>
+      );
+    }
     return null;
-  }
+  };
+
+  const renderQAText = () => {
+    if (submissionType === 'qa') {
+      return (
+        <div className="submission-modal__qa-section">
+          <div className="submission-modal__qa-label">QA Text:</div>
+          <textarea
+            className="submission-modal__qa-input"
+            value={localQAText}
+            onChange={e => setLocalQAText(e.target.value)}
+            rows={3}
+            disabled={isSubmitting}
+            placeholder="Enter your QA answer here..."
+            style={{ width: '100%', resize: 'vertical', marginTop: '0.5rem' }}
+          />
+        </div>
+      );
+    }
+    return null;
+  };
 
   return (
-    <div className="submission-modal" onClick={handleBackdropClick}>
-      <div className="submission-modal__content">
+    <div className="submission-modal__backdrop" onClick={handleBackdropClick}>
+      <div className={`submission-modal submission-modal--${submissionType}`}>
         <div className="submission-modal__header">
-          <h3 className="submission-modal__title">Submit Answer</h3>
+          <h3 className="submission-modal__title">{getSubmissionTitle()}</h3>
           <button 
             className="submission-modal__close"
             onClick={handleCancel}
-            aria-label="Close modal"
             disabled={isSubmitting}
+            type="button"
           >
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
+            ×
           </button>
         </div>
-
-        <div className="submission-modal__body">
-          <div className="submission-modal__frame">
-            <FrameItem 
-              frame={frame}
-              isSelected={false}
-              showFilename={true}
-              size="large"
-              className="submission-modal__frame-item"
-              onZoom={handleFrameZoom}
-            />
-          </div>
-
-          {/* <div className="submission-modal__info">
-            <p><strong>Round:</strong> {round}</p>
-            {round === 'prelims' && (
-              <p><strong>Query Index:</strong> {queryIndex}</p>
-            )}
-            <p><strong>Mode:</strong> {queryMode.toUpperCase()}</p>
-          </div> */}
-
-          {queryMode === 'qa' && (
-            <div className="submission-modal__answer">
-              <label htmlFor="answer-input" className="submission-modal__label">
-                Your Answer:
-              </label>
-              <textarea
-                id="answer-input"
-                className="submission-modal__textarea"
-                value={answer}
-                onChange={(e) => setAnswer(e.target.value)}
-                placeholder="Enter your answer here..."
-                rows={3}
-                disabled={isSubmitting}
-              />
-            </div>
-          )}
+        
+        <div className="submission-modal__content">
+          <p className="submission-modal__message">{getSubmissionMessage()}</p>
+          
+          {renderFramePreview()}
+          {renderQAText()}
         </div>
-
-        <div className="submission-modal__footer">
+        
+        <div className="submission-modal__actions">
           <button 
-            className="submission-modal__button submission-modal__button--cancel"
+            className="submission-modal__cancel"
             onClick={handleCancel}
             disabled={isSubmitting}
+            type="button"
           >
             Cancel
           </button>
           <button 
-            className="submission-modal__button submission-modal__button--submit"
-            onClick={handleSubmit}
+            className={`submission-modal__confirm ${isSubmitting ? 'submission-modal__loading' : ''}`}
+            onClick={handleConfirm}
             disabled={isSubmitting}
+            type="button"
           >
-            {isSubmitting ? 'Submitting...' : 'Submit'}
+            {isSubmitting ? (
+              <>
+                <span className="submission-modal__spinner">⟳</span>
+                Submitting...
+              </>
+            ) : (
+              'Submit Answer'
+            )}
           </button>
         </div>
       </div>
-
-      {isImageZoomOpen && frameToZoom && (
-        <ImageZoomModal 
-          isOpen={isImageZoomOpen}
-          onClose={handleCloseImageZoom}
-          imageUrl={frameToZoom.url}
-          videoName={frameToZoom.video_name}
-          frameIndex={frameToZoom.frame_index}
-        />
-      )}
     </div>
   );
 };

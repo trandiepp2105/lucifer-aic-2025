@@ -21,6 +21,15 @@
     }
   }
 
+  // Show actions when frame has checkbox and is checked
+  &--has-checkbox.frame-item--checked {
+    .frame-item__actions {
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
+    }
+  }
+
   &--selected {
     border-color: #007bff;
     border-width: 2px;
@@ -152,6 +161,17 @@
       }
     }
 
+    &--delete {
+      background: rgba(239, 68, 68, 0.9);
+      border: 1px solid rgba(239, 68, 68, 1); // Add border for better visibility
+      
+      &:hover {
+        background: rgba(239, 68, 68, 1);
+        transform: scale(1.1);
+        box-shadow: 0 2px 6px rgba(239, 68, 68, 0.4);
+      }
+    }
+
     &--disabled {
       background: rgba(107, 114, 128, 0.6) !important;
       border: 1px solid rgba(107, 114, 128, 0.8) !important;
@@ -222,10 +242,68 @@
 
     &__thumbnail {
       background: #1a202c;
+      aspect-ratio: 533 / 300; // Maintain aspect ratio of 533:300
+      img {
+        height: 100%;
+      }
     }
 
     &__filename {
       color: #101112;
     }
   }
+}
+
+// Checkbox styling for TRAKE mode
+.frame-item__checkbox-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  // padding: 8px;
+}
+
+.frame-item__checkbox {
+  position: absolute;
+  opacity: 0;
+  cursor: pointer;
+  width: 0;
+  height: 0;
+}
+
+.frame-item__checkbox-custom {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  background: #fff;
+  border: 2px solid #ddd;
+  border-radius: 3px;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &::after {
+    content: '✓';
+    font-size: 12px;
+    font-weight: bold;
+    color: #fff;
+    display: none;
+    line-height: 1;
+  }
+}
+
+.frame-item__checkbox:checked + .frame-item__checkbox-custom {
+  background: #007bff;
+  border-color: #007bff;
+
+  &::after {
+    display: block;
+  }
+}
+
+.frame-item__checkbox:hover + .frame-item__checkbox-custom {
+  border-color: #007bff;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.2);
 }

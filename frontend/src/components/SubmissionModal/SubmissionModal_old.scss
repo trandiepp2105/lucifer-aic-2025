@@ -1,5 +1,5 @@
-// TeamAnswerModal.scss
-.team-answer-modal {
+// SubmissionModal.scss
+.submission-modal {
   position: fixed;
   top: 0;
   left: 0;
@@ -12,13 +12,7 @@
   z-index: 10001;
   padding: 0 20px;
   backdrop-filter: blur(4px);
-  outline: none; // Remove focus outline for modal container
   
-  // Ensure modal can receive focus for keyboard events
-  &:focus {
-    outline: none;
-  }
-    overflow-y: auto;
   &__content {
     background: white;
     border-radius: 12px;
@@ -28,18 +22,13 @@
     max-height: 95vh;
     overflow-y: auto;
     animation: modalSlideIn 0.3s ease-out;
-    outline: none;
-    
-    &:focus {
-      outline: none;
-    }
   }
 
   &__header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 5px;
+    padding: 0 20px;
     border-bottom: 1px solid #e5e7eb;
     background: #f9fafb;
     border-radius: 12px 12px 0 0;
@@ -68,11 +57,6 @@
       background: #f3f4f6;
       color: #374151;
     }
-
-    &:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
   }
 
   &__body {
@@ -93,10 +77,9 @@
     overflow: hidden;
     
     .frame-item__thumbnail {
-      aspect-ratio: 533 / 300; // Maintain aspect ratio of 533:300
       img {
-        // width: 100%;
-        height: 100%;
+        width: 100%;
+        // height: 160px;
         object-fit: cover;
       }
     }
@@ -112,6 +95,10 @@
     }
   }
 
+  &__answer {
+    margin-bottom: 20px;
+  }
+
   &__label {
     display: block;
     margin-bottom: 8px;
@@ -122,15 +109,16 @@
 
   &__textarea {
     width: 100%;
-    padding: 12px;
-    border: 2px solid #e5e7eb;
+    min-height: 80px;
+    padding: 10px 14px;
+    border: 1px solid #d1d5db;
     border-radius: 8px;
     font-size: 0.875rem;
-    line-height: 1.5;
+    color: #1f2937;
     resize: vertical;
-    min-height: 80px;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
     font-family: inherit;
-    transition: border-color 0.2s ease;
+    background: #fefefe;
 
     &:focus {
       outline: none;
@@ -141,19 +129,13 @@
     &::placeholder {
       color: #9ca3af;
     }
-
-    &:disabled {
-      background: #f9fafb;
-      color: #6b7280;
-      cursor: not-allowed;
-    }
   }
 
   &__footer {
     display: flex;
     justify-content: flex-end;
     gap: 12px;
-    padding: 20px;
+    padding: 14px 20px;
     border-top: 1px solid #e5e7eb;
     background: #f9fafb;
     border-radius: 0 0 12px 12px;
@@ -171,57 +153,52 @@
 
     &--cancel {
       background: #f3f4f6;
-      color: #374151;
+      color: #6b7280;
+      border: 1px solid #d1d5db;
 
-      &:hover:not(:disabled) {
+      &:hover {
         background: #e5e7eb;
+        color: #374151;
       }
     }
 
     &--submit {
       background: #3b82f6;
       color: white;
+      box-shadow: 0 2px 4px rgba(59, 130, 246, 0.2);
 
-      &:hover:not(:disabled) {
+      &:hover {
         background: #2563eb;
+        box-shadow: 0 4px 8px rgba(59, 130, 246, 0.3);
       }
 
-      &:disabled {
-        background: #9ca3af;
-        cursor: not-allowed;
+      &:active {
+        transform: translateY(1px);
       }
-    }
-
-    &:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
     }
   }
 
-  // Responsive design
-  @media (max-width: 768px) {
-    &__content {
-      width: 95%;
-      margin: 1rem;
-    }
-
-    &__header,
-    &__body,
-    &__footer {
-      padding: 1rem;
-    }
-
-    &__footer {
-      flex-direction: column;
-      gap: 0.5rem;
-
-      button {
-        width: 100%;
+  &__info {
+    margin: 16px 0;
+    padding: 12px 16px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    
+    p {
+      margin: 4px 0;
+      font-size: 0.875rem;
+      color: #475569;
+      
+      strong {
+        color: #1e293b;
+        font-weight: 600;
       }
     }
   }
 }
 
+// Animation
 @keyframes modalSlideIn {
   from {
     opacity: 0;
@@ -230,5 +207,43 @@
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
+  }
+}
+
+// Responsive
+@media (max-width: 768px) {
+  .submission-modal {
+    padding: 16px;
+
+    &__content {
+      max-width: 100%;
+      margin: 0;
+    }
+
+    &__header {
+      padding: 14px 18px;
+    }
+
+    &__body {
+      padding: 18px;
+    }
+
+    &__frame-item {
+      max-width: 100%;
+      
+      .frame-item__thumbnail img {
+        height: 140px;
+      }
+    }
+
+    &__footer {
+      padding: 12px 18px;
+      flex-direction: column-reverse;
+      gap: 8px;
+    }
+
+    &__button {
+      width: 100%;
+    }
   }
 }
