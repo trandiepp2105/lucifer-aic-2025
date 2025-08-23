@@ -50,7 +50,7 @@ const TeamAnswer = ({
   
   // Use TRAKE context for TRAKE-related state
   const {
-    allTRAKEAnswers,
+    currentQueryTRAKEAnswers, // Use filtered TRAKE answers for current query
     setAllTRAKEAnswers,
     activeGroup,
     setActiveGroup,
@@ -309,8 +309,8 @@ const TeamAnswer = ({
         setTRAKEsseConnected(true);
         // Fetch initial TRAKE data when connection is established
         if (onRefresh) {
-          console.log('📡 Fetching initial TRAKE data with queryIndex:', queryIndex);
-          // Call onRefresh with no parameters - the HomePage onRefresh handler will handle queryIndex
+          console.log('📡 Fetching initial TRAKE data');
+          // Call onRefresh with no parameters - the context will handle fetching all data
           onRefresh();
         }
       };
@@ -722,10 +722,10 @@ const TeamAnswer = ({
           {queryMode === 'tra' ? (
             <span>
               <span className="team-answer__icon">🎯</span>
-              TRAKE Answers ({Array.isArray(allTRAKEAnswers) ? 
-                (allTRAKEAnswers.length > 0 && allTRAKEAnswers[0].hasOwnProperty('group') ? 
-                  allTRAKEAnswers.length : 
-                  Object.keys(allTRAKEAnswers.reduce((groups, item) => ({ ...groups, [item.group || 1]: true }), {})).length
+              TRAKE Answers ({Array.isArray(currentQueryTRAKEAnswers) ? 
+                (currentQueryTRAKEAnswers.length > 0 && currentQueryTRAKEAnswers[0].hasOwnProperty('group') ? 
+                  currentQueryTRAKEAnswers.length : 
+                  Object.keys(currentQueryTRAKEAnswers.reduce((groups, item) => ({ ...groups, [item.group || 1]: true }), {})).length
                 ) : 0
               } groups)
             </span>
@@ -778,7 +778,7 @@ const TeamAnswer = ({
             onToggle={onToggle}
             onFrameSelect={onFrameSelect}
             onFrameDoubleClick={onFrameDoubleClick}
-            allTRAKEAnswers={allTRAKEAnswers}
+            allTRAKEAnswers={currentQueryTRAKEAnswers}
             setAllTRAKEAnswers={setAllTRAKEAnswers}
             onRefresh={fetchAllTRAKEAnswers}
             activeGroup={activeGroup}

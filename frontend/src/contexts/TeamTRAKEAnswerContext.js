@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useApp } from './AppContext';
 import { useToast } from '../components/Toast/ToastProvider';
 import { TeamTRAKEAnswerService } from '../services/TeamTRAKEAnswerService';
@@ -31,24 +31,23 @@ export const TeamTRAKEAnswerProvider = ({ children }) => {
   const eventSourceRef = useRef(null);
 
   // Fetch TRAKE answers
-  const fetchAllTRAKEAnswers = useCallback(async (queryIdx = queryIndex) => {
-    console.log('🎯 Context fetchAllTRAKEAnswers called with queryIndex:', queryIdx);
+  const fetchAllTRAKEAnswers = useCallback(async () => {
+    console.log('🎯 Context fetchAllTRAKEAnswers called - fetching all TRAKE answers');
     
-    if (queryMode !== 'tra') return;
-    if (queryIdx === null || queryIdx === undefined) {
-      console.log('❌ No queryIndex provided, skipping fetch');
+    if (queryMode !== 'tra') {
+      console.log('❌ Not in tra mode, skipping fetch');
       return;
     }
     
     try {
       setIsLoadingTRAKEAnswers(true);
-      console.log('📡 Making API call to fetch TRAKE answers...');
-      const response = await TeamTRAKEAnswerService.getTRAKEAnswers(queryIdx);
-      console.log('📡 TRAKE answers response:', response);
+      console.log('📡 Making API call to fetch all TRAKE answers...');
+      const response = await TeamTRAKEAnswerService.getTRAKEAnswers();
+      console.log('📡 All TRAKE answers response:', response);
       
       if (response && response.data) {
         setAllTRAKEAnswers(response.data || []);
-        console.log('✅ TRAKE answers set:', response.data.length, 'groups');
+        console.log('✅ All TRAKE answers set:', response.data.length, 'groups');
       } else {
         console.error('Failed to fetch TRAKE answers:', response);
         toast.error('Failed to load TRAKE answers');
@@ -65,137 +64,29 @@ export const TeamTRAKEAnswerProvider = ({ children }) => {
     } finally {
       setIsLoadingTRAKEAnswers(false);
     }
-  }, [queryIndex, queryMode, toast]);
+  }, [queryMode, toast]);
 
-  // Load TRAKE answers when queryIndex or queryMode changes
+  // Load TRAKE answers when queryMode changes
   useEffect(() => {
-    if (queryMode === 'tra' && queryIndex !== null) {
-      fetchAllTRAKEAnswers(queryIndex);
+    console.log('🔄 useEffect triggered: queryMode =', queryMode);
+    
+    if (queryMode === 'tra') {
+      console.log('🔄 Fetching all TRAKE answers');
+      // Force clear old data first
+      setAllTRAKEAnswers([]);
+      // Then fetch new data
+      fetchAllTRAKEAnswers();
+    } else {
+      // Clear TRAKE answers when not in 'tra' mode
+      console.log('🧹 Clearing TRAKE answers - not in tra mode');
+      setAllTRAKEAnswers([]);
     }
-  }, [queryIndex, queryMode, fetchAllTRAKEAnswers]);
+  }, [queryMode, fetchAllTRAKEAnswers]);
 
   // Reset activeGroup when switching query or mode
   useEffect(() => {
     setActiveGroup(null);
   }, [queryIndex, queryMode]);
-
-  // Initialize SSE connection for TRAKE answers
-  const initializeTRAKESSE = useCallback(() => {
-    try {
-      // Close existing connection if any
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
-      }
-
-      // Create new EventSource connection
-      const sseUrl = `${apiConfig.baseURL}/team-trake-answers/sse/`;
-      console.log('🔗 Initializing TRAKE SSE connection to:', sseUrl);
-      
-      const eventSource = new EventSource(sseUrl);
-      eventSourceRef.current = eventSource;
-
-      // Handle incoming messages
-      eventSource.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          console.log('📡 TRAKE SSE message received:', data);
-
-          switch (data.type) {
-            case 'connected':
-              setSseConnected(true);
-              toast.success('TRAKE real-time updates connected', 500);
-              break;
-
-            case 'create':
-              // Refresh TRAKE answers when new items are created
-              if (queryMode === 'tra' && queryIndex !== null) {
-                fetchAllTRAKEAnswers(queryIndex);
-              }
-              toast.success('New TRAKE items added', 500);
-              break;
-
-            case 'delete':
-              // Refresh TRAKE answers when items are deleted
-              if (queryMode === 'tra' && queryIndex !== null) {
-                fetchAllTRAKEAnswers(queryIndex);
-              }
-              toast.info('TRAKE items removed', 500);
-              break;
-
-            case 'bulk_delete':
-              // Refresh TRAKE answers when bulk delete occurs
-              if (queryMode === 'tra' && queryIndex !== null) {
-                fetchAllTRAKEAnswers(queryIndex);
-              }
-              toast.info(`${data.count || 'Multiple'} TRAKE items deleted`, 500);
-              break;
-
-            case 'group_delete':
-              // Refresh TRAKE answers when group is deleted
-              if (queryMode === 'tra' && queryIndex !== null) {
-                fetchAllTRAKEAnswers(queryIndex);
-              }
-              toast.info(`TRAKE group deleted`, 500);
-              break;
-
-            case 'update_group':
-              // Refresh TRAKE answers when group is updated
-              if (queryMode === 'tra' && queryIndex !== null) {
-                fetchAllTRAKEAnswers(queryIndex);
-              }
-              toast.info('TRAKE group updated', 500);
-              break;
-
-            case 'heartbeat':
-              // Keep connection alive
-              break;
-
-            case 'error':
-              console.error('❌ TRAKE SSE Error:', data.message);
-              toast.error(data.message, 500);
-              break;
-
-            default:
-              console.log('Unknown TRAKE SSE message type:', data.type);
-              break;
-          }
-        } catch (error) {
-          console.error('Error parsing TRAKE SSE message:', error, event.data);
-        }
-      };
-
-      // Handle connection open
-      eventSource.onopen = (event) => {
-        console.log('✅ TRAKE SSE connection opened');
-        setSseConnected(true);
-      };
-
-      // Handle connection errors
-      eventSource.onerror = (event) => {
-        console.error('❌ TRAKE SSE connection error:', event);
-        setSseConnected(false);
-        
-        if (eventSource.readyState === EventSource.CLOSED) {
-          toast.warning('TRAKE real-time connection lost', 500);
-        }
-      };
-
-    } catch (error) {
-      console.error('Failed to initialize TRAKE SSE:', error);
-      setSseConnected(false);
-    }
-  }, [queryMode, queryIndex, toast, fetchAllTRAKEAnswers]);
-
-  // Cleanup SSE connection
-  const cleanupTRAKESSE = useCallback(() => {
-    if (eventSourceRef.current) {
-      console.log('🔌 Closing TRAKE SSE connection');
-      eventSourceRef.current.close();
-      eventSourceRef.current = null;
-      setSseConnected(false);
-    }
-  }, []);
 
   // Initialize SSE permanently (don't depend on queryMode)
   useEffect(() => {
@@ -234,11 +125,33 @@ export const TeamTRAKEAnswerProvider = ({ children }) => {
               case 'bulk_delete':
               case 'group_delete':
               case 'update_group':
-                // Always refresh TRAKE answers when there are changes
-                // This ensures the context data is up-to-date for mode detection
-                const currentQueryIndex = queryIndex;
-                if (currentQueryIndex !== null) {
-                  fetchAllTRAKEAnswers(currentQueryIndex);
+              case 'group_update': // Add support for backend event type
+                // Simply refresh all TRAKE answers when any changes happen
+                if (queryMode === 'tra') {
+                  console.log(`📡 SSE ${data.type} event - refreshing all TRAKE answers`, data);
+                  fetchAllTRAKEAnswers();
+                  
+                  // Show appropriate toast message
+                  switch (data.type) {
+                    case 'create':
+                      toast.success('New TRAKE items added', 500);
+                      break;
+                    case 'delete':
+                      toast.info('TRAKE items removed', 500);
+                      break;
+                    case 'bulk_delete':
+                      toast.info(`${data.count || 'Multiple'} TRAKE items deleted`, 500);
+                      break;
+                    case 'group_delete':
+                      toast.info('TRAKE group deleted', 500);
+                      break;
+                    case 'update_group':
+                    case 'group_update':
+                      toast.info(`TRAKE group updated (${data.updated_count || 'items'} moved to group ${data.new_group || 'unknown'})`, 1000);
+                      break;
+                  }
+                } else {
+                  console.log(`📡 SSE ${data.type} event ignored - not in tra mode`);
                 }
                 break;
 
@@ -294,11 +207,76 @@ export const TeamTRAKEAnswerProvider = ({ children }) => {
         setSseConnected(false);
       }
     };
-  }, []); // Empty dependency array - only run once on mount
+  }, [toast, fetchAllTRAKEAnswers, queryMode]); // Add queryMode to capture current value
+
+  // Manual refresh function that can be called from components
+  const manualRefreshTRAKEAnswers = useCallback(() => {
+    if (queryMode === 'tra') {
+      console.log('🔄 Manual refresh all TRAKE answers');
+      setAllTRAKEAnswers([]); // Clear first
+      fetchAllTRAKEAnswers();
+    }
+  }, [queryMode, fetchAllTRAKEAnswers]);
+
+  // Function to delete all TRAKE answers for current query
+  const deleteAllTRAKEAnswers = useCallback(async () => {
+    if (queryMode !== 'tra' || queryIndex === null || queryIndex === undefined) {
+      console.log('❌ Cannot delete TRAKE answers - not in tra mode or no queryIndex');
+      return;
+    }
+
+    try {
+      setIsLoadingTRAKEAnswers(true);
+      console.log('🗑️ Deleting all TRAKE answers for queryIndex:', queryIndex);
+      const response = await TeamTRAKEAnswerService.deleteAllTRAKEAnswers(queryIndex);
+      console.log('🗑️ Delete response:', response);
+      
+      if (response && response.success) {
+        // Refresh all data to update the UI
+        await fetchAllTRAKEAnswers();
+        toast.success('All TRAKE answers deleted');
+        return { success: true };
+      } else {
+        console.error('Failed to delete all TRAKE answers:', response);
+        toast.error('Failed to delete TRAKE answers');
+        return { success: false, error: response?.error || 'Failed to delete all TRAKE answers' };
+      }
+    } catch (error) {
+      console.error('Error deleting all TRAKE answers:', error);
+      toast.error('Failed to delete TRAKE answers');
+      return { success: false, error: error.message || 'Error deleting all TRAKE answers' };
+    } finally {
+      setIsLoadingTRAKEAnswers(false);
+    }
+  }, [queryMode, queryIndex, toast, fetchAllTRAKEAnswers]);
+
+  // Computed property to get TRAKE answers for current query index
+  const currentQueryTRAKEAnswers = useMemo(() => {
+    if (!allTRAKEAnswers || !Array.isArray(allTRAKEAnswers)) {
+      return [];
+    }
+    
+    console.log('🔍 Filtering TRAKE answers for queryIndex:', queryIndex);
+    console.log('🔍 All TRAKE answers:', allTRAKEAnswers);
+    
+    // Find the query data that matches current queryIndex
+    const currentQueryData = allTRAKEAnswers.find(queryData => 
+      queryData.query_index === queryIndex
+    );
+    
+    if (!currentQueryData || !currentQueryData.data || !Array.isArray(currentQueryData.data)) {
+      console.log('🔍 No data found for queryIndex:', queryIndex);
+      return [];
+    }
+    
+    console.log('🔍 Found data for queryIndex:', queryIndex, currentQueryData.data);
+    return currentQueryData.data;
+  }, [allTRAKEAnswers, queryIndex]);
 
   const contextValue = {
     // State
-    allTRAKEAnswers,
+    allTRAKEAnswers, // Keep original for internal use
+    currentQueryTRAKEAnswers, // Filtered for current query
     setAllTRAKEAnswers,
     activeGroup,
     setActiveGroup,
@@ -307,35 +285,8 @@ export const TeamTRAKEAnswerProvider = ({ children }) => {
     
     // Actions
     fetchAllTRAKEAnswers,
-    
-    // Delete all TRAKE answers for current query
-    deleteAllTRAKEAnswers: useCallback(async (queryIdx = queryIndex) => {
-      console.log('🗑️ Context deleteAllTRAKEAnswers called with queryIndex:', queryIdx);
-      
-      if (queryMode !== 'tra') return;
-      if (queryIdx === null || queryIdx === undefined) {
-        console.log('❌ No queryIndex provided, skipping delete');
-        return;
-      }
-      
-      try {
-        console.log('📡 Making API call to delete all TRAKE answers...');
-        const response = await TeamTRAKEAnswerService.deleteAllTRAKEAnswers(queryIdx);
-        console.log('📡 Delete all TRAKE answers response:', response);
-        
-        if (response && response.success) {
-          setAllTRAKEAnswers([]);
-          console.log('✅ All TRAKE answers deleted successfully');
-          return { success: true };
-        } else {
-          console.error('Failed to delete all TRAKE answers:', response);
-          return { success: false, error: response?.error || 'Failed to delete all TRAKE answers' };
-        }
-      } catch (error) {
-        console.error('Error deleting all TRAKE answers:', error);
-        return { success: false, error: error.message || 'Error deleting all TRAKE answers' };
-      }
-    }, [queryIndex, queryMode]),
+    manualRefreshTRAKEAnswers,
+    deleteAllTRAKEAnswers,
     
     // Helper function to toggle active group
     toggleActiveGroup: useCallback((groupNumber) => {

@@ -79,9 +79,10 @@ class TeamTRAKEAnswerService {
     }
   }
 
-  static async getTRAKEAnswers(queryIndex) {
+  static async getTRAKEAnswers() {
     try {
-      const response = await fetch(`${apiConfig.baseURL}/team-trake-answers/?query_index=${queryIndex}`);
+      // Fetch all TRAKE answers without query_index filter
+      const response = await fetch(`${apiConfig.baseURL}/team-trake-answers/`);
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -118,23 +119,31 @@ class TeamTRAKEAnswerService {
 
   static async deleteAllTRAKEAnswers(queryIndex) {
     try {
-      // First, get all TRAKE answers for this query to get their IDs
-      const getTRAKEResponse = await fetch(`${apiConfig.baseURL}/team-trake-answers/?query_index=${queryIndex}`);
+      // First, get all TRAKE answers to find items for this query
+      const getTRAKEResponse = await fetch(`${apiConfig.baseURL}/team-trake-answers/`);
       
       if (!getTRAKEResponse.ok) {
         throw new Error(`Failed to fetch TRAKE answers: ${getTRAKEResponse.status}`);
       }
       
       const responseData = await getTRAKEResponse.json();
-      console.log('🔍 Fetched TRAKE answers response:', responseData);
+      console.log('🔍 Fetched all TRAKE answers response:', responseData);
       
       // Extract the data array from the response
-      const traKEAnswers = responseData.data || [];
-      console.log('🔍 Extracted TRAKE answers array:', traKEAnswers);
+      const allTRAKEAnswers = responseData.data || [];
+      console.log('🔍 All TRAKE answers array:', allTRAKEAnswers);
       
-      if (!Array.isArray(traKEAnswers) || traKEAnswers.length === 0) {
-        return { success: true, message: 'No TRAKE answers to delete' };
+      // Find the data for current query index
+      const currentQueryData = allTRAKEAnswers.find(queryData => 
+        queryData.query_index === queryIndex
+      );
+      
+      if (!currentQueryData || !currentQueryData.data || !Array.isArray(currentQueryData.data) || currentQueryData.data.length === 0) {
+        return { success: true, message: 'No TRAKE answers to delete for this query' };
       }
+      
+      const traKEAnswers = currentQueryData.data;
+      console.log('🔍 TRAKE answers for queryIndex', queryIndex, ':', traKEAnswers);
       
       // Collect all IDs from all groups
       const allIds = [];

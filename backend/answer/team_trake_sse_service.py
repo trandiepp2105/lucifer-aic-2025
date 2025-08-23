@@ -58,28 +58,30 @@ class TeamTRAKEAnswerSSEService:
             logger.error(f"❌ Unexpected Redis error for TeamTRAKE: {e}")
             self.redis_client = None
 
-    def publish_create_message(self, data):
+    def publish_create_message(self, data, query_index=None):
         """
         Publish create message for TeamTRAKEAnswer updates
         
         Args:
             data: Data to send (list of created items or single item)
+            query_index: Query index for filtering (optional)
         """
-        self.publish_simple_message('create', data)
+        self.publish_simple_message('create', data, query_index)
 
-    def publish_bulk_delete_message(self, deleted_count, deleted_ids=None):
+    def publish_bulk_delete_message(self, deleted_count, deleted_ids=None, query_index=None):
         """
         Publish bulk delete message for TeamTRAKEAnswer updates
         
         Args:
             deleted_count (int): Number of items deleted
             deleted_ids (list): List of deleted IDs (optional)
+            query_index (int): Query index for filtering (optional)
         """
         data = {
             'deleted_count': deleted_count,
             'deleted_ids': deleted_ids or []
         }
-        self.publish_simple_message('bulk_delete', data)
+        self.publish_simple_message('bulk_delete', data, query_index)
 
     def publish_group_delete_message(self, deleted_count, group, query_index=None):
         """
@@ -97,13 +99,14 @@ class TeamTRAKEAnswerSSEService:
         }
         self.publish_simple_message('group_delete', data)
 
-    def publish_simple_message(self, message_type, data):
+    def publish_simple_message(self, message_type, data, query_index=None):
         """
         Simple publish method for team TRAKE answer updates
         
         Args:
             message_type (str): Type of message ('create', 'bulk_delete', 'group_delete')
             data: Data to send
+            query_index (int): Query index for filtering (optional)
         """
         if not self.redis_client:
             logger.warning("Redis not available, skipping TeamTRAKE SSE publish")
@@ -112,16 +115,17 @@ class TeamTRAKEAnswerSSEService:
         message = {
             "type": message_type,
             "data": data,
+            "query_index": query_index,
             "timestamp": timezone.now().isoformat()
         }
         
         try:
             self.redis_client.publish(self.CHANNEL_NAME, json.dumps(message))
-            logger.info(f"Published TeamTRAKEAnswer {message_type} event")
+            logger.info(f"Published TeamTRAKEAnswer {message_type} event for query_index {query_index}")
         except Exception as e:
             logger.error(f"Failed to publish TeamTRAKEAnswer {message_type} event: {e}")
 
-    def publish_group_update_message(self, updated_count, item_ids, new_group):
+    def publish_group_update_message(self, updated_count, item_ids, new_group, query_index=None):
         """
         Publish group update message via Redis
         
@@ -129,6 +133,7 @@ class TeamTRAKEAnswerSSEService:
             updated_count (int): Number of items updated
             item_ids (list): List of updated item IDs
             new_group (int): New group number assigned
+            query_index (int): Query index for filtering (optional)
         """
         try:
             if not self.ensure_redis_connection():
@@ -136,10 +141,11 @@ class TeamTRAKEAnswerSSEService:
                 return False
             
             message_data = {
-                'type': 'group_update',
+                'type': 'update_group',  # Match frontend expectation
                 'updated_count': updated_count,
                 'item_ids': item_ids,
                 'new_group': new_group,
+                'query_index': query_index,
                 'timestamp': timezone.now().isoformat(),
                 'message': f'Updated group for {updated_count} items to group {new_group}'
             }
@@ -147,7 +153,7 @@ class TeamTRAKEAnswerSSEService:
             message_json = json.dumps(message_data)
             self.redis_client.publish(self.CHANNEL_NAME, message_json)
             
-            logger.info(f"Published TeamTRAKE group update message: {updated_count} items to group {new_group}")
+            logger.info(f"Published TeamTRAKE group update message: {updated_count} items to group {new_group} for query_index {query_index}")
             return True
             
         except Exception as e:
