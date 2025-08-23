@@ -138,10 +138,10 @@ const DisplayListFrame = ({
     }
   };
 
-  // Hàm mở modal xác nhận submit group TRAKE
-  const handleSubmitTrakeGroup = (frameList) => {
-    openSubmissionModal('trake', frameList);
-  };
+  // // Hàm mở modal xác nhận submit group TRAKE
+  // const handleSubmitTrakeGroup = (frameList) => {
+  //   openSubmissionModal('trake', frameList);
+  // };
 
   // Handle push TRAKE group
   const handlePushTrakeGroup = async () => {

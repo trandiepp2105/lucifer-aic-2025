@@ -20,6 +20,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { restrictToVerticalAxis, restrictToParentElement } from '@dnd-kit/modifiers';
 import FrameItem from '../FrameItem/FrameItem';
 import ConfirmationModal from '../ConfirmationModal';
+import SubmissionModal from '../SubmissionModal/SubmissionModal';
 import { useToast } from '../Toast/ToastProvider';
 import { useApp } from '../../contexts/AppContext';
 import { useSubmission } from '../../hooks/useSubmission';
@@ -27,9 +28,8 @@ import { TeamTRAKEAnswerService } from '../../services/TeamTRAKEAnswerService';
 import './TeamTRAKEAnswerList.scss';
 
 // Sortable Group Item Component
-const SortableGroupItem = ({ group, onDeleteItem, onDeleteGroup, onFrameSelect, onFrameDoubleClick, selectedFrame, activeGroup, onSetActiveGroup, onSubmitGroup }) => {
+const SortableGroupItem = ({ group, onDeleteItem, onDeleteGroup, onFrameSelect, onFrameDoubleClick, selectedFrame, activeGroup, onSetActiveGroup, openSubmissionModal }) => {
   const { queryIndex } = useApp(); // Get queryIndex from App context
-  const { submitTRAKEAnswer, openSubmissionModal } = useSubmission(); // Use submission hook
   const {
     attributes,
     listeners,
@@ -135,16 +135,16 @@ const SortableGroupItem = ({ group, onDeleteItem, onDeleteGroup, onFrameSelect, 
     const frameList = group.items.map(item => ({
       video_name: item.video_name,
       frame_index: item.frame_index,
-      group: group.group
+      group: group.group,
+      url: item.frame_url || item.url // Add url for modal preview
     }));
     if (!frameList.length) {
       toast.error('No frames to submit in this group');
       return;
     }
-    // Gọi callback từ props
-    if (onSubmitGroup) {
-      onSubmitGroup(frameList);
-    }
+    console.log("opening submission modal for group:", group.group, frameList);
+    // Open submission modal instead of calling callback
+    openSubmissionModal('trake', frameList);
   };
 
   return (
@@ -284,6 +284,19 @@ const TeamTRAKEAnswerList = ({
   const toast = useToast();
   const { queryIndex } = useApp();
   const [dragging, setDragging] = useState(false);
+  
+  // Use submission hook for modal management
+  const {
+    submissionModal,
+    openSubmissionModal,
+    closeSubmissionModal,
+    handleSubmissionConfirm
+  } = useSubmission();
+
+  // Debug: Log submissionModal state changes
+  React.useEffect(() => {
+    console.log("TeamTRAKEAnswerList - submissionModal state changed:", submissionModal);
+  }, [submissionModal]);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -431,6 +444,7 @@ const TeamTRAKEAnswerList = ({
                     selectedFrame={selectedFrame}
                     activeGroup={activeGroup}
                     onSetActiveGroup={onSetActiveGroup}
+                    openSubmissionModal={openSubmissionModal}
                   />
                 ))}
               </div>
@@ -445,6 +459,17 @@ const TeamTRAKEAnswerList = ({
           </div>
         )}
       </div>
+      
+      {/* Submission Modal */}
+      <SubmissionModal
+        isOpen={submissionModal.isOpen}
+        onClose={closeSubmissionModal}
+        onConfirm={handleSubmissionConfirm}
+        submissionType={submissionModal.type}
+        frameData={submissionModal.frameData}
+        qaText={submissionModal.qaText}
+        isSubmitting={submissionModal.isSubmitting}
+      />
     </div>
   );
 };
