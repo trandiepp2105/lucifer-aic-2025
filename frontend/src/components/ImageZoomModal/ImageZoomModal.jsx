@@ -72,9 +72,9 @@ const ImageZoomModal = ({
         )}
         
         {/* Instructions */}
-        <div className="image-zoom-modal__instructions">
+        {/* <div className="image-zoom-modal__instructions">
           Press ESC or click outside to close
-        </div>
+        </div> */}
       </div>
     </div>
   );
