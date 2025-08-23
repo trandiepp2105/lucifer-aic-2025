@@ -22,11 +22,14 @@ import FrameItem from '../FrameItem/FrameItem';
 import ConfirmationModal from '../ConfirmationModal';
 import { useToast } from '../Toast/ToastProvider';
 import { useApp } from '../../contexts/AppContext';
+import { useSubmission } from '../../hooks/useSubmission';
 import { TeamTRAKEAnswerService } from '../../services/TeamTRAKEAnswerService';
 import './TeamTRAKEAnswerList.scss';
 
 // Sortable Group Item Component
 const SortableGroupItem = ({ group, onDeleteItem, onDeleteGroup, onFrameSelect, onFrameDoubleClick, selectedFrame, activeGroup, onSetActiveGroup }) => {
+  const { queryIndex } = useApp(); // Get queryIndex from App context
+  const { submitTRAKEAnswer } = useSubmission(); // Use submission hook
   const {
     attributes,
     listeners,
@@ -52,6 +55,23 @@ const SortableGroupItem = ({ group, onDeleteItem, onDeleteGroup, onFrameSelect, 
     event.stopPropagation();
     setDeletingItem(item);
     setShowDeleteModal(true);
+  };
+
+  // Direct delete without confirmation modal
+  const handleDirectDeleteClick = async (item, event) => {
+    event.stopPropagation();
+    
+    try {
+      console.log('🗑️ Direct delete TRAKE item:', item);
+      await TeamTRAKEAnswerService.deleteTRAKEAnswersByIds([item.id]);
+      if (onDeleteItem) {
+        onDeleteItem(item.id);
+      }
+      toast.success(`TRAKE answer deleted from ${item.video_name} frame ${item.frame_index}`);
+    } catch (error) {
+      console.error('Error deleting TRAKE answer:', error);
+      toast.error('Failed to delete TRAKE answer');
+    }
   };
 
   const handleDeleteGroupClick = (event) => {
@@ -80,7 +100,7 @@ const SortableGroupItem = ({ group, onDeleteItem, onDeleteGroup, onFrameSelect, 
 
     try {
       setDeletingGroup(true);
-      await TeamTRAKEAnswerService.deleteGroupTRAKEAnswers(group.group);
+      await TeamTRAKEAnswerService.deleteGroupTRAKEAnswers(group.group, queryIndex);
       if (onDeleteGroup) {
         onDeleteGroup(group.group);
       }
@@ -105,14 +125,22 @@ const SortableGroupItem = ({ group, onDeleteItem, onDeleteGroup, onFrameSelect, 
 
   const handleActiveGroupChange = (event) => {
     const isChecked = event.target.checked;
+    console.log('Active group change:', { group: group.group, isChecked, currentActiveGroup: activeGroup });
     if (onSetActiveGroup) {
       onSetActiveGroup(isChecked ? group.group : null);
     }
   };
 
   const handleSubmitGroup = () => {
-    // TODO: Implement submit group functionality
-    console.log(`Submit group ${group.group} - placeholder for future implementation`);
+    // Convert group items to the format expected by submission service
+    const frameList = group.items.map(item => ({
+      video_name: item.video_name,
+      frame_index: item.frame_index,
+      group: group.group
+    }));
+
+    // Use submission modal for confirmation
+    submitTRAKEAnswer(frameList);
   };
 
   return (
@@ -124,33 +152,54 @@ const SortableGroupItem = ({ group, onDeleteItem, onDeleteGroup, onFrameSelect, 
         {...attributes}
       >
         <div className="team-trake-group__header">
-          <input
-            type="checkbox"
-            className="team-trake-group__checkbox"
-            checked={activeGroup === group.group}
-            onChange={handleActiveGroupChange}
-            title={activeGroup === group.group ? "Active group for new submissions" : "Set as active group"}
-          />
-          <button 
-            className="team-trake-group__submit"
-            onClick={handleSubmitGroup}
-            title={`Submit Group ${group.group} (${group.items.length} items)`}
+          {/* Left side - controls */}
+          <div className="team-trake-group__left">
+            <input
+              type="checkbox"
+              className="team-trake-group__checkbox"
+              checked={activeGroup === group.group}
+              onChange={handleActiveGroupChange}
+              title={activeGroup === group.group ? "Active group for new submissions" : "Set as active group"}
+            />
+            {/* <span className="team-trake-group__title">
+              Group {group.group} ({group.items.length})
+            </span> */}
+          </div>
+          
+          {/* Middle - drag area */}
+          <div 
+            className="team-trake-group__drag-area"
             {...listeners}
+            style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
+            title="Drag to reorder groups"
           >
-            <img src="/assets/send.svg" alt="Submit Group" />
-          </button>
-          <button 
-            className="team-trake-group__delete"
-            onClick={handleDeleteGroupClick}
-            disabled={deletingGroup}
-            title="Delete entire group"
-          >
-            {deletingGroup ? (
-              <span className="team-trake-group__spinner">⟳</span>
-            ) : (
-              <img src="/assets/trash-bin.svg" alt="Delete Group" />
-            )}
-          </button>
+            <div className="team-trake-group__drag-indicator">
+              <img src="/assets/drag.svg" alt="Drag to reorder" />
+            </div>
+          </div>
+          
+          {/* Right side - action buttons */}
+          <div className="team-trake-group__actions">
+            <button 
+              className="team-trake-group__submit"
+              onClick={handleSubmitGroup}
+              title={`Submit Group ${group.group} (${group.items.length} items)`}
+            >
+              <img src="/assets/send.svg" alt="Submit Group" />
+            </button>
+            <button 
+              className="team-trake-group__delete"
+              onClick={handleDeleteGroupClick}
+              disabled={deletingGroup}
+              title="Delete entire group"
+            >
+              {deletingGroup ? (
+                <span className="team-trake-group__spinner">⟳</span>
+              ) : (
+                <img src="/assets/trash-bin.svg" alt="Delete Group" />
+              )}
+            </button>
+          </div>
         </div>
         
         <div className="team-trake-group__items">
@@ -160,7 +209,7 @@ const SortableGroupItem = ({ group, onDeleteItem, onDeleteGroup, onFrameSelect, 
               parseInt(selectedFrame.frame_index) === parseInt(item.frame_index);
             
             return (
-              <div key={item.id} className="team-trake-group__item">
+              <div key={`${group.group}-${item.id}-${item.frame_index}`} className="team-trake-group__item">
                 <FrameItem
                   frame={{
                     ...item,
@@ -182,7 +231,7 @@ const SortableGroupItem = ({ group, onDeleteItem, onDeleteGroup, onFrameSelect, 
                   })}
                   isSelected={isSelected}
                   showDelete={true}
-                  onDeleteClick={(event) => handleDeleteClick(item, event)}
+                  onDeleteClick={(event) => handleDirectDeleteClick(item, event)}
                 />
               </div>
             );
@@ -225,7 +274,8 @@ const TeamTRAKEAnswerList = ({
   setAllTRAKEAnswers,
   onRefresh,
   activeGroup,      // Add activeGroup prop
-  onSetActiveGroup  // Add onSetActiveGroup prop
+  onSetActiveGroup, // Add onSetActiveGroup prop
+  isCompact = false // Add compact mode prop
 }) => {
   const toast = useToast();
   const { queryIndex } = useApp();
@@ -351,7 +401,7 @@ const TeamTRAKEAnswerList = ({
   }
 
   return (
-    <div className="team-trake-answer-list">
+    <div className={`team-trake-answer-list ${isCompact ? 'team-trake-answer-list--compact' : ''}`}>
       <div className="team-trake-answer-list__content">
         {groupedAnswers.length > 0 ? (
           <DndContext

@@ -8,6 +8,11 @@ from .team_trake_sse_views import (
     TeamTRAKEAnswerGroupDeleteSSEAPIView,
     TeamTRAKEAnswerUpdateGroupAPIView
 )
+from .submit_views import (
+    SubmitKISAnswerView,
+    SubmitQAAnswerView,
+    SubmitTRAKEAnswerView
+)
 
 urlpatterns = [
     # Answer endpoints
@@ -30,6 +35,11 @@ urlpatterns = [
     path('api/team-trake-answers/group-delete/', TeamTRAKEAnswerGroupDeleteSSEAPIView.as_view(), name='team-trake-answer-group-delete'),
     path('api/team-trake-answers/update-group/', TeamTRAKEAnswerUpdateGroupAPIView.as_view(), name='team-trake-answer-update-group'),
     path('api/team-trake-answers/sse/', TeamTRAKEAnswerSSEView.as_view(), name='team-trake-answer-sse'),
+    
+    # Submit endpoints
+    path('api/submit/kis/', SubmitKISAnswerView.as_view(), name='submit-kis-answer'),
+    path('api/submit/qa/', SubmitQAAnswerView.as_view(), name='submit-qa-answer'),
+    path('api/submit/trake/', SubmitTRAKEAnswerView.as_view(), name='submit-trake-answer'),
 ]
 
 # Available endpoints:
@@ -58,3 +68,8 @@ urlpatterns = [
 # DELETE /api/team-trake-answers/bulk-delete/ - Bulk delete TeamTRAKEAnswer by IDs (broadcasts via SSE)
 # DELETE /api/team-trake-answers/group-delete/ - Delete all TeamTRAKEAnswer in a specific group (broadcasts via SSE)
 # GET /api/team-trake-answers/sse/ - Subscribe to real-time TeamTRAKEAnswer updates via Server-Sent Events
+
+# Submit Answer Endpoints:
+# POST /api/submit/kis/ - Submit KIS answer (single frame item: video_name, frame_index)
+# POST /api/submit/qa/ - Submit QA answer (single frame item: video_name, frame_index, qa)  
+# POST /api/submit/trake/ - Submit TRAKE answer (list of frame items)

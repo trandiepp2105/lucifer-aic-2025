@@ -5,13 +5,25 @@ import FrameItem from '../FrameItem/FrameItem';
 import SubmissionModal from '../SubmissionModal/SubmissionModal';
 import TeamAnswerModal from '../TeamAnswerModal/TeamAnswerModal';
 import ImageZoomModal from '../ImageZoomModal/ImageZoomModal';
-import PreviewTRAKEAnswer from './PreviewTRAKEAnswer';
+import TeamAnswer from '../TeamAnswer/TeamAnswer';
 import { useApp } from '../../contexts/AppContext';
 import { useFrameActions } from '../../hooks/useFrameActions';
 import './VideoPlayer.scss';
 
-const VideoPlayer = ({ isOpen, onClose, currentFrame, onFrameSelect, onSubmit, onSend, sendingFrames = new Set(), allTeamAnswers = [], allTRAKEAnswers = [], searchResults = [] }) => {
-  const { queryMode } = useApp();
+const VideoPlayer = ({ 
+  isOpen, 
+  onClose, 
+  currentFrame, 
+  onFrameSelect, 
+  onSubmit, 
+  onSend, 
+  sendingFrames = new Set(), 
+  allTeamAnswers = [], 
+  setAllTeamAnswers,
+  searchResults = [],
+  onRefresh
+}) => {
+  const { queryMode, tempTrakeItems, addTempTrakeItem, removeTempTrakeItem } = useApp();
   
   // Use the shared frame actions hook
   const {
@@ -695,6 +707,30 @@ const VideoPlayer = ({ isOpen, onClose, currentFrame, onFrameSelect, onSubmit, o
     }, 1000);
   };
 
+  // Check if a frame is in temp TRAKE items
+  const isFrameInTempTrake = React.useCallback((frame) => {
+    return tempTrakeItems.some(item => 
+      item.video_name === frame.video_name && 
+      item.frame_index === frame.frame_index
+    );
+  }, [tempTrakeItems]);
+
+  // Handle checkbox change for TRAKE mode
+  const handleCheckboxChange = React.useCallback((frame, isChecked) => {
+    if (isChecked) {
+      addTempTrakeItem({
+        video_name: frame.video_name,
+        frame_index: frame.frame_index,
+        url: frame.url,
+      });
+    } else {
+      removeTempTrakeItem({
+        video_name: frame.video_name,
+        frame_index: frame.frame_index,
+      });
+    }
+  }, [addTempTrakeItem, removeTempTrakeItem]);
+
   // Scroll to center frame in gallery to keep it centered
   const scrollToCenterFrame = useCallback(() => {
     if (centerFrame && galleryRef.current && videoFrames.length > 0) {
@@ -1086,6 +1122,10 @@ const VideoPlayer = ({ isOpen, onClose, currentFrame, onFrameSelect, onSubmit, o
                         frame.isCenter ? 'center' : ''
                       }`}
                       isSending={sendingFrames.has(`${frame.video_name}-${frame.frame_index}`)}
+                      // TRAKE mode specific props
+                      showCheckbox={queryMode === 'tra'}
+                      isChecked={queryMode === 'tra' ? isFrameInTempTrake(frame) : false}
+                      onCheckboxChange={queryMode === 'tra' ? handleCheckboxChange : undefined}
                     />
                   </div>
                 ))
@@ -1097,17 +1137,19 @@ const VideoPlayer = ({ isOpen, onClose, currentFrame, onFrameSelect, onSubmit, o
             </div>
           </div>
 
-          {/* Preview TRAKE Answer Section */}
-          <PreviewTRAKEAnswer 
-            isVisible={true}
-            className="video-player__preview-trake-section"
-            allTeamAnswers={allTeamAnswers}
-            allTRAKEAnswers={allTRAKEAnswers}
-            onFrameSelect={onFrameSelect}
-            onFrameDoubleClick={onFrameSelect} // Use the same handler for double click
-            onSubmit={onSubmit}
+          {/* Team Answer Section - replaces PreviewTRAKEAnswer */}
+          <TeamAnswer
             selectedFrame={currentFrame}
-            searchResults={searchResults} // Pass search results for TRAKE mode
+            isVisible={true}
+            onToggle={null} // Remove empty function - allow component to handle
+            onFrameSelect={onFrameSelect}
+            onFrameDoubleClick={onFrameSelect}
+            onSubmit={onSubmit}
+            allTeamAnswers={allTeamAnswers}
+            setAllTeamAnswers={setAllTeamAnswers}
+            onRefresh={onRefresh}
+            isCompact={true}
+            className="video-player__team-answer-section"
           />
         </div>
       </div>

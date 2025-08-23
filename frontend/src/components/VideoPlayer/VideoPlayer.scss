@@ -200,6 +200,21 @@
   100% { transform: rotate(360deg); }
 }
 
+// Team Answer section in VideoPlayer
+.video-player__team-answer-section {
+  &.team-answer {
+    width: 200px;
+    border-left: 1px solid #e9ecef;
+    height: 100%;
+    
+    // Override any conflicting styles for VideoPlayer context
+    .team-answer__content {
+      height: 100%;
+      overflow-y: auto;
+    }
+  }
+}
+
 .video-player__video {
   width: 100%;
   height: 100%;
@@ -529,7 +544,7 @@
   overflow-y: auto;
   padding: 0.5rem;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 0.5rem;
   align-content: start;
   

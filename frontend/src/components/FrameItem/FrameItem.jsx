@@ -19,6 +19,8 @@ const FrameItem = ({
   showCheckbox = false, // Add checkbox support for TRAKE mode
   isChecked = false, // Checkbox state
   onCheckboxChange, // Checkbox change handler
+  showDelete = false, // Add delete button support
+  onDeleteClick, // Delete button click handler
 }) => {
   const handleClick = (e) => {
     // Check for Ctrl+Click to trigger zoom
@@ -58,6 +60,13 @@ const FrameItem = ({
     e.stopPropagation();
     if (onCheckboxChange) {
       onCheckboxChange(frame, e.target.checked);
+    }
+  };
+
+  const handleDelete = (e) => {
+    e.stopPropagation();
+    if (onDeleteClick) {
+      onDeleteClick(e);
     }
   };
 
@@ -156,7 +165,7 @@ const FrameItem = ({
       </div>
       
       {/* Action buttons - only show if handlers are provided */}
-      {(onSubmit || onSend || showCheckbox) && (
+      {(onSubmit || onSend || showCheckbox || showDelete) && (
         <div className="frame-item__actions">
           {showCheckbox ? (
             <label className="frame-item__checkbox-wrapper">
@@ -191,6 +200,15 @@ const FrameItem = ({
                   title="Submit this frame"
                 >
                   <img src="/assets/submit.svg" alt="Submit" />
+                </button>
+              )}
+              {showDelete && (
+                <button 
+                  className="frame-item__action-btn frame-item__action-btn--delete"
+                  onClick={handleDelete}
+                  title="Delete this frame"
+                >
+                  <img src="/assets/trash-bin.svg" alt="Delete" />
                 </button>
               )}
             </>

@@ -6,6 +6,8 @@ import { useToast } from '../Toast/ToastProvider';
 import { useApp } from '../../contexts/AppContext';
 import { getSessionIdFromUrl, getStageFromUrl, getViewModeFromUrl, updateUrlParams } from '../../utils/urlParams';
 import { exportTeamAnswersToZip, exportAnswersToZip } from '../../utils/exportUtils';
+import { ExportTeamAnswerUtils } from '../../utils/exportTeamAnswerUtils';
+import { QueryModeUtils } from '../../utils/queryModeUtils';
 import ConfirmationModal from '../ConfirmationModal';
 import QueryInput from './QueryInput';
 import SidebarQueries from './SidebarQueries';
@@ -24,7 +26,7 @@ const Sidebar = ({
   allAnswers = [], // All answers data for export
   csvFilenameFormat = 'query-{query_index}-{type}' // Custom CSV filename format
 }) => {
-  const { stage, viewMode, round, queryIndex, k, searchUrl, session, sessionLoading, setStage, setViewMode, setQueryIndex, setSession } = useApp();
+  const { stage, viewMode, round, queryIndex, k, searchUrl, session, sessionLoading, queryMode, setStage, setViewMode, setQueryIndex, setQueryMode, setSession } = useApp();
   const toast = useToast();
   
   // Local queries management - unified structure matching backend
@@ -783,14 +785,9 @@ const Sidebar = ({
   const handleExport = async () => {
     try {
       if (mode === 'team-answer') {
-        if (!allTeamAnswers || allTeamAnswers.length === 0) {
-          toast.warning('No team answers to export', 3000);
-          return;
-        }
-        
-        toast.info('Generating export file...', 1000);
-        await exportTeamAnswersToZip(allTeamAnswers, round, csvFilenameFormat);
-        toast.success('Export completed successfully!', 2000);
+        toast.info('Exporting team answers and TRAKE answers...', 1000);
+        const result = await ExportTeamAnswerUtils.exportAllAnswers();
+        toast.success(result.message || 'Export completed successfully!', 2000);
         
       } else if (mode === 'answer') {
         if (!allAnswers || allAnswers.length === 0) {
@@ -812,6 +809,18 @@ const Sidebar = ({
   const handleDeleteQueryIndex = (queryIndex, mode) => {
     setDeleteTarget({ queryIndex, mode });
     setShowDeleteModal(true);
+  };
+
+  // Handle export team answers functionality for chat section
+  const handleExportTeamAnswers = async () => {
+    try {
+      toast.info('Exporting team answers and TRAKE answers...', 1000);
+      const result = await ExportTeamAnswerUtils.exportAllAnswers();
+      toast.success(result.message || 'Export completed successfully!', 2000);
+    } catch (error) {
+      console.error('Export error:', error);
+      toast.error(error.message || 'Failed to export team answers', 4000);
+    }
   };
 
   // Sort localQueries by stage for display
@@ -890,6 +899,35 @@ const Sidebar = ({
     );
   };
 
+  // Auto-detect query mode when query index changes
+  const handleQueryIndexChange = useCallback(async (newQueryIndex) => {
+    try {
+      // Set the new query index first
+      setQueryIndex(newQueryIndex);
+      
+      // Only auto-detect for chat mode (not for team-answer/answer modes)
+      if (mode === 'chat') {
+        console.log(`🔄 Auto-detecting mode for query index: ${newQueryIndex}`);
+        const detectedMode = await QueryModeUtils.detectQueryMode(newQueryIndex);
+        
+        if (detectedMode !== 'unknown' && detectedMode !== queryMode) {
+          // Actually change the query mode
+          setQueryMode(detectedMode);
+          const modeName = QueryModeUtils.getModeName(detectedMode);
+          toast.success(`Switched to ${modeName} mode for query ${newQueryIndex}`);
+          console.log(`✅ Auto-switched to ${detectedMode} mode for query ${newQueryIndex}`);
+        } else if (detectedMode === 'unknown') {
+          console.log(`ℹ️ No data found for query ${newQueryIndex}, keeping current mode`);
+        } else {
+          console.log(`ℹ️ Query ${newQueryIndex} already in correct mode: ${detectedMode}`);
+        }
+      }
+    } catch (error) {
+      console.error('Error in handleQueryIndexChange:', error);
+      // Don't show error toast for auto-detection failures
+    }
+  }, [setQueryIndex, mode, toast, queryMode, setQueryMode]);
+
   return (
     <div className="sidebar">
       {/* Session loading indicator */}
@@ -908,43 +946,72 @@ const Sidebar = ({
           ) : (
         <>
           <div className="sidebar__header">
+            <button 
+              onClick={handleExportTeamAnswers}
+              className="sidebar__export-btn"
+              title="Export Team Answers"
+            >
+              <img src="/assets/export.svg" alt="Export Team Answers" className="sidebar__action-icon" />
+            </button>
             {round === 'final' ? (
               <h3>Query History</h3>
             ) : (
               <div className="sidebar__query-index">
                 <label htmlFor="queryIndex">Index:</label>
-                <input
-                  id="queryIndex"
-                  type="number"
-                  value={queryIndex}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    if (value === '') {
-                      setQueryIndex('');
-                      return;
-                    }
-                    if (/^\d+$/.test(value)) {
-                      const numValue = parseInt(value, 10);
-                      if (numValue >= 1 && numValue <= 999) {
-                        setQueryIndex(numValue);
+                <div className="sidebar__query-index-controls">
+                  <button 
+                    className="sidebar__query-index-btn sidebar__query-index-btn--decrease"
+                    onClick={() => {
+                      const newValue = Math.max(1, (queryIndex || 1) - 1);
+                      handleQueryIndexChange(newValue);
+                    }}
+                    title="Decrease query index"
+                  >
+                    -
+                  </button>
+                  <input
+                    id="queryIndex"
+                    type="number"
+                    value={queryIndex}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      if (value === '') {
+                        setQueryIndex('');
+                        return;
                       }
-                    }
-                  }}
-                  onBlur={(e) => {
-                    if (e.target.value === '') {
-                      setQueryIndex(1);
-                    }
-                  }}
-                  onKeyDown={(e) => {
-                    if (!/[\d]/.test(e.key) && 
-                        !['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.key)) {
-                      e.preventDefault();
-                    }
-                  }}
-                  min="1"
-                  max="999"
-                  className="sidebar__query-index-input"
-                />
+                      if (/^\d+$/.test(value)) {
+                        const numValue = parseInt(value, 10);
+                        if (numValue >= 1 && numValue <= 999) {
+                          handleQueryIndexChange(numValue);
+                        }
+                      }
+                    }}
+                    onBlur={(e) => {
+                      if (e.target.value === '') {
+                        setQueryIndex(1);
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (!/[\d]/.test(e.key) && 
+                          !['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.key)) {
+                        e.preventDefault();
+                      }
+                    }}
+                    min="1"
+                    max="999"
+                    className="sidebar__query-index-input"
+                  />
+                  <button 
+                    className="sidebar__query-index-btn sidebar__query-index-btn--increase"
+                    onClick={() => {
+                      const newValue = Math.min(999, (queryIndex || 1) + 1);
+                      handleQueryIndexChange(newValue);
+                    }}
+                    title="Increase query index"
+                  >
+                    +
+                  </button>
+                </div>
               </div>
             )}
             <button 

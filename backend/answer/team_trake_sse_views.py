@@ -157,10 +157,10 @@ class TeamTRAKEAnswerListCreateSSEAPIView(APIView):
     parser_classes = [JSONParser]
 
     @swagger_auto_schema(
-        operation_summary="List TeamTRAKEAnswer by query_index",
-        operation_description="Get TeamTRAKEAnswer grouped by group for a specific query_index",
+        operation_summary="List TeamTRAKEAnswer by query_index or all",
+        operation_description="Get TeamTRAKEAnswer grouped by group for a specific query_index or all query_indexes if not specified",
         manual_parameters=[
-            openapi.Parameter('query_index', openapi.IN_QUERY, description="Filter by query index", type=openapi.TYPE_INTEGER, required=True),
+            openapi.Parameter('query_index', openapi.IN_QUERY, description="Filter by query index (optional)", type=openapi.TYPE_INTEGER, required=False),
         ],
         responses={
             200: openapi.Response(
@@ -176,47 +176,82 @@ class TeamTRAKEAnswerListCreateSSEAPIView(APIView):
         }
     )
     def get(self, request):
-        """List TeamTRAKEAnswer grouped by group for specific query_index"""
+        """List TeamTRAKEAnswer grouped by group for specific query_index or all"""
         query_index = request.query_params.get('query_index')
         
-        if query_index is None:
+        if query_index is not None:
+            # Single query_index case (existing behavior)
+            try:
+                query_index = int(query_index)
+            except ValueError:
+                return Response({
+                    'message': 'query_index must be a valid integer',
+                    'data': []
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Get all TeamTRAKEAnswer for the query_index
+            queryset = TeamTRAKEAnswer.objects.filter(query_index=query_index).order_by('-created_at')
+            
+            # Group by group field
+            grouped_data = {}
+            for item in queryset:
+                group_key = item.group
+                if group_key not in grouped_data:
+                    grouped_data[group_key] = []
+                grouped_data[group_key].append(TeamTRAKEAnswerSerializer(item).data)
+            
+            # Sort items within each group by frame_index ascending
+            for group_key in grouped_data:
+                grouped_data[group_key].sort(key=lambda x: x.get('frame_index', 0))
+            
+            # Convert to list of dicts with group and items fields, sorted by group
+            result = []
+            for group in sorted(grouped_data.keys()):
+                result.append({'group': group, 'items': grouped_data[group]})
+            
             return Response({
-                'message': 'query_index parameter is required',
-                'data': []
-            }, status=status.HTTP_400_BAD_REQUEST)
+                'message': f'TeamTRAKEAnswer for query_index {query_index} retrieved successfully',
+                'data': result
+            }, status=status.HTTP_200_OK)
         
-        try:
-            query_index = int(query_index)
-        except ValueError:
+        else:
+            # All query_indexes case (new behavior)
+            # Get all TeamTRAKEAnswer and group by query_index
+            all_queryset = TeamTRAKEAnswer.objects.all().order_by('query_index', '-created_at')
+            
+            # Group by query_index first, then by group within each query_index
+            query_data = {}
+            for item in all_queryset:
+                qi = item.query_index
+                if qi not in query_data:
+                    query_data[qi] = {}
+                
+                group_key = item.group
+                if group_key not in query_data[qi]:
+                    query_data[qi][group_key] = []
+                query_data[qi][group_key].append(TeamTRAKEAnswerSerializer(item).data)
+            
+            # Process each query_index
+            result = []
+            for qi in sorted(query_data.keys()):
+                # Sort items within each group by frame_index ascending
+                for group_key in query_data[qi]:
+                    query_data[qi][group_key].sort(key=lambda x: x.get('frame_index', 0))
+                
+                # Convert to list of dicts with group and items fields, sorted by group
+                groups_data = []
+                for group in sorted(query_data[qi].keys()):
+                    groups_data.append({'group': group, 'items': query_data[qi][group]})
+                
+                result.append({
+                    'query_index': qi,
+                    'data': groups_data
+                })
+            
             return Response({
-                'message': 'query_index must be a valid integer',
-                'data': []
-            }, status=status.HTTP_400_BAD_REQUEST)
-        
-        # Get all TeamTRAKEAnswer for the query_index
-        queryset = TeamTRAKEAnswer.objects.filter(query_index=query_index).order_by('-created_at')
-        
-        # Group by group field
-        grouped_data = {}
-        for item in queryset:
-            group_key = item.group
-            if group_key not in grouped_data:
-                grouped_data[group_key] = []
-            grouped_data[group_key].append(TeamTRAKEAnswerSerializer(item).data)
-        
-        # Sort items within each group by frame_index ascending
-        for group_key in grouped_data:
-            grouped_data[group_key].sort(key=lambda x: x.get('frame_index', 0))
-        
-        # Convert to list of dicts with group and items fields, sorted by group
-        result = []
-        for group in sorted(grouped_data.keys()):
-            result.append({'group': group, 'items': grouped_data[group]})
-        
-        return Response({
-            'message': f'TeamTRAKEAnswer for query_index {query_index} retrieved successfully',
-            'data': result
-        }, status=status.HTTP_200_OK)
+                'message': 'All TeamTRAKEAnswer retrieved successfully',
+                'data': result
+            }, status=status.HTTP_200_OK)
 
     @swagger_auto_schema(
         operation_summary="Create multiple TeamTRAKEAnswer with SSE",
@@ -281,6 +316,19 @@ class TeamTRAKEAnswerListCreateSSEAPIView(APIView):
             target_group = None
             if items_data and 'group' in items_data[0] and items_data[0]['group'] is not None:
                 target_group = items_data[0]['group']
+                
+                # Validate that new items have same video_name as existing items in the group
+                existing_items_in_group = TeamTRAKEAnswer.objects.filter(group=target_group)
+                if existing_items_in_group.exists():
+                    existing_video_name = existing_items_in_group.first().video_name
+                    new_video_name = items_data[0].get('video_name')
+                    
+                    if existing_video_name != new_video_name:
+                        logger.error(f"Video name mismatch for group {target_group}: existing={existing_video_name}, new={new_video_name}")
+                        return Response({
+                            'message': f'Cannot add items from video "{new_video_name}" to group {target_group}',
+                            'error': f'Group {target_group} already contains items from video "{existing_video_name}". All items in a group must be from the same video.'
+                        }, status=status.HTTP_400_BAD_REQUEST)
             else:
                 # Auto-generate group by finding max group + 1
                 max_group = TeamTRAKEAnswer.objects.aggregate(

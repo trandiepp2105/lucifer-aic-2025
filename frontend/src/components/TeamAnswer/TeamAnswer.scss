@@ -474,6 +474,31 @@
     }
   }
 
+  // Compact mode for VideoPlayer sidebar
+  &--compact {
+    width: 150px;
+    box-shadow: none;
+    border-radius: 0;
+    
+    .team-answer__header {
+      padding: 0.5rem 0.75rem;
+      background: transparent;
+      border-bottom: 1px solid #e9ecef;
+    }
+    
+    .team-answer__title {
+      font-size: 0.85rem;
+    }
+    
+    .team-answer__content {
+      padding: 5px;
+    }
+    
+    .team-answer__item {
+      width: auto;
+    }
+  }
+
   // Responsive adjustments
   @media (max-width: 768px) {
     width: 200px;

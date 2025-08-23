@@ -34,21 +34,24 @@ const DisplayListFrame = ({
   
   // Use the shared frame actions hook
   const {
-    isSubmissionModalOpen,
+    submissionModal,
+    closeSubmissionModal,
+    handleSubmissionConfirm,
     isTeamAnswerModalOpen,
     frameToSubmit,
     handleSendFrame: hookHandleSendFrame,
     handleSubmitFrame,
     handleTeamAnswerModalClose,
     handleTeamAnswerComplete,
-    handleSubmissionModalClose,
-    handleSubmissionComplete
+    submitKISAnswer,
+    submitQAAnswer,
+    submitTRAKEAnswer
   } = useFrameActions(queryMode, allTeamAnswers);
   
   // Debug modal states
   useEffect(() => {
     // Modal states tracking
-  }, [isVideoPlayerOpen, isSubmissionModalOpen, isTeamAnswerModalOpen, frameToSubmit]);
+  }, [isVideoPlayerOpen, submissionModal.isOpen, isTeamAnswerModalOpen, frameToSubmit]);
   
   // Get app context for round and queryIndex
   const { 
@@ -135,6 +138,10 @@ const DisplayListFrame = ({
 
   // Handle push TRAKE group
   const handlePushTrakeGroup = async () => {
+    console.log('🚀 handlePushTrakeGroup called');
+    console.log('📊 activeGroup:', activeGroup);
+    console.log('📊 tempTrakeItems:', tempTrakeItems);
+    
     if (!tempTrakeItems || tempTrakeItems.length === 0) {
       toast.error('No items selected for TRAKE group');
       return;
@@ -156,8 +163,15 @@ const DisplayListFrame = ({
         ...(activeGroup && { group: activeGroup })
       }));
 
+      console.log('📤 About to submit TRAKE answers:', traKeAnswers);
+      console.log('📤 Each item group value:', traKeAnswers.map(item => ({ frame_index: item.frame_index, group: item.group })));
+
+      console.log('🔥 About to call TeamTRAKEAnswerService.createBulkTRAKEAnswers...');
+      
       // Submit the TRAKE group
-      const response = await TeamTRAKEAnswerService.createBulk(traKeAnswers);
+      const response = await TeamTRAKEAnswerService.createBulkTRAKEAnswers({ items: traKeAnswers });
+      
+      console.log('🔥 API call completed, response:', response);
       
       // Clear temp items on success
       clearTempTrakeItems();
@@ -188,10 +202,22 @@ const DisplayListFrame = ({
     }
   };
 
-  // Handle submit TRAKE (placeholder for future implementation)
+  // Handle submit TRAKE - use submission modal for confirmation
   const handleSubmitTrake = async () => {
-    // TODO: Implement submit TRAKE functionality
-    toast.info('Submit TRAKE functionality will be implemented later');
+    if (!tempTrakeItems || tempTrakeItems.length === 0) {
+      toast.error('No TRAKE items to submit');
+      return;
+    }
+
+    // Convert tempTrakeItems to the format expected by submission service
+    const frameList = tempTrakeItems.map(item => ({
+      video_name: item.video_name,
+      frame_index: item.frame_index,
+      group: item.group || activeGroup
+    }));
+
+    // Use submission modal for confirmation
+    submitTRAKEAnswer(frameList);
   };
 
   // Keyboard navigation
@@ -471,11 +497,13 @@ const DisplayListFrame = ({
       )}
 
       <SubmissionModal
-        isOpen={isSubmissionModalOpen}
-        onClose={handleSubmissionModalClose}
-        onSubmit={handleSubmissionComplete}
-        frame={frameToSubmit}
-        queryMode={queryMode}
+        isOpen={submissionModal.isOpen}
+        onClose={closeSubmissionModal}
+        onConfirm={handleSubmissionConfirm}
+        submissionType={submissionModal.type}
+        frameData={submissionModal.frameData}
+        qaText={submissionModal.qaText}
+        isSubmitting={submissionModal.isSubmitting}
       />
 
       <TeamAnswerModal

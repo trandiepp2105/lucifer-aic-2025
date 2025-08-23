@@ -23,8 +23,11 @@ import ConfirmationModal from '../ConfirmationModal';
 import TeamAnswerModal from '../TeamAnswerModal/TeamAnswerModal';
 import ImageZoomModal from '../ImageZoomModal/ImageZoomModal';
 import VideoPlayer from '../VideoPlayer/VideoPlayer';
+import SubmissionModal from '../SubmissionModal/SubmissionModal';
 import { useApp } from '../../contexts/AppContext';
+import { useTeamTRAKEAnswer } from '../../contexts/TeamTRAKEAnswerContext';
 import { useToast } from '../Toast/ToastProvider';
+import { useSubmission } from '../../hooks/useSubmission';
 import { TeamAnswerService } from '../../services';
 import { apiConfig } from '../../services/apiConfig';
 import './TeamAnswer.scss';
@@ -38,14 +41,31 @@ const TeamAnswer = ({
   onFrameDoubleClick, 
   onSubmit,
   allTeamAnswers = [], // Get from props instead of local state
-  allTRAKEAnswers = [], // Add TRAKE answers prop
   setAllTeamAnswers,  // Setter from parent
-  setAllTRAKEAnswers, // Add TRAKE answers setter
   onRefresh,          // Refresh function from parent
-  activeGroup,        // Add activeGroup prop
-  onSetActiveGroup    // Add onSetActiveGroup prop
+  isCompact = false,  // Add compact mode prop
+  className = ''      // Add className prop
 }) => {
   const selectedFrameRef = useRef(null);
+  
+  // Use TRAKE context for TRAKE-related state
+  const {
+    allTRAKEAnswers,
+    setAllTRAKEAnswers,
+    activeGroup,
+    setActiveGroup,
+    isLoadingTRAKEAnswers,
+    fetchAllTRAKEAnswers,
+    deleteAllTRAKEAnswers
+  } = useTeamTRAKEAnswer();
+  
+  // Submission logic with confirmation modal
+  const {
+    submissionModal,
+    closeSubmissionModal,
+    handleSubmissionConfirm
+  } = useSubmission();
+  
   const teamAnswerRef = useRef(null);
   
   const [loading, setLoading] = useState(false);
@@ -378,6 +398,16 @@ const TeamAnswer = ({
     setShowDeleteAllModal(true);
   };
 
+  // Handle delete all TRAKE answers for TRA mode
+  const handleDeleteAllTRAKEAnswers = async () => {
+    if (deletingAll) {
+      return;
+    }
+
+    // Show confirmation modal for TRAKE answers
+    setShowDeleteAllModal(true);
+  };
+
   // Handle confirmed delete all team answers
   const handleConfirmDeleteAll = async () => {
     // Use queryIndex directly from AppContext (matches server query_index)
@@ -387,25 +417,39 @@ const TeamAnswer = ({
       setDeletingAll(true);
       setShowDeleteAllModal(false);
       
-      // Show loading toast
-      toast.info('Deleting all team answers...', 500);
-      
-      const response = await TeamAnswerService.deleteAllTeamAnswers({
-        query_index: currentQueryIndex,
-        round: round || 'prelims'
-      });
-      
-      if (response.success) {
-        toast.success('All team answers deleted successfully!', 500);
-        // Refresh the list
-        if (onRefresh) onRefresh();
+      if (queryMode === 'tra') {
+        // Delete all TRAKE answers
+        toast.info('Deleting all TRAKE answers...', 500);
+        
+        const result = await deleteAllTRAKEAnswers(currentQueryIndex);
+        
+        if (result.success) {
+          toast.success('All TRAKE answers deleted successfully!', 500);
+        } else {
+          console.error('Delete all TRAKE failed:', result.error);
+          toast.error(result.error || 'Failed to delete all TRAKE answers', 500);
+        }
       } else {
-        console.error('Delete all failed:', response.error);
-        toast.error(response.error || 'Failed to delete all team answers', 500);
+        // Delete all team answers
+        toast.info('Deleting all team answers...', 500);
+        
+        const response = await TeamAnswerService.deleteAllTeamAnswers({
+          query_index: currentQueryIndex,
+          round: round || 'prelims'
+        });
+        
+        if (response.success) {
+          toast.success('All team answers deleted successfully!', 500);
+          // Refresh the list
+          if (onRefresh) onRefresh();
+        } else {
+          console.error('Delete all failed:', response.error);
+          toast.error(response.error || 'Failed to delete all team answers', 500);
+        }
       }
     } catch (error) {
-      console.error('Error deleting all team answers:', error);
-      toast.error('An error occurred while deleting all team answers', 500);
+      console.error(`Error deleting all ${queryMode === 'tra' ? 'TRAKE' : 'team'} answers:`, error);
+      toast.error(`An error occurred while deleting all ${queryMode === 'tra' ? 'TRAKE' : 'team'} answers`, 500);
     } finally {
       setDeletingAll(false);
     }
@@ -627,13 +671,16 @@ const TeamAnswer = ({
   const currentRound = round || 'prelims';
 
   return (
-    <div className="team-answer" ref={teamAnswerRef}>
+    <div className={`team-answer ${isCompact ? 'team-answer--compact' : ''} ${className}`} ref={teamAnswerRef}>
       <ConfirmationModal
         isOpen={showDeleteAllModal}
         onClose={() => setShowDeleteAllModal(false)}
         onConfirm={handleConfirmDeleteAll}
-        title="Delete All Team Answers"
-        message={`Are you sure you want to delete all team answers for query ${currentQueryIndex} in ${currentRound} round? This action cannot be undone.`}
+        title={queryMode === 'tra' ? "Delete All TRAKE Answers" : "Delete All Team Answers"}
+        message={queryMode === 'tra' ? 
+          `Are you sure you want to delete all TRAKE answers for query ${queryIndex}? This action cannot be undone.` :
+          `Are you sure you want to delete all team answers for query ${queryIndex} in ${round || 'prelims'} round? This action cannot be undone.`
+        }
         confirmText="Delete All"
         cancelText="Cancel"
         isLoading={deletingAll}
@@ -678,7 +725,7 @@ const TeamAnswer = ({
           className="team-answer__reload"
           onClick={onRefresh}
           disabled={loading}
-          title="Reload team answers"
+          title={queryMode === 'tra' ? "Reload TRAKE answers" : "Reload team answers"}
         >
           {loading ? (
             <span className="team-answer__spinner">⟳</span>
@@ -688,9 +735,9 @@ const TeamAnswer = ({
         </button>
         <button 
           className="team-answer__delete-all"
-          onClick={handleDeleteAllTeamAnswers}
+          onClick={queryMode === 'tra' ? handleDeleteAllTRAKEAnswers : handleDeleteAllTeamAnswers}
           disabled={deletingAll || loading}
-          title="Delete all team answers"
+          title={queryMode === 'tra' ? "Delete all TRAKE answers" : "Delete all team answers"}
         >
           {deletingAll ? (
             <span className="team-answer__spinner">⟳</span>
@@ -718,9 +765,10 @@ const TeamAnswer = ({
             onFrameDoubleClick={onFrameDoubleClick}
             allTRAKEAnswers={allTRAKEAnswers}
             setAllTRAKEAnswers={setAllTRAKEAnswers}
-            onRefresh={onRefresh}
+            onRefresh={fetchAllTRAKEAnswers}
             activeGroup={activeGroup}
-            onSetActiveGroup={onSetActiveGroup}
+            onSetActiveGroup={setActiveGroup}
+            isCompact={isCompact}
           />
         ) : (
           // Render regular team answers for KIS/QA modes
@@ -813,6 +861,17 @@ const TeamAnswer = ({
           allTeamAnswers={allTeamAnswers}
         />
       )}
+
+      {/* Submission Modal */}
+      <SubmissionModal
+        isOpen={submissionModal.isOpen}
+        onClose={closeSubmissionModal}
+        onConfirm={handleSubmissionConfirm}
+        submissionType={submissionModal.type}
+        frameData={submissionModal.frameData}
+        qaText={submissionModal.qaText}
+        isSubmitting={submissionModal.isSubmitting}
+      />
     </div>
   );
 };

@@ -1,5 +1,6 @@
 import React from 'react';
 import FrameItem from '../FrameItem/FrameItem';
+import TeamTRAKEAnswerList from '../TeamAnswer/TeamTRAKEAnswerList';
 import { useApp } from '../../contexts/AppContext';
 import './PreviewTRAKEAnswer.scss';
 
@@ -8,11 +9,15 @@ const PreviewTRAKEAnswer = ({
   className = '',
   allTeamAnswers = [],
   allTRAKEAnswers = [], // Add TRAKE answers prop
+  setAllTRAKEAnswers, // Add setter for TRAKE answers
   onFrameSelect,
   onFrameDoubleClick,
   onSubmit,
   selectedFrame,
   searchResults = [], // Add search results for TRAKE mode
+  activeGroup, // Add active group for TRAKE mode
+  onSetActiveGroup, // Add setter for active group
+  onRefresh, // Add refresh handler for TRAKE mode
 }) => {
   const { 
     queryMode, 
@@ -99,77 +104,19 @@ const PreviewTRAKEAnswer = ({
     <div className={`preview-trake ${className}`}>
       <div className="preview-trake__content">
         {queryMode === 'tra' ? (
-          // Show search results for TRA mode with checkboxes
-          <>
-            {searchResults && searchResults.length > 0 ? (
-              <div className="preview-trake__items">
-                <div className="preview-trake__section-title">Search Results</div>
-                {searchResults.map((frame, index) => {
-                  const isSelected = selectedFrame && 
-                    selectedFrame.video_name === frame.video_name && 
-                    parseInt(selectedFrame.frame_index) === parseInt(frame.frame_index);
-                  
-                  const isChecked = isFrameInTempTrake(frame);
-                  
-                  return (
-                    <div
-                      key={`search-${frame.video_name}-${frame.frame_index}-${index}`}
-                      className="preview-trake__item"
-                    >
-                      <FrameItem
-                        frame={frame}
-                        isSelected={isSelected}
-                        onClick={handleFrameClick}
-                        onDoubleClick={handleFrameDoubleClick}
-                        showFilename={true}
-                        size="small"
-                        className="preview-trake__frame"
-                        showCheckbox={true}
-                        isChecked={isChecked}
-                        onCheckboxChange={handleCheckboxChange}
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="preview-trake__placeholder">
-                <div className="preview-trake__placeholder-icon">�</div>
-                <p className="preview-trake__placeholder-text">
-                  Search results will be displayed here for TRAKE selection
-                </p>
-              </div>
-            )}
-            
-            {/* Show TRAKE answers if available */}
-            {teamAnswers.length > 0 && (
-              <div className="preview-trake__items">
-                <div className="preview-trake__section-title">Previous TRAKE Answers</div>
-                {teamAnswers.map((teamAnswer) => {
-                  const isSelected = selectedFrame && 
-                    selectedFrame.video_name === teamAnswer.video_name && 
-                    parseInt(selectedFrame.frame_index) === parseInt(teamAnswer.frame_index);
-                  
-                  return (
-                    <div
-                      key={`trake-${teamAnswer.id || `${teamAnswer.video_name}-${teamAnswer.frame_index}`}`}
-                      className="preview-trake__item"
-                    >
-                      <FrameItem
-                        frame={teamAnswer}
-                        isSelected={isSelected}
-                        onClick={handleFrameClick}
-                        onDoubleClick={handleFrameDoubleClick}
-                        showFilename={true}
-                        size="small"
-                        className="preview-trake__frame"
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </>
+          // Show TeamTRAKEAnswerList for TRA mode - same as TeamAnswer
+          <TeamTRAKEAnswerList
+            selectedFrame={selectedFrame}
+            isVisible={true}
+            onFrameSelect={onFrameSelect}
+            onFrameDoubleClick={onFrameDoubleClick}
+            allTRAKEAnswers={allTRAKEAnswers}
+            setAllTRAKEAnswers={setAllTRAKEAnswers}
+            onRefresh={onRefresh}
+            activeGroup={activeGroup}
+            onSetActiveGroup={onSetActiveGroup}
+            isCompact={true}
+          />
         ) : (
           // Show team answers for KIS/QA modes
           <>
