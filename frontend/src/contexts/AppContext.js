@@ -278,6 +278,8 @@ export const AppProvider = ({ children }) => {
       queryIndex: state.queryIndex,
       k: state.k,
       searchUrl: state.searchUrl,
+      // reset tempTrakeItems
+      tempTrakeItems: [],
     };
     
     // Only include session if it's not null - let Sidebar manage session in URL

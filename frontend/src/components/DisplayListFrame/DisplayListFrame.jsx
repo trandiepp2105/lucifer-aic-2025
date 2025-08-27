@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
 import VideoPlayer from '../VideoPlayer/VideoPlayer';
 import FrameItem from '../FrameItem/FrameItem';
 import SubmissionModal from '../SubmissionModal/SubmissionModal';
@@ -11,7 +11,7 @@ import { TeamAnswerService } from '../../services/TeamAnswerService';
 import { TeamTRAKEAnswerService } from '../../services/TeamTRAKEAnswerService';
 import './DisplayListFrame.scss';
 
-const DisplayListFrame = ({ 
+const DisplayListFrame = forwardRef(({ 
   onFrameSelect, 
   selectedFrame, 
   onStageChange, 
@@ -27,7 +27,7 @@ const DisplayListFrame = ({
   allTRAKEAnswers = [], // Add allTRAKEAnswers prop
   onClearFrames, // Add callback to clear frames when viewMode changes
   activeGroup, // Add activeGroup prop
-}) => {
+}, ref) => {
   const [isVideoPlayerOpen, setIsVideoPlayerOpen] = useState(false);
   const [isImageZoomOpen, setIsImageZoomOpen] = useState(false);
   const [frameToZoom, setFrameToZoom] = useState(null);
@@ -75,6 +75,18 @@ const DisplayListFrame = ({
   // Ref for content container to control scrolling (where the actual scrollbar is)
   const contentRef = useRef(null);
 
+  // Expose methods to parent component via ref
+  useImperativeHandle(ref, () => ({
+    scrollToTop: () => {
+      if (contentRef.current) {
+        contentRef.current.scrollTo({
+          top: 0,
+          behavior: 'smooth'
+        });
+      }
+    }
+  }), []);
+
   // Auto-scroll to top when new data arrives
   useEffect(() => {
     if (frames.length > 0 && contentRef.current) {
@@ -119,10 +131,21 @@ const DisplayListFrame = ({
   };
 
   const handleStageChange = (newStage) => {
-    if (newStage >= 1 && newStage <= availableStages) {
+    // Check if newStage is in availableStages array or within range
+    const maxStage = Array.isArray(availableStages) 
+      ? Math.max(...availableStages)
+      : availableStages;
+    const validStages = Array.isArray(availableStages) 
+      ? availableStages 
+      : Array.from({ length: availableStages }, (_, i) => i + 1);
+    
+    if (newStage >= 1 && newStage <= maxStage && validStages.includes(newStage)) {
+      console.log('🎯 Stage change requested:', newStage, 'from current:', currentStage);
       if (onStageChange) {
         onStageChange(newStage);
       }
+    } else {
+      console.warn('⚠️ Invalid stage change attempt:', newStage, 'valid stages:', validStages);
     }
   };
 
@@ -427,19 +450,27 @@ const DisplayListFrame = ({
   }, [addTempTrakeItem, removeTempTrakeItem]);
 
   return (
-    <div className="display-frame">
+    <div ref={ref} className="display-frame">
       <div className="display-frame__header">
         <div className="display-frame__stage-selector">
           <div className="display-frame__stages">
-            {(Array.isArray(availableStages) ? availableStages : Array.from({ length: availableStages }, (_, i) => i + 1)).map((stage) => (
-              <button
-                key={stage}
-                className={`display-frame__stage ${currentStage === stage ? 'display-frame__stage--active' : ''}`}
-                onClick={() => handleStageChange(stage)}
-              >
-                Stage {stage}
-              </button>
-            ))}
+            {(() => {
+              const stages = Array.isArray(availableStages) ? availableStages : Array.from({ length: availableStages }, (_, i) => i + 1);
+              console.log('🎯 Rendering stages - currentStage:', currentStage, 'availableStages:', availableStages, 'stages to render:', stages);
+              return stages.map((stage) => {
+                const isActive = currentStage === stage;
+                console.log(`🎯 Stage ${stage} - currentStage: ${currentStage}, isActive: ${isActive}`);
+                return (
+                  <button
+                    key={stage}
+                    className={`display-frame__stage ${isActive ? 'display-frame__stage--active' : ''}`}
+                    onClick={() => handleStageChange(stage)}
+                  >
+                    Stage {stage}
+                  </button>
+                );
+              });
+            })()}
           </div>
         </div>
         
@@ -529,6 +560,8 @@ const DisplayListFrame = ({
       />
     </div>
   );
-};
+});
+
+DisplayListFrame.displayName = 'DisplayListFrame';
 
 export default DisplayListFrame;

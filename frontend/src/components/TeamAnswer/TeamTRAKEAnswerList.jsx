@@ -311,7 +311,7 @@ const TeamTRAKEAnswerList = ({
     
     // If already grouped (array of objects with group and items)
     if (allTRAKEAnswers.length > 0 && allTRAKEAnswers[0].hasOwnProperty('group') && allTRAKEAnswers[0].hasOwnProperty('items')) {
-      return allTRAKEAnswers.sort((a, b) => a.group - b.group);
+      return allTRAKEAnswers.sort((a, b) => b.group - a.group); // Sort descending (largest group first)
     }
     
     // If flat array, group by group field
@@ -329,7 +329,7 @@ const TeamTRAKEAnswerList = ({
       group.items.sort((a, b) => (a.frame_index || 0) - (b.frame_index || 0));
     });
     
-    return Object.values(groups).sort((a, b) => a.group - b.group);
+    return Object.values(groups).sort((a, b) => b.group - a.group); // Sort descending (largest group first)
   }, [allTRAKEAnswers]);
 
   const handleDragStart = () => {
@@ -350,13 +350,17 @@ const TeamTRAKEAnswerList = ({
     if (oldIndex === -1 || newIndex === -1) return;
 
     try {
-      // Calculate new group assignments
+      // Calculate new group assignments with descending order logic
       const reorderedGroups = arrayMove(groupedAnswers, oldIndex, newIndex);
       const groupUpdates = [];
 
-      // Prepare updates for each moved group
+      // Since we're sorting descending, assign groups in reverse order
+      // Index 0 = highest group number, Index n = lowest group number
+      const maxGroup = Math.max(...groupedAnswers.map(g => g.group));
+      
       reorderedGroups.forEach((group, index) => {
-        const newGroupId = index + 1;
+        // Calculate new group ID: maxGroup for index 0, decreasing as index increases
+        const newGroupId = maxGroup - index;
         if (group.group !== newGroupId) {
           groupUpdates.push({
             oldGroup: group.group,
@@ -366,22 +370,34 @@ const TeamTRAKEAnswerList = ({
         }
       });
 
-      // Apply updates to backend
+      console.log('🔄 Group updates to apply:', groupUpdates);
+
+      // Apply updates to backend - each will trigger SSE events
       for (const update of groupUpdates) {
         // Update all items in this group to new group number
         const itemIds = update.items.map(item => item.id);
+        console.log(`📡 Updating group ${update.oldGroup} -> ${update.newGroup} for items:`, itemIds);
         await TeamTRAKEAnswerService.updateGroupForItems(itemIds, update.newGroup);
       }
 
-      // Refresh data to reflect changes
-      if (onRefresh) {
-        onRefresh();
-      }
+      // Let SSE handle data refresh automatically
+      // If no SSE, fallback to manual refresh after a short delay
+      setTimeout(() => {
+        if (onRefresh) {
+          console.log('📡 Fallback refresh after group updates');
+          onRefresh();
+        }
+      }, 500);
 
       toast.success('Group order updated successfully');
     } catch (error) {
       console.error('Error updating group order:', error);
       toast.error('Failed to update group order');
+      
+      // On error, definitely refresh to get correct state
+      if (onRefresh) {
+        onRefresh();
+      }
     }
   };
 

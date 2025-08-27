@@ -149,12 +149,16 @@ const Sidebar = ({
 
   // Load queries for current session
   const loadQueries = useCallback(async (sessionId = null) => {
+    
+    // reset local queries
+    onFramesUpdate([])
+
+    
     // Use sessionId parameter first, then session from AppContext
     const targetSessionId = sessionId || session;
     if (!targetSessionId) return;
     
     setLoading(true);
-
     try {
       const response = await QueryService.getQueries({
         session: targetSessionId,

@@ -70,7 +70,7 @@ export class ExportTeamAnswerUtils {
   }
 
   /**
-   * Create files from team answers (qa/kis types)
+   * Create CSV files from team answers (qa/kis types)
    */
   static createTeamAnswerFiles(teamAnswers) {
     const files = [];
@@ -85,7 +85,7 @@ export class ExportTeamAnswerUtils {
       groupedByQuery[queryIndex].push(item);
     });
 
-    // Create file for each query_index
+    // Create CSV file for each query_index
     Object.keys(groupedByQuery)
       .sort((a, b) => parseInt(a) - parseInt(b))
       .forEach(queryIndex => {
@@ -95,17 +95,17 @@ export class ExportTeamAnswerUtils {
         // Determine type from first item
         const firstItem = items[0];
         const type = firstItem.qa ? 'qa' : 'kis';
-        const filename = `query-${queryIndex}-${type}.txt`;
+        const filename = `query-${queryIndex}-${type}.csv`;
         
         let content = '';
         if (type === 'kis') {
           content = items
             .map(item => `${item.video_name},${item.frame_index}`)
-            .join('\n');
+            .join('\r\n');
         } else if (type === 'qa') {
           content = items
-            .map(item => `${item.video_name},${item.frame_index},${item.qa}`)
-            .join('\n');
+            .map(item => `${item.video_name},${item.frame_index},"${item.qa}"`)
+            .join('\r\n');
         }
 
         files.push({ filename, content });
@@ -115,7 +115,7 @@ export class ExportTeamAnswerUtils {
   }
 
   /**
-   * Create files from TRAKE answers (trake type)
+   * Create CSV files from TRAKE answers (trake type)
    */
   static createTRAKEAnswerFiles(trakeData) {
     const files = [];
@@ -127,7 +127,7 @@ export class ExportTeamAnswerUtils {
       
       if (!groups || groups.length === 0) return;
 
-      const filename = `query-${queryIndex}-trake.txt`;
+      const filename = `query-${queryIndex}-trake.csv`;
       
       // Sort groups by group number
       const sortedGroups = [...groups].sort((a, b) => a.group - b.group);
@@ -141,7 +141,7 @@ export class ExportTeamAnswerUtils {
         const frameIndexes = sortedItems.map(item => item.frame_index);
         
         return `${videoName},${frameIndexes.join(',')}`;
-      }).join('\n');
+      }).join('\r\n');
 
       files.push({ filename, content });
     });
@@ -150,22 +150,24 @@ export class ExportTeamAnswerUtils {
   }
 
   /**
-   * Create and download ZIP file
+   * Create and download ZIP file with submission folder structure
    */
   static async downloadAsZip(files) {
     const zip = new JSZip();
 
-    // Add files to ZIP
+    // Create submission folder
+    const submissionFolder = zip.folder('submission');
+
+    // Add CSV files to submission folder
     files.forEach(file => {
-      zip.file(file.filename, file.content);
+      submissionFolder.file(file.filename, file.content);
     });
 
     // Generate ZIP blob
     const blob = await zip.generateAsync({ type: 'blob' });
     
-    // Download
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-    const filename = `lucifer-top-1.zip`;
+    // Download with team name and round
+    const filename = `team_lucifer_round1.zip`;
     saveAs(blob, filename);
   }
 }

@@ -358,7 +358,9 @@ class TeamTRAKEAnswerListCreateSSEAPIView(APIView):
             # Broadcast create event via SSE if any items were created
             if created_items:
                 serialized_items = [TeamTRAKEAnswerSerializer(item).data for item in created_items]
-                team_trake_answer_sse_service.publish_create_message(serialized_items)
+                # Get query_index from first created item (all items should have same query_index)
+                query_index = created_items[0].query_index if created_items else None
+                team_trake_answer_sse_service.publish_create_message(serialized_items, query_index)
             
             total_submitted = len(items_data)
             total_created = len(created_items)
@@ -431,10 +433,14 @@ class TeamTRAKEAnswerBulkDeleteSSEAPIView(APIView):
             }, status=status.HTTP_400_BAD_REQUEST)
         
         try:
-            deleted_count, _ = TeamTRAKEAnswer.objects.filter(id__in=ids).delete()
+            # Get query_index from items before deleting (for SSE broadcast)
+            items_to_delete = TeamTRAKEAnswer.objects.filter(id__in=ids)
+            query_index = items_to_delete.first().query_index if items_to_delete.exists() else None
+            
+            deleted_count, _ = items_to_delete.delete()
             
             # Broadcast delete event via SSE
-            team_trake_answer_sse_service.publish_bulk_delete_message(deleted_count, ids)
+            team_trake_answer_sse_service.publish_bulk_delete_message(deleted_count, ids, query_index)
             
             return Response({
                 'message': f'Successfully deleted {deleted_count} TeamTRAKEAnswer'
@@ -583,7 +589,11 @@ class TeamTRAKEAnswerUpdateGroupAPIView(APIView):
             }, status=status.HTTP_400_BAD_REQUEST)
         
         try:
-            updated_count = TeamTRAKEAnswer.objects.filter(id__in=item_ids).update(group=new_group)
+            # Get query_index from items before updating (for SSE broadcast)
+            items_to_update = TeamTRAKEAnswer.objects.filter(id__in=item_ids)
+            query_index = items_to_update.first().query_index if items_to_update.exists() else None
+            
+            updated_count = items_to_update.update(group=new_group)
             
             if updated_count == 0:
                 return Response({
@@ -591,7 +601,7 @@ class TeamTRAKEAnswerUpdateGroupAPIView(APIView):
                 }, status=status.HTTP_404_NOT_FOUND)
             
             # Broadcast update event via SSE
-            team_trake_answer_sse_service.publish_group_update_message(updated_count, item_ids, new_group)
+            team_trake_answer_sse_service.publish_group_update_message(updated_count, item_ids, new_group, query_index)
             
             return Response({
                 'message': f'Successfully updated group for {updated_count} TeamTRAKEAnswer items',
