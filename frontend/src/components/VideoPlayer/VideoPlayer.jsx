@@ -280,8 +280,8 @@ const VideoPlayer = ({
       const baseFrameIndex = parseInt(internalCurrentFrame.frame_index);
       
       const newUrl = baseUrl.replace(
-        `/${baseFrameIndex}.jpg`, 
-        `/${newFrameIndex}.jpg`
+        `/${baseFrameIndex}.webp`, 
+        `/${newFrameIndex}.webp`
       );
       
       const newCenterFrame = {
@@ -872,16 +872,16 @@ const VideoPlayer = ({
     
     // Extract the base URL pattern from current frame URL
     // Handle different URL patterns like:
-    // http://ip/path/frame_123.jpg -> http://ip/path/frame_{frameIndex}.jpg
-    // http://ip/path/123.jpg -> http://ip/path/{frameIndex}.jpg
+    // http://ip/path/frame_123.webp -> http://ip/path/frame_{frameIndex}.webp
+    // http://ip/path/123.webp -> http://ip/path/{frameIndex}.webp
     const url = currentFrame.url;
     
     if (url.includes('/frame_')) {
-      // Pattern: /frame_123.jpg
-      return url.replace(/\/frame_\d+\.jpg$/, `/frame_${frameIndex}.jpg`);
+      // Pattern: /frame_123.webp
+      return url.replace(/\/frame_\d+\.webp$/, `/frame_${frameIndex}.webp`);
     } else {
-      // Pattern: /123.jpg
-      return url.replace(/\/\d+\.jpg$/, `/${frameIndex}.jpg`);
+      // Pattern: /123.webp
+      return url.replace(/\/\d+\.webp$/, `/${frameIndex}.webp`);
     }
   };
 

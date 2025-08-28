@@ -119,6 +119,8 @@
     cursor: pointer;
     transition: all 0.2s ease;
 
+    z-index: 99999999;
+
     img {
       width: 12px;
       height: 12px;

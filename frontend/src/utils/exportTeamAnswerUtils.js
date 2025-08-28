@@ -130,7 +130,7 @@ export class ExportTeamAnswerUtils {
       const filename = `query-${queryIndex}-trake.csv`;
       
       // Sort groups by group number
-      const sortedGroups = [...groups].sort((a, b) => a.group - b.group);
+      const sortedGroups = [...groups].sort((a, b) => b.group - a.group);
       
       const content = sortedGroups.map(group => {
         // Sort items by frame_index within each group
