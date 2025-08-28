@@ -4,16 +4,15 @@ import { useToast } from '../Toast/ToastProvider';
 import { QueryModeUtils } from '../../utils/queryModeUtils';
 import './ActivityBar.scss';
 
-const ActivityBar = ({ onSectionChange, activeSection, onRoundChange, onQueryModeChange, onCsvFormatChange, onKChange, selectedRound = 'prelims', selectedQueryMode = 'kis', csvFilenameFormat = 'query-{query_index}-{type}', selectedK = 50 }) => {
+const ActivityBar = ({ onSectionChange, activeSection, onRoundChange, onQueryModeChange, onKChange, selectedRound = 'prelims', selectedQueryMode = 'kis', selectedK = 50 }) => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [currentRound, setCurrentRound] = useState(selectedRound);
   const [currentQueryMode, setCurrentQueryMode] = useState(selectedQueryMode);
-  const [currentCsvFormat, setCurrentCsvFormat] = useState(csvFilenameFormat);
   const [currentK, setCurrentK] = useState(selectedK);
   const settingsRef = useRef(null);
   
-  // Use AppContext for search URL and queryIndex
-  const { searchUrl, setSearchUrl, queryIndex } = useApp();
+  // Use AppContext for search URL, queryIndex, and csvFormat
+  const { searchUrl, setSearchUrl, queryIndex, csvFormat, setCsvFormat } = useApp();
   const toast = useToast();
 
   // Update internal state when props change
@@ -24,10 +23,6 @@ const ActivityBar = ({ onSectionChange, activeSection, onRoundChange, onQueryMod
   useEffect(() => {
     setCurrentQueryMode(selectedQueryMode);
   }, [selectedQueryMode]);
-
-  useEffect(() => {
-    setCurrentCsvFormat(csvFilenameFormat);
-  }, [csvFilenameFormat]);
 
   useEffect(() => {
     setCurrentK(selectedK);
@@ -117,11 +112,7 @@ const ActivityBar = ({ onSectionChange, activeSection, onRoundChange, onQueryMod
   };
 
   const handleCsvFormatChange = (format) => {
-    setCurrentCsvFormat(format);
-    // Notify parent component about CSV format change
-    if (onCsvFormatChange) {
-      onCsvFormatChange(format);
-    }
+    setCsvFormat(format);
   };
 
   const handleKChange = (k) => {
@@ -235,7 +226,7 @@ const ActivityBar = ({ onSectionChange, activeSection, onRoundChange, onQueryMod
                     id="csv-format-input"
                     type="text"
                     className="activity-bar__csv-format-input"
-                    value={currentCsvFormat}
+                    value={csvFormat}
                     onChange={(e) => handleCsvFormatChange(e.target.value)}
                     placeholder="query-{query_index}-{type}"
                   />

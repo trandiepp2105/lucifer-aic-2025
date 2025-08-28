@@ -17,6 +17,7 @@ const getInitialStateFromURL = () => {
     section: 'chat',      // 'chat' hoặc 'history'
     k: 50,                // top k results (1-200)
     searchUrl: '',        // search server endpoint
+    csvFormat: 'query-p1-{query_index}-{type}', // CSV filename format
     tempTrakeItems: [],   // temporary TRAKE items for collection before submission
   };
 
@@ -81,6 +82,11 @@ const getInitialStateFromURL = () => {
     urlState.searchUrl = decodeURIComponent(searchUrlParam);
   }
   
+  const csvFormatParam = urlParams.get('csvformat');
+  if (csvFormatParam) {
+    urlState.csvFormat = decodeURIComponent(csvFormatParam);
+  }
+  
   const queryIndexParam = urlParams.get('queryindex');
   if (queryIndexParam) {
     urlState.queryIndex = parseInt(queryIndexParam, 10);
@@ -107,6 +113,7 @@ const ActionTypes = {
   SET_QUERY_INDEX: 'SET_QUERY_INDEX',
   SET_K: 'SET_K',
   SET_SEARCH_URL: 'SET_SEARCH_URL',
+  SET_CSV_FORMAT: 'SET_CSV_FORMAT',
   UPDATE_FROM_URL: 'UPDATE_FROM_URL',
   RESET_STATE: 'RESET_STATE',
   AUTO_DETECT_QUERY_MODE: 'AUTO_DETECT_QUERY_MODE',
@@ -142,6 +149,8 @@ const appReducer = (state, action) => {
       return { ...state, k: action.payload };
     case ActionTypes.SET_SEARCH_URL:
       return { ...state, searchUrl: action.payload };
+    case ActionTypes.SET_CSV_FORMAT:
+      return { ...state, csvFormat: action.payload };
     case ActionTypes.AUTO_DETECT_QUERY_MODE:
       return { ...state, queryMode: action.payload };
     case ActionTypes.ADD_TEMP_TRAKE_ITEM:
@@ -211,6 +220,11 @@ export const AppProvider = ({ children }) => {
     } else {
       urlParams.delete('searchurl');
     }
+    if (newState.csvFormat !== undefined && newState.csvFormat !== '') {
+      urlParams.set('csvformat', encodeURIComponent(newState.csvFormat));
+    } else {
+      urlParams.delete('csvformat');
+    }
 
     const newUrl = `${window.location.pathname}?${urlParams.toString()}`;
     window.history.replaceState(null, '', newUrl);
@@ -278,6 +292,7 @@ export const AppProvider = ({ children }) => {
       queryIndex: state.queryIndex,
       k: state.k,
       searchUrl: state.searchUrl,
+      csvFormat: state.csvFormat,
       // reset tempTrakeItems
       tempTrakeItems: [],
     };
@@ -288,7 +303,7 @@ export const AppProvider = ({ children }) => {
     }
     
     updateUrlState(urlStateToUpdate);
-  }, [state.session, state.queryMode, state.round, state.viewMode, state.stage, state.section, state.queryIndex, state.k, state.searchUrl]);
+  }, [state.session, state.queryMode, state.round, state.viewMode, state.stage, state.section, state.queryIndex, state.k, state.searchUrl, state.csvFormat]);
 
   // Actions
   const actions = {
@@ -301,6 +316,7 @@ export const AppProvider = ({ children }) => {
     setQueryIndex: (index) => dispatch({ type: ActionTypes.SET_QUERY_INDEX, payload: index }),
     setK: (k) => dispatch({ type: ActionTypes.SET_K, payload: k }),
     setSearchUrl: (url) => dispatch({ type: ActionTypes.SET_SEARCH_URL, payload: url }),
+    setCsvFormat: (format) => dispatch({ type: ActionTypes.SET_CSV_FORMAT, payload: format }),
     resetState: (keepState = {}) => dispatch({ type: ActionTypes.RESET_STATE, payload: keepState }),
     addTempTrakeItem: (item) => dispatch({ type: ActionTypes.ADD_TEMP_TRAKE_ITEM, payload: item }),
     removeTempTrakeItem: (item) => dispatch({ type: ActionTypes.REMOVE_TEMP_TRAKE_ITEM, payload: item }),

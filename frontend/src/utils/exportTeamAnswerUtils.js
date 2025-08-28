@@ -9,8 +9,9 @@ export class ExportTeamAnswerUtils {
   
   /**
    * Export all team answers and TRAKE answers
+   * @param {string} fileNameFormat - Format for filenames with placeholders {query_index} and {type}
    */
-  static async exportAllAnswers() {
+  static async exportAllAnswers(fileNameFormat = "query-p1-{query_index}-{type}") {
     try {
       console.log('Starting export process...');
       
@@ -26,13 +27,13 @@ export class ExportTeamAnswerUtils {
 
       // Process team answers (qa/kis types)
       if (Array.isArray(teamAnswers) && teamAnswers.length > 0) {
-        const teamFiles = this.createTeamAnswerFiles(teamAnswers);
+        const teamFiles = this.createTeamAnswerFiles(teamAnswers, fileNameFormat);
         files.push(...teamFiles);
       }
 
       // Process TRAKE answers (trake type) - using original format
       if (trakeData && Array.isArray(trakeData.data)) {
-        const trakeFiles = this.createTRAKEAnswerFiles(trakeData.data);
+        const trakeFiles = this.createTRAKEAnswerFiles(trakeData.data, fileNameFormat);
         files.push(...trakeFiles);
       }
       
@@ -71,8 +72,10 @@ export class ExportTeamAnswerUtils {
 
   /**
    * Create CSV files from team answers (qa/kis types)
+   * @param {Array} teamAnswers - Array of team answers
+   * @param {string} fileNameFormat - Format for filenames with placeholders {query_index} and {type}
    */
-  static createTeamAnswerFiles(teamAnswers) {
+  static createTeamAnswerFiles(teamAnswers, fileNameFormat) {
     const files = [];
     
     // Group by query_index
@@ -95,7 +98,11 @@ export class ExportTeamAnswerUtils {
         // Determine type from first item
         const firstItem = items[0];
         const type = firstItem.qa ? 'qa' : 'kis';
-        const filename = `query-${queryIndex}-${type}.csv`;
+        
+        // Generate filename using the format template
+        const filename = fileNameFormat
+          .replace('{query_index}', queryIndex)
+          .replace('{type}', type) + '.csv';
         
         let content = '';
         if (type === 'kis') {
@@ -116,8 +123,10 @@ export class ExportTeamAnswerUtils {
 
   /**
    * Create CSV files from TRAKE answers (trake type)
+   * @param {Array} trakeData - Array of TRAKE data
+   * @param {string} fileNameFormat - Format for filenames with placeholders {query_index} and {type}
    */
-  static createTRAKEAnswerFiles(trakeData) {
+  static createTRAKEAnswerFiles(trakeData, fileNameFormat) {
     const files = [];
     
     // trakeData is array of {query_index, data: [groups]}
@@ -127,7 +136,10 @@ export class ExportTeamAnswerUtils {
       
       if (!groups || groups.length === 0) return;
 
-      const filename = `query-${queryIndex}-trake.csv`;
+      // Generate filename using the format template
+      const filename = fileNameFormat
+        .replace('{query_index}', queryIndex)
+        .replace('{type}', 'trake') + '.csv';
       
       // Sort groups by group number
       const sortedGroups = [...groups].sort((a, b) => b.group - a.group);
