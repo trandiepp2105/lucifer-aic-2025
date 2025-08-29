@@ -493,43 +493,86 @@ class QueryServiceClass {
    * Batch update queries for a session
    * @param {number} sessionId - Session ID
    * @param {Array} queries - Array of query objects
+   * @param {Array} imageFiles - Array of {stage, file} objects for image uploads
    * @returns {Promise<Object>} Response with updated queries from server
    */
-  async batchUpdateQueries(sessionId, queries) {
+  async batchUpdateQueries(sessionId, queries, imageFiles = []) {
     try {
-      const requestBody = {
-        session: sessionId,
-        localQueries: queries  // Changed from 'queries' to 'localQueries' to match backend expectation
-      };
+      // Check if we have any image files to upload
+      const hasImageFiles = imageFiles && imageFiles.length > 0;
       
-      const response = await fetch(`${this.baseURL}/`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody)
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        console.error('Bad request details:', { 
-          status: response.status, 
-          statusText: response.statusText,
-          responseData: data 
+      if (hasImageFiles) {
+        // Use FormData when we have image files
+        const formData = new FormData();
+        formData.append('session', sessionId);
+        formData.append('localQueries', JSON.stringify(queries));
+        
+        // Add image files with stage prefix
+        imageFiles.forEach(({stage, file}) => {
+          formData.append(`image_stage_${stage}`, file);
         });
+        
+        const response = await fetch(`${this.baseURL}/`, {
+          method: 'POST',
+          body: formData, // No Content-Type header for FormData
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          console.error('Bad request details:', { 
+            status: response.status, 
+            statusText: response.statusText,
+            responseData: data 
+          });
+          return {
+            success: false,
+            error: data.detail || data.error || data.message || `HTTP ${response.status}: ${response.statusText}`,
+            status: response.status,
+            responseData: data
+          };
+        }
+
         return {
-          success: false,
-          error: data.detail || data.error || data.message || `HTTP ${response.status}: ${response.statusText}`,
-          status: response.status,
-          responseData: data
+          success: true,
+          data: data
+        };
+      } else {
+        // Use JSON when no image files
+        const requestBody = {
+          session: sessionId,
+          localQueries: queries
+        };
+        
+        const response = await fetch(`${this.baseURL}/`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(requestBody)
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          console.error('Bad request details:', { 
+            status: response.status, 
+            statusText: response.statusText,
+            responseData: data 
+          });
+          return {
+            success: false,
+            error: data.detail || data.error || data.message || `HTTP ${response.status}: ${response.statusText}`,
+            status: response.status,
+            responseData: data
+          };
+        }
+
+        return {
+          success: true,
+          data: data
         };
       }
-
-      return {
-        success: true,
-        data: data
-      };
     } catch (error) {
       return handleApiError(error);
     }

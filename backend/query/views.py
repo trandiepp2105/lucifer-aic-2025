@@ -365,7 +365,27 @@ class QueryListCreateAPIView(APIView):
         try:
             print(f"POST request data: {request.data}")
             session_id = request.data.get('session')
-            local_queries = request.data.get('localQueries', [])
+            
+            # Handle both JSON and FormData requests
+            if 'localQueries' in request.data:
+                if isinstance(request.data['localQueries'], str):
+                    # FormData: localQueries is JSON string
+                    import json
+                    local_queries = json.loads(request.data['localQueries'])
+                else:
+                    # JSON: localQueries is already parsed
+                    local_queries = request.data.get('localQueries', [])
+            else:
+                local_queries = []
+            
+            # Extract image files from FormData (format: image_stage_N)
+            image_files = {}
+            for key, file in request.FILES.items():
+                if key.startswith('image_stage_'):
+                    stage = int(key.replace('image_stage_', ''))
+                    image_files[stage] = file
+            
+            print(f"Extracted image files for stages: {list(image_files.keys())}")
             
             if not session_id:
                 return Response({
@@ -405,12 +425,24 @@ class QueryListCreateAPIView(APIView):
                     fields_to_check = ['text', 'ocr', 'speech', 'image', 'stage']
                     
                     for field in fields_to_check:
+                        # Skip image field if not present in local_query_data (means no change intended)
+                        if field == 'image' and field not in local_query_data:
+                            continue
+                            
                         local_value = local_query_data.get(field)
                         server_value = getattr(server_query, field)
                         
                         # Handle None values and empty strings
                         local_value = local_value if local_value not in [None, 'null', ''] else None
                         server_value = server_value if server_value not in [None, 'null', ''] else None
+                        
+                        # Special handling for image field - check for image file in FormData
+                        if field == 'image':
+                            query_stage = local_query_data.get('stage')
+                            if query_stage in image_files:
+                                # Use image file from FormData instead of local_value
+                                local_value = image_files[query_stage]
+                                print(f"Using uploaded image file for existing query {query_id} stage {query_stage}")
                         
                         if local_value != server_value:
                             changes[field] = local_value
@@ -424,13 +456,21 @@ class QueryListCreateAPIView(APIView):
                         
                 elif not query_id or query_id not in server_queries_dict:
                     # CREATE: New query (no ID or ID doesn't exist on server)
+                    query_stage = local_query_data.get('stage', 1)
+                    image_data = local_query_data.get('image')
+                    
+                    # Use image file from FormData if available for this stage
+                    if query_stage in image_files:
+                        image_data = image_files[query_stage]
+                        print(f"Using uploaded file for stage {query_stage}: {image_data.name}")
+                    
                     serializer = QueryCreateSerializer(data={
                         'session': session_id,
                         'text': local_query_data.get('text'),
                         'ocr': local_query_data.get('ocr'), 
                         'speech': local_query_data.get('speech'),
-                        'image': local_query_data.get('image'),
-                        'stage': local_query_data.get('stage', 1),
+                        'image': image_data,
+                        'stage': query_stage,
                     })
                     
                     if serializer.is_valid():
