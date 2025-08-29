@@ -43,9 +43,32 @@ const QueryItem = ({
            value.trim() !== '';
   };
 
+  // Helper to get only the path part of an image URL
+  const getImagePath = (imageUrl) => {
+    if (!hasValidValue(imageUrl)) return imageUrl;
+    try {
+      // If it's already a path, return as is
+      if (imageUrl.startsWith('/media/')) return imageUrl;
+      // If it's a full URL, extract the path
+      const url = new URL(imageUrl);
+      return url.pathname;
+    } catch (e) {
+      // If parsing fails, return as is
+      return imageUrl;
+    }
+  };
+
   // Check if query has content to allow creating new query after it
   const hasContent = () => {
     return hasValidValue(query.text) || hasValidValue(query.ocr) || hasValidValue(query.image);
+  };
+
+  // When sending query, ensure only image path is sent
+  const getSanitizedQuery = () => {
+    return {
+      ...query,
+      image: getImagePath(query.image)
+    };
   };
 
   const handleClick = () => {
@@ -75,6 +98,7 @@ const QueryItem = ({
       data-draggable={isDraggable}
       {...(isDraggable ? attributes : {})}
       {...(isDraggable ? listeners : {})}
+      data-sanitized-query={JSON.stringify(getSanitizedQuery())}
     >
       {/* Drag handle - visual indicator only */}
       {isDraggable && (
@@ -155,7 +179,7 @@ const QueryItem = ({
               {/* Image field */}
               {hasImage && (
                 <div className="sidebar__message-field sidebar__message-image">
-                  <img src={query.image} alt="Query image" className="sidebar__query-image" />
+                  <img src={getImagePath(query.image)} alt="Query image" className="sidebar__query-image" />
                 </div>
               )}
             </>
