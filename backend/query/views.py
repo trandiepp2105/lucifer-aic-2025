@@ -565,7 +565,7 @@ class QueryListCreateAPIView(APIView):
         
         # Get SERVER_IP from environment, fallback to request host
         # server_ip = os.environ.get('SERVER_IP')
-        server_ip = "172.23.190.19"
+        server_ip = None
         if server_ip:
             base_url = f"http://{server_ip}"
         else:

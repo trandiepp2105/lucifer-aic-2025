@@ -70,8 +70,9 @@ class TeamAnswer(models.Model):
     url = models.TextField(
         help_text="URL of the frame image"
     )
-    qa = models.TextField(
-        null=True, 
+    qa = models.CharField(
+        max_length=100,
+        default='', 
         blank=True, 
         help_text="Question and answer text"
     )
@@ -94,8 +95,7 @@ class TeamAnswer(models.Model):
         verbose_name = 'Team Answer'
         verbose_name_plural = 'Team Answers'
         # Unique constraint for video_name, frame_index, query_index combination
-        unique_together = ['video_name', 'frame_index', 'query_index']
-
+        unique_together = [['video_name', 'frame_index', 'query_index', 'qa']]
     def __str__(self):
         return f"TeamAnswer {self.id} - {self.video_name} Frame {self.frame_index} Query {self.query_index} ({self.round})"
 
