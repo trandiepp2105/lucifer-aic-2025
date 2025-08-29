@@ -23,10 +23,9 @@ const Sidebar = ({
   isLoading = false, // Loading state for data
   onRefresh = null, // Refresh function for data
   allTeamAnswers = [], // All team answers data for export
-  allAnswers = [], // All answers data for export
-  csvFilenameFormat = 'query-{query_index}-{type}' // Custom CSV filename format
+  allAnswers = [] // All answers data for export
 }) => {
-  const { stage, viewMode, round, queryIndex, k, searchUrl, session, sessionLoading, queryMode, setStage, setViewMode, setQueryIndex, setQueryMode, setSession } = useApp();
+  const { stage, viewMode, round, queryIndex, k, searchUrl, session, sessionLoading, queryMode, csvFormat, setStage, setViewMode, setQueryIndex, setQueryMode, setSession } = useApp();
   const toast = useToast();
   
   // Local queries management - unified structure matching backend
@@ -790,7 +789,7 @@ const Sidebar = ({
     try {
       if (mode === 'team-answer') {
         toast.info('Exporting team answers and TRAKE answers...', 1000);
-        const result = await ExportTeamAnswerUtils.exportAllAnswers();
+        const result = await ExportTeamAnswerUtils.exportAllAnswers(csvFormat);
         toast.success(result.message || 'Export completed successfully!', 2000);
         
       } else if (mode === 'answer') {
@@ -800,7 +799,7 @@ const Sidebar = ({
         }
         
         toast.info('Generating export file...', 1000);
-        await exportAnswersToZip(allAnswers, round, csvFilenameFormat);
+        await exportAnswersToZip(allAnswers, round, csvFormat);
         toast.success('Export completed successfully!', 2000);
       }
     } catch (error) {
@@ -819,7 +818,7 @@ const Sidebar = ({
   const handleExportTeamAnswers = async () => {
     try {
       toast.info('Exporting team answers and TRAKE answers...', 1000);
-      const result = await ExportTeamAnswerUtils.exportAllAnswers();
+      const result = await ExportTeamAnswerUtils.exportAllAnswers(csvFormat);
       toast.success(result.message || 'Export completed successfully!', 2000);
     } catch (error) {
       console.error('Export error:', error);

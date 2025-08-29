@@ -78,7 +78,6 @@ const HomePage = () => {
   // Local state for UI components (not managed by AppContext)
   const [selectedFrame, setSelectedFrame] = useState(null);
   const [isVideoPlayerOpen, setIsVideoPlayerOpen] = useState(false);
-  const [csvFilenameFormat, setCsvFilenameFormat] = useState('query-{query_index}-{type}');
   
   // Ref to store the loadQueries function from Sidebar
   const loadQueriesRef = useRef(null);
@@ -257,10 +256,6 @@ const HomePage = () => {
     // TODO: Add logic to handle query mode change (e.g., switch between KIS and Q&A interfaces)
   }, [setQueryMode]);
 
-  const handleCsvFormatChange = useCallback((format) => {
-    setCsvFilenameFormat(format);
-  }, []);
-
   const handleSectionChange = (sectionId) => {
     setSection(sectionId);
     
@@ -375,7 +370,6 @@ const HomePage = () => {
           onRefresh={fetchAllTeamAnswers}
           allTeamAnswers={allTeamAnswers}
           allAnswers={allAnswers}
-          csvFilenameFormat={csvFilenameFormat}
         />;
       case 'answer':
         return <Sidebar 
@@ -385,7 +379,6 @@ const HomePage = () => {
           onRefresh={fetchAllAnswers}
           allTeamAnswers={allTeamAnswers}
           allAnswers={allAnswers}
-          csvFilenameFormat={csvFilenameFormat}
         />;
       default:
         return <Sidebar 
@@ -437,11 +430,9 @@ const HomePage = () => {
           activeSection={section}
           onRoundChange={handleRoundChange}
           onQueryModeChange={handleQueryModeChange}
-          onCsvFormatChange={handleCsvFormatChange}
           onKChange={setK}
           selectedRound={round}
           selectedQueryMode={queryMode}
-          csvFilenameFormat={csvFilenameFormat}
           selectedK={k}
         />
         {renderSidePanel()}
