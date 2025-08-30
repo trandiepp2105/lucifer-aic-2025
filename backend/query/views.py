@@ -36,6 +36,31 @@ from .serializers import (
 )
 
 class QueryListCreateAPIView(APIView):
+    def _normalize_image_path(self, image_value):
+        """
+        Nhận vào image là URL hoặc path, trả về path tương đối bên trong MEDIA_ROOT (ví dụ: queries/xxx.jpg)
+        """
+        if not image_value:
+            return image_value
+        if isinstance(image_value, str):
+            # Nếu là URL, lấy phần path
+            try:
+                from urllib.parse import urlparse
+                parsed = urlparse(image_value)
+                path = parsed.path
+            except Exception:
+                path = image_value
+            else:
+                image_value = path
+            # Nếu bắt đầu bằng /media/, cắt bỏ /media/
+            if image_value.startswith('/media/'):
+                return image_value[len('/media/'):]
+            # Nếu bắt đầu bằng media/, cắt bỏ media/
+            if image_value.startswith('media/'):
+                return image_value[len('media/'):]
+            # Nếu là path tương đối, giữ nguyên
+            return image_value.lstrip('/')
+        return image_value
     """
     API endpoint for listing and creating queries
     """
@@ -154,28 +179,27 @@ class QueryListCreateAPIView(APIView):
         
         for query_data in sorted_queries_serializer.data:
             query_item = {}
-            
             # Thêm text nếu có và không rỗng
             if query_data.get('text') and query_data['text'].strip():
                 query_item['text'] = query_data['text']
-                
             # Thêm ocr nếu có và không rỗng
             if query_data.get('ocr') and query_data['ocr'].strip() and query_data['ocr'].lower() != 'null':
                 query_item['ocr'] = query_data['ocr']
-            
             # Xử lý image nếu có
             if query_data.get('image'):
+                # Luôn chuẩn hóa path ảnh
+                norm_image_path = self._normalize_image_path(query_data['image'])
                 # Tìm query object tương ứng để lấy file path
                 query_obj = sorted_queries.get(id=query_data['id'])
                 if query_obj.image and hasattr(query_obj.image, 'path'):
                     image_path = query_obj.image.path
                     image_name = os.path.basename(image_path)
-                    
                     # Sử dụng tên file thực tế làm image_ref thay vì tạo reference
                     query_item['image_ref'] = image_name
                     image_files_to_open.append((image_name, image_path, image_name))
                     image_counter += 1
-            
+                # Ghi lại path đã chuẩn hóa (nếu cần debug hoặc trả về)
+                query_item['image'] = norm_image_path
             # Chỉ thêm vào queries_structure nếu có ít nhất một field
             if query_item:
                 queries_structure.append(query_item)
@@ -413,17 +437,17 @@ class QueryListCreateAPIView(APIView):
             
             # Process each local query
             for local_query_data in local_queries:
+                # Luôn chuẩn hóa image path nếu có
+                if 'image' in local_query_data:
+                    local_query_data['image'] = self._normalize_image_path(local_query_data['image'])
                 query_id = local_query_data.get('id')
-                
                 if query_id and query_id in server_queries_dict:
                     # UPDATE: Query exists on server, check for changes
                     server_query = server_queries_dict[query_id]
                     local_query_ids.add(query_id)
-                    
                     # Check if any field has changed
                     changes = {}
                     fields_to_check = ['text', 'ocr', 'speech', 'image', 'stage']
-                    
                     for field in fields_to_check:
                         # Skip image field if not present in local_query_data (means no change intended)
                         if field == 'image' and field not in local_query_data:
@@ -431,7 +455,6 @@ class QueryListCreateAPIView(APIView):
                             
                         local_value = local_query_data.get(field)
                         server_value = getattr(server_query, field)
-                        
                         # Handle None values and empty strings
                         local_value = local_value if local_value not in [None, 'null', ''] else None
                         server_value = server_value if server_value not in [None, 'null', ''] else None
@@ -444,16 +467,15 @@ class QueryListCreateAPIView(APIView):
                                 local_value = image_files[query_stage]
                                 print(f"Using uploaded image file for existing query {query_id} stage {query_stage}")
                         
+
                         if local_value != server_value:
                             changes[field] = local_value
-                    
                     if changes:
                         # Update the query
                         for field, value in changes.items():
                             setattr(server_query, field, value)
                         server_query.save()
                         updated_queries.append(server_query)
-                        
                 elif not query_id or query_id not in server_queries_dict:
                     # CREATE: New query (no ID or ID doesn't exist on server)
                     query_stage = local_query_data.get('stage', 1)
@@ -472,7 +494,6 @@ class QueryListCreateAPIView(APIView):
                         'image': image_data,
                         'stage': query_stage,
                     })
-                    
                     if serializer.is_valid():
                         new_query = serializer.save()
                         created_queries.append(new_query)
