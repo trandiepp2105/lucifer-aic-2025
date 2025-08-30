@@ -403,6 +403,7 @@ class TeamAnswerListCreateAPIView(APIView):
             except Exception as e:
                 # Handle database unique constraint error
                 if 'unique constraint' in str(e).lower() or 'duplicate' in str(e).lower():
+                    print("Duplicate entry error:", e)
                     return Response({
                         'message': 'Team answer already exists for this video, frame, and query index combination',
                         'errors': {'non_field_errors': ['Duplicate entry']}
@@ -412,7 +413,7 @@ class TeamAnswerListCreateAPIView(APIView):
                         'message': 'Error creating team answer',
                         'errors': {'non_field_errors': [str(e)]}
                     }, status=status.HTTP_400_BAD_REQUEST)
-        
+        print("Serializer errors:", serializer.errors)
         return Response({
             'message': 'Invalid data',
             'errors': serializer.errors

@@ -156,13 +156,16 @@ const QueryInput = ({
         console.log('🔍 Image loaded, updating query with:', {
           imageSize: file.size,
           imageType: file.type,
-          imageName: file.name
+          imageName: file.name,
+          imageDataUrl: e.target.result?.substring(0, 50) + '...'
         });
+        console.log('🔍 Before updateCurrentLocalQuery - currentLocalQuery:', currentLocalQuery);
         updateCurrentLocalQuery({
           image: e.target.result,
           imageFile: file,
           imageRemoved: false
         });
+        console.log('🔍 After updateCurrentLocalQuery called');
       };
       reader.readAsDataURL(file);
     }

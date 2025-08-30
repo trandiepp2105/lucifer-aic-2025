@@ -103,6 +103,12 @@ const Sidebar = ({
 
   // Update current stage query in localQueries directly
   const updateCurrentLocalQuery = useCallback((updates) => {
+    console.log('🔍 updateCurrentLocalQuery called with updates:', {
+      ...updates,
+      imageFile: updates.imageFile ? `File(${updates.imageFile.size} bytes)` : updates.imageFile,
+      image: updates.image ? (typeof updates.image === 'string' ? `DataURL(${updates.image.substring(0, 50)}...)` : `File(${updates.image.size} bytes)`) : updates.image
+    });
+    
     setLocalQueries(prev => {
       const currentStageIndex = prev.findIndex(q => q.stage === stage);
       
@@ -115,6 +121,11 @@ const Sidebar = ({
           ...updates,
           updated_at: new Date().toISOString()
         };
+        console.log('🔍 Updated existing query at stage', stage, 'with:', {
+          ...updatedQueries[currentStageIndex],
+          imageFile: updatedQueries[currentStageIndex].imageFile ? `File(${updatedQueries[currentStageIndex].imageFile.size} bytes)` : updatedQueries[currentStageIndex].imageFile,
+          image: updatedQueries[currentStageIndex].image ? (typeof updatedQueries[currentStageIndex].image === 'string' ? `DataURL(${updatedQueries[currentStageIndex].image.substring(0, 50)}...)` : `File(${updatedQueries[currentStageIndex].image.size} bytes)`) : updatedQueries[currentStageIndex].image
+        });
         return updatedQueries;
       } else {
         // Create new query for current stage
@@ -122,16 +133,29 @@ const Sidebar = ({
           stage: stage,
           ...updates
         });
+        console.log('🔍 Created new query for stage', stage, 'with:', {
+          ...newQuery,
+          imageFile: newQuery.imageFile ? `File(${newQuery.imageFile.size} bytes)` : newQuery.imageFile,
+          image: newQuery.image ? (typeof newQuery.image === 'string' ? `DataURL(${newQuery.image.substring(0, 50)}...)` : `File(${newQuery.image.size} bytes)`) : newQuery.image
+        });
         return [...prev, newQuery];
       }
     });
 
     // Also update currentLocalQuery for input synchronization
-    setCurrentLocalQuery(prev => ({
-      ...prev,
-      ...updates,
-      updated_at: new Date().toISOString()
-    }));
+    setCurrentLocalQuery(prev => {
+      const updated = {
+        ...prev,
+        ...updates,
+        updated_at: new Date().toISOString()
+      };
+      console.log('🔍 Updated currentLocalQuery:', {
+        ...updated,
+        imageFile: updated.imageFile ? `File(${updated.imageFile.size} bytes)` : updated.imageFile,
+        image: updated.image ? (typeof updated.image === 'string' ? `DataURL(${updated.image.substring(0, 50)}...)` : `File(${updated.image.size} bytes)`) : updated.image
+      });
+      return updated;
+    });
   }, [stage, createLocalQuery]);
 
   const updateUrlWithSession = (sessionId) => {
@@ -223,7 +247,8 @@ const Sidebar = ({
             hasImageFile: !!query.imageFile,
             imageFileSize: query.imageFile?.size,
             hasImage: !!query.image,
-            imageRemoved: query.imageRemoved
+            imageRemoved: query.imageRemoved,
+            imageIsUrl: query.image && query.image.startsWith('http')
           });
           
           const syncQuery = {
@@ -241,43 +266,37 @@ const Sidebar = ({
           syncQuery.background_sound = query.background_sound && query.background_sound.trim() ? query.background_sound : null;
           
           if (query.imageFile) {
+            // Don't send data URL, file will be sent separately in FormData
             syncQuery.image = null;
           } else if (query.imageRemoved) {
+            // Explicitly remove image
             syncQuery.image = null;
           } else {
-            syncQuery.image = query.image;
+            // Don't include image field if no changes - let backend keep existing image
+            // Only include if it's a new data URL (not a URL starting with http)
+            if (query.image && !query.image.startsWith('http')) {
+              syncQuery.image = query.image;
+            }
+            // If it's a URL (existing image), don't include the field to avoid changes
           }
           
           return syncQuery;
         });
 
-      const response = await QueryService.batchUpdateQueries(session, queriesToSync);
+      // Collect image files for FormData upload
+      const imageFiles = localQueries
+        .filter(q => q.imageFile)
+        .map(q => ({
+          stage: q.stage,
+          file: q.imageFile
+        }));
+
+      console.log('🔍 Sending image files for stages:', imageFiles.map(f => f.stage));
+
+      const response = await QueryService.batchUpdateQueries(session, queriesToSync, imageFiles);
       
       if (response.success) {
-        // Handle image uploads first if any
-        const localQueriesWithImages = localQueries.filter(q => q.imageFile);
-        console.log('🔍 Found queries with images:', localQueriesWithImages.length);
-        if (localQueriesWithImages.length > 0) {
-          for (const imageQuery of localQueriesWithImages) {
-            console.log('🔍 Processing image for query stage:', imageQuery.stage, 'imageFile:', !!imageQuery.imageFile);
-            // Find the synced query by stage since it might have a new ID
-            const syncedQuery = response.data.data.find(q => q.stage === imageQuery.stage);
-            if (syncedQuery) {
-              console.log('🔍 Found synced query with ID:', syncedQuery.id, 'uploading image...');
-              
-              // Send image as object with image property, not as FormData directly
-              const imageResponse = await QueryService.updateQuery(syncedQuery.id, {
-                image: imageQuery.imageFile
-              });
-              if (!imageResponse.success) {
-                console.error('❌ Image upload failed for query:', syncedQuery.id);
-              } else {
-                console.log('✅ Image upload successful for query:', syncedQuery.id);
-              }
-            }
-          }
-        }
-        
+        // No need for separate image uploads anymore - they're handled in batch request
         // Reload all queries from server to get fresh data
         await loadQueries(session);
         toast.success('Queries synced successfully', 2000);
@@ -319,37 +338,35 @@ const Sidebar = ({
           syncQuery.background_sound = query.background_sound && query.background_sound.trim() ? query.background_sound : null;
           
           if (query.imageFile) {
+            // Don't send data URL, file will be sent separately in FormData
             syncQuery.image = null;
           } else if (query.imageRemoved) {
+            // Explicitly remove image
             syncQuery.image = null;
           } else {
-            syncQuery.image = query.image;
+            // Don't include image field if no changes - let backend keep existing image
+            // Only include if it's a new data URL (not a URL starting with http)
+            if (query.image && !query.image.startsWith('http')) {
+              syncQuery.image = query.image;
+            }
+            // If it's a URL (existing image), don't include the field to avoid changes
           }
           
           return syncQuery;
         });
 
-      const response = await QueryService.batchUpdateQueries(session, queriesToSync);
+      // Collect image files for FormData upload
+      const imageFiles = queriesToUse
+        .filter(q => q.imageFile)
+        .map(q => ({
+          stage: q.stage,
+          file: q.imageFile
+        }));
+
+      const response = await QueryService.batchUpdateQueries(session, queriesToSync, imageFiles);
       
       if (response.success) {
-        // Handle image uploads first if any
-        const localQueriesWithImages = queriesToUse.filter(q => q.imageFile);
-        if (localQueriesWithImages.length > 0) {
-          for (const imageQuery of localQueriesWithImages) {
-            // Find the synced query by stage since it might have a new ID
-            const syncedQuery = response.data.find(q => q.stage === imageQuery.stage);
-            if (syncedQuery) {
-              const imageFormData = new FormData();
-              imageFormData.append('image', imageQuery.imageFile);
-              
-              const imageResponse = await QueryService.updateQuery(syncedQuery.id, imageFormData);
-              if (!imageResponse.success) {
-                console.error('❌ Image upload failed for query:', syncedQuery.id);
-              }
-            }
-          }
-        }
-        
+        // No need for separate image uploads anymore - they're handled in batch request
         // Reload all queries from server to get fresh data
         await loadQueries(session);
         toast.success('Queries synced successfully', 2000);
@@ -490,11 +507,24 @@ const Sidebar = ({
       return;
     }
 
+    // DEBUG: Log current query state
+    console.log('🔍 handleSendMessage - currentLocalQuery:', {
+      stage: currentLocalQuery.stage,
+      hasText: !!hasText,
+      hasOcr: !!hasOcr,
+      hasImage: !!hasImage,
+      hasImageFile: !!currentLocalQuery.imageFile,
+      imageFileSize: currentLocalQuery.imageFile?.size,
+      hasImageUrl: !!currentLocalQuery.image,
+      imageRemoved: currentLocalQuery.imageRemoved
+    });
+
     // Update current query
     updateCurrentLocalQuery({
       text: hasText || null,
       ocr: hasOcr || null,
-      image: currentLocalQuery.imageFile || (currentLocalQuery.imageRemoved ? null : currentLocalQuery.image),
+      // Keep the data URL in image field, imageFile is handled separately
+      image: currentLocalQuery.imageRemoved ? null : currentLocalQuery.image,
     });
 
     // Create next stage query

@@ -98,6 +98,14 @@ class TeamAnswerSerializer(serializers.ModelSerializer):
 class TeamAnswerCreateSerializer(serializers.ModelSerializer):
     """Serializer for creating TeamAnswer"""
     
+    qa = serializers.CharField(
+        max_length=100,
+        required=False,
+        allow_blank=True,
+        default='',
+        help_text="Question and answer text (optional)"
+    )
+    
     class Meta:
         model = TeamAnswer
         fields = ['video_name', 'frame_index', 'url', 'qa', 'query_index', 'round']
@@ -134,19 +142,23 @@ class TeamAnswerCreateSerializer(serializers.ModelSerializer):
         video_name = data.get('video_name')
         frame_index = data.get('frame_index')
         query_index = data.get('query_index', 0)
+        qa = data.get('qa', '')
         
         # If this is an update (instance exists), exclude current instance from uniqueness check
         if hasattr(self, 'instance') and self.instance:
             existing = TeamAnswer.objects.filter(
                 video_name=video_name,
                 frame_index=frame_index,
-                query_index=query_index
+                query_index=query_index,
+                qa=qa
             ).exclude(id=self.instance.id)
         else:
             existing = TeamAnswer.objects.filter(
                 video_name=video_name,
                 frame_index=frame_index,
-                query_index=query_index
+                query_index=query_index,
+                qa=qa
+
             )
         
         if existing.exists():

@@ -314,7 +314,7 @@ const VideoPlayer = ({
       const hls = new Hls({
         enableWorker: false,
         lowLatencyMode: true,
-        backBufferLength: 90
+        backBufferLength: 30
       });
       hlsRef.current = hls;
 
@@ -948,6 +948,7 @@ const VideoPlayer = ({
               )}
               
               <video
+                crossOrigin="anonymous"
                 ref={videoRef}
                 className="video-player__video"
                 onTimeUpdate={handleVideoTimeUpdate}

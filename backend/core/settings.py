@@ -188,6 +188,8 @@ def get_cors_allowed_origins():
     default_origins = [
         "http://localhost:3000",  # React development server
         "http://127.0.0.1:3000",
+        "http://localhost:3001",  # React development server
+        "http://127.0.0.1:3001",
         "http://127.0.0.1",
         "http://localhost",
     ]
@@ -198,6 +200,7 @@ def get_cors_allowed_origins():
         origins.extend([
             f"http://{host}",        # Port 80 (default)
             f"http://{host}:3000",   # Port 3000
+            f"http://{host}:3001",
         ])
     
     return list(set(origins))  # Remove duplicates
