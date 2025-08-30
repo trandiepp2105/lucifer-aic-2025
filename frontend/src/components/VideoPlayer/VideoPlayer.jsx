@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { createPortal } from 'react-dom';
 import Hls from 'hls.js';
 import FrameItem from '../FrameItem/FrameItem';
 import SubmissionModal from '../SubmissionModal/SubmissionModal';
@@ -627,6 +626,11 @@ const VideoPlayer = ({
   };
 
   const handleKeyDown = (e) => {
+    // Don't handle keyboard shortcuts when any modal is open
+    if (submissionModal.isOpen || isTeamAnswerModalOpen || isImageZoomOpen) {
+      return;
+    }
+    
     e.preventDefault();
     
     switch (e.key) {
@@ -663,7 +667,11 @@ const VideoPlayer = ({
   };
 
   const handleOverlayClick = (e) => {
-    if (e.target === e.currentTarget) {
+    // Only close if clicking directly on overlay and no modals are open
+    if (e.target === e.currentTarget && 
+        !submissionModal.isOpen && 
+        !isTeamAnswerModalOpen && 
+        !isImageZoomOpen) {
       onClose();
     }
   };
@@ -1155,8 +1163,8 @@ const VideoPlayer = ({
         </div>
       </div>
 
-      {/* SubmissionModal overlay within VideoPlayer - render at body level */}
-      {submissionModal.isOpen && createPortal(
+      {/* SubmissionModal overlay within VideoPlayer - render in component tree */}
+      {submissionModal.isOpen && (
         <SubmissionModal
           isOpen={submissionModal.isOpen}
           onClose={closeSubmissionModal}
@@ -1165,32 +1173,29 @@ const VideoPlayer = ({
           frameData={submissionModal.frameData}
           qaText={submissionModal.qaText}
           isSubmitting={submissionModal.isSubmitting}
-        />,
-        document.body
+        />
       )}
 
-      {/* TeamAnswerModal overlay within VideoPlayer - render at body level */}
-      {isTeamAnswerModalOpen && frameToSubmit && createPortal(
+      {/* TeamAnswerModal overlay within VideoPlayer - render in component tree */}
+      {isTeamAnswerModalOpen && frameToSubmit && (
         <TeamAnswerModal
           isOpen={isTeamAnswerModalOpen}
           onClose={handleTeamAnswerModalClose}
           onSubmit={handleTeamAnswerComplete}
           frame={frameToSubmit}
           allTeamAnswers={allTeamAnswers}
-        />,
-        document.body
+        />
       )}
 
-      {/* ImageZoomModal overlay within VideoPlayer - render at body level */}
-      {isImageZoomOpen && frameToZoom && createPortal(
+      {/* ImageZoomModal overlay within VideoPlayer - render in component tree */}
+      {isImageZoomOpen && frameToZoom && (
         <ImageZoomModal
           isOpen={isImageZoomOpen}
           onClose={handleCloseImageZoom}
           imageUrl={frameToZoom?.url}
           imageAlt={frameToZoom ? `Frame ${frameToZoom.video_name}-${frameToZoom.frame_index}` : ''}
           frame={frameToZoom}
-        />,
-        document.body
+        />
       )}
     </div>
   );
