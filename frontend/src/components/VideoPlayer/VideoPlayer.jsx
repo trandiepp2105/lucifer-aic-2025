@@ -639,16 +639,16 @@ const VideoPlayer = ({
         togglePlayPause();
         break;
       case 'ArrowLeft':
-        skip(-10);
+        skip(-2);
         break;
       case 'ArrowRight':
-        skip(10);
+        skip(2);
         break;
       case 'j':
-        skip(-10);
+        skip(-2);
         break;
       case 'l':
-        skip(10);
+        skip(2);
         break;
       case 'f':
         toggleFullscreen();
