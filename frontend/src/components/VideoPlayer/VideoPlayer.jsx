@@ -41,6 +41,7 @@ const VideoPlayer = ({
   const hlsRef = useRef(null);
   const progressRef = useRef(null);
   const galleryRef = useRef(null);
+  const containerRef = useRef(null); // Ref for the main container to handle focus
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -460,6 +461,18 @@ const VideoPlayer = ({
     }
   }, [isOpen]);
 
+  // Auto-focus VideoPlayer when it opens to enable keyboard shortcuts
+  useEffect(() => {
+    if (isOpen && containerRef.current) {
+      // Small delay to ensure the component is fully rendered
+      const timeoutId = setTimeout(() => {
+        containerRef.current.focus();
+      }, 100);
+      
+      return () => clearTimeout(timeoutId);
+    }
+  }, [isOpen]);
+
   // Video event handlers
   const handleVideoTimeUpdate = () => {
     if (videoRef.current) {
@@ -639,7 +652,10 @@ const VideoPlayer = ({
       return;
     }
     
-    e.preventDefault();
+    // Don't prevent default for tab key to allow normal navigation
+    if (e.key !== 'Tab') {
+      e.preventDefault();
+    }
     
     switch (e.key) {
       case ' ':
@@ -692,10 +708,19 @@ const VideoPlayer = ({
 
   const handleVideoClick = () => {
     togglePlayPause();
+    // Ensure focus is on the container for keyboard shortcuts
+    if (containerRef.current) {
+      containerRef.current.focus();
+    }
   };
 
   const handleMouseMove = () => {
     setShowControls(true);
+    
+    // Ensure focus when user interacts with the player
+    if (containerRef.current && document.activeElement !== containerRef.current) {
+      containerRef.current.focus();
+    }
     
     // Auto-hide cursor in fullscreen mode
     if (isFullscreen) {
@@ -952,6 +977,7 @@ const VideoPlayer = ({
       onKeyDown={handleKeyDown}
       tabIndex={0}
       onMouseMove={handleMouseMove}
+      ref={containerRef}
     >        <div className={`video-player-container ${isFullscreen ? 'video-fullscreen' : ''} ${cursorHidden ? 'cursor-hidden' : ''}`}>
           <button className="video-player__close" onClick={onClose}>
             ×
