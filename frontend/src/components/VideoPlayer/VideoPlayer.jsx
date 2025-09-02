@@ -41,6 +41,7 @@ const VideoPlayer = ({
   const hlsRef = useRef(null);
   const progressRef = useRef(null);
   const galleryRef = useRef(null);
+  const containerRef = useRef(null); // Ref for the main container to handle focus
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -71,6 +72,8 @@ const VideoPlayer = ({
   const imageUpdateTimeoutRef = useRef(null);
   const seekTimeoutRef = useRef(null);
   const loadingTimeoutRef = useRef(null);
+  const cursorTimeoutRef = useRef(null);
+  const [cursorHidden, setCursorHidden] = useState(false);
 
   // Generate video URL from frame URL - only HLS
   const generateVideoUrl = (frameUrl, videoName) => {
@@ -433,6 +436,8 @@ const VideoPlayer = ({
       setVideoError(null);
       setIsVideoAccessible(true);
       setIsUserSeeking(false);
+      setIsFullscreen(false); // Reset fullscreen state
+      setCursorHidden(false);
       
       // Clean up HLS
       if (hlsRef.current) {
@@ -449,6 +454,22 @@ const VideoPlayer = ({
         clearTimeout(loadingTimeoutRef.current);
         loadingTimeoutRef.current = null;
       }
+      if (cursorTimeoutRef.current) {
+        clearTimeout(cursorTimeoutRef.current);
+        cursorTimeoutRef.current = null;
+      }
+    }
+  }, [isOpen]);
+
+  // Auto-focus VideoPlayer when it opens to enable keyboard shortcuts
+  useEffect(() => {
+    if (isOpen && containerRef.current) {
+      // Small delay to ensure the component is fully rendered
+      const timeoutId = setTimeout(() => {
+        containerRef.current.focus();
+      }, 100);
+      
+      return () => clearTimeout(timeoutId);
     }
   }, [isOpen]);
 
@@ -631,7 +652,10 @@ const VideoPlayer = ({
       return;
     }
     
-    e.preventDefault();
+    // Don't prevent default for tab key to allow normal navigation
+    if (e.key !== 'Tab') {
+      e.preventDefault();
+    }
     
     switch (e.key) {
       case ' ':
@@ -639,22 +663,28 @@ const VideoPlayer = ({
         togglePlayPause();
         break;
       case 'ArrowLeft':
-        skip(-10);
+        skip(-2);
         break;
       case 'ArrowRight':
-        skip(10);
+        skip(2);
         break;
       case 'j':
-        skip(-10);
+        skip(-2);
         break;
       case 'l':
-        skip(10);
+        skip(2);
         break;
       case 'f':
         toggleFullscreen();
         break;
       case 'Escape':
-        onClose();
+        if (isFullscreen) {
+          // Exit video fullscreen if in fullscreen mode
+          setIsFullscreen(false);
+        } else {
+          // Close video player if not in fullscreen
+          onClose();
+        }
         break;
       default:
         break;
@@ -662,7 +692,7 @@ const VideoPlayer = ({
   };
 
   const toggleFullscreen = () => {
-    // This would require additional fullscreen API implementation
+    // Simply toggle the fullscreen state for video overlay
     setIsFullscreen(!isFullscreen);
   };
 
@@ -678,10 +708,36 @@ const VideoPlayer = ({
 
   const handleVideoClick = () => {
     togglePlayPause();
+    // Ensure focus is on the container for keyboard shortcuts
+    if (containerRef.current) {
+      containerRef.current.focus();
+    }
   };
 
   const handleMouseMove = () => {
     setShowControls(true);
+    
+    // Ensure focus when user interacts with the player
+    if (containerRef.current && document.activeElement !== containerRef.current) {
+      containerRef.current.focus();
+    }
+    
+    // Auto-hide cursor in fullscreen mode
+    if (isFullscreen) {
+      setCursorHidden(false);
+      
+      // Clear existing timeout
+      if (cursorTimeoutRef.current) {
+        clearTimeout(cursorTimeoutRef.current);
+      }
+      
+      // Set new timeout to hide cursor after 3 seconds of inactivity
+      cursorTimeoutRef.current = setTimeout(() => {
+        if (isFullscreen && isPlaying) {
+          setCursorHidden(true);
+        }
+      }, 3000);
+    }
   };
 
   const handleFrameClick = (frame) => {
@@ -777,6 +833,9 @@ const VideoPlayer = ({
       }
       if (imageUpdateTimeoutRef.current) {
         clearTimeout(imageUpdateTimeoutRef.current);
+      }
+      if (cursorTimeoutRef.current) {
+        clearTimeout(cursorTimeoutRef.current);
       }
     };
   }, []);
@@ -918,16 +977,16 @@ const VideoPlayer = ({
       onKeyDown={handleKeyDown}
       tabIndex={0}
       onMouseMove={handleMouseMove}
-    >
-      <div className="video-player-container">
-        <button className="video-player__close" onClick={onClose}>
-          ×
-        </button>
-        
-        <div className="video-player__layout">
-          {/* Left side - Video Player */}
-          <div className="video-player__video-section">
-            <div className="video-player__wrapper">
+      ref={containerRef}
+    >        <div className={`video-player-container ${isFullscreen ? 'video-fullscreen' : ''} ${cursorHidden ? 'cursor-hidden' : ''}`}>
+          <button className="video-player__close" onClick={onClose}>
+            ×
+          </button>
+          
+          <div className="video-player__layout">
+            {/* Left side - Video Player */}
+            <div className="video-player__video-section">
+              <div className={`video-player__wrapper ${cursorHidden ? 'cursor-hidden' : ''}`}>
               {isLoading && (
                 <div className="video-player__loading">
                   <div className="video-player__spinner"></div>
@@ -1080,11 +1139,19 @@ const VideoPlayer = ({
                     <button 
                       className="video-player__control-btn"
                       onClick={toggleFullscreen}
-                      title="Fullscreen"
+                      title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}
                     >
-                      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-                        <path d="M1.5 1a.5.5 0 0 0-.5.5v4a.5.5 0 0 1-1 0v-4A1.5 1.5 0 0 1 1.5 0h4a.5.5 0 0 1 0 1h-4zM10 .5a.5.5 0 0 1 .5-.5h4A1.5 1.5 0 0 1 16 1.5v4a.5.5 0 0 1-1 0v-4a.5.5 0 0 0-.5-.5h-4a.5.5 0 0 1-.5-.5zM.5 10a.5.5 0 0 1 .5.5v4a.5.5 0 0 0 .5.5h4a.5.5 0 0 1 0 1h-4A1.5 1.5 0 0 1 0 14.5v-4a.5.5 0 0 1 .5-.5zm15 0a.5.5 0 0 1 .5.5v4a1.5 1.5 0 0 1-1.5 1.5h-4a.5.5 0 0 1 0-1h4a.5.5 0 0 0 .5-.5v-4a.5.5 0 0 1 .5-.5z"/>
-                      </svg>
+                      {isFullscreen ? (
+                        // Exit fullscreen icon
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                          <path d="M5.5 0a.5.5 0 0 1 .5.5v4A1.5 1.5 0 0 1 4.5 6h-4a.5.5 0 0 1 0-1h4a.5.5 0 0 0 .5-.5v-4a.5.5 0 0 1 .5-.5zm5 0a.5.5 0 0 1 .5.5v4a.5.5 0 0 0 .5.5h4a.5.5 0 0 1 0 1h-4A1.5 1.5 0 0 1 10 4.5v-4a.5.5 0 0 1 .5-.5zM0 10.5a.5.5 0 0 1 .5-.5h4A1.5 1.5 0 0 1 6 11.5v4a.5.5 0 0 1-1 0v-4a.5.5 0 0 0-.5-.5h-4a.5.5 0 0 1-.5-.5zm10 1a1.5 1.5 0 0 1 1.5-1.5h4a.5.5 0 0 1 0 1h-4a.5.5 0 0 0-.5.5v4a.5.5 0 0 1-1 0v-4z"/>
+                        </svg>
+                      ) : (
+                        // Enter fullscreen icon
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                          <path d="M1.5 1a.5.5 0 0 0-.5.5v4a.5.5 0 0 1-1 0v-4A1.5 1.5 0 0 1 1.5 0h4a.5.5 0 0 1 0 1h-4zM10 .5a.5.5 0 0 1 .5-.5h4A1.5 1.5 0 0 1 16 1.5v4a.5.5 0 0 1-1 0v-4a.5.5 0 0 0-.5-.5h-4a.5.5 0 0 1-.5-.5zM.5 10a.5.5 0 0 1 .5.5v4a.5.5 0 0 0 .5.5h4a.5.5 0 0 1 0 1h-4A1.5 1.5 0 0 1 0 14.5v-4a.5.5 0 0 1 .5-.5zm15 0a.5.5 0 0 1 .5.5v4a1.5 1.5 0 0 1-1.5 1.5h-4a.5.5 0 0 1 0-1h4a.5.5 0 0 0 .5-.5v-4a.5.5 0 0 1 .5-.5z"/>
+                        </svg>
+                      )}
                     </button>
                   </div>
                 </div>

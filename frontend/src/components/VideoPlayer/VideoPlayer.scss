@@ -29,6 +29,81 @@
   display: flex;
   flex-direction: column;
   align-items: center;
+
+  // Video fullscreen mode (overlay, not document fullscreen)
+  &.video-fullscreen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    max-width: none;
+    max-height: none;
+    background: #000;
+    z-index: 10000;
+
+    .video-player__layout {
+      width: 100%;
+      height: 100vh;
+      border-radius: 0;
+      
+      // Hide gallery and team answer section in fullscreen
+      .video-player__gallery-section,
+      .video-player__team-answer-section {
+        display: none;
+      }
+      
+      // Make video section take full space
+      .video-player__video-section {
+        flex: 1;
+        width: 100%;
+        height: 100%;
+      }
+    }
+
+    .video-player__close {
+      top: 20px;
+      right: 20px;
+      z-index: 10002;
+    }
+
+    .video-player__wrapper {
+      cursor: none; // Hide cursor in fullscreen
+      transition: cursor 0.3s ease;
+
+      &:hover {
+        cursor: auto; // Show cursor on hover
+      }
+
+      // Show cursor when controls are visible
+      &.show-cursor {
+        cursor: auto;
+      }
+    }
+
+    .video-player__controls {
+      // Ensure controls are more visible in fullscreen
+      background: linear-gradient(transparent, rgba(0, 0, 0, 0.8));
+      
+      &.visible {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      &:not(.visible) {
+        opacity: 0;
+        transform: translateY(20px);
+        transition: all 0.3s ease;
+      }
+    }
+
+    // Auto-hide cursor in fullscreen when inactive
+    &.cursor-hidden {
+      .video-player__wrapper {
+        cursor: none !important;
+      }
+    }
+  }
 }
 
 .video-player__close {
@@ -151,7 +226,7 @@
     ul {
       margin: 8px 0;
       padding-left: 20px;
-      
+
       li {
         margin-bottom: 4px;
         line-height: 1.3;
@@ -179,7 +254,7 @@
   border-radius: 4px;
   font-size: 0.85rem;
   z-index: 10;
-  
+
   p {
     margin: 0;
     font-weight: 500;
@@ -196,8 +271,12 @@
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
 }
 
 // Team Answer section in VideoPlayer
@@ -206,7 +285,7 @@
     width: 200px;
     border-left: 1px solid #e9ecef;
     height: 100%;
-    
+
     // Override any conflicting styles for VideoPlayer context
     .team-answer__content {
       height: 100%;
@@ -308,8 +387,9 @@
   justify-content: center;
   width: 32px;
   height: 32px;
-  
-  img, svg {
+
+  img,
+  svg {
     width: 14px;
     height: 14px;
     filter: brightness(0) invert(1);
@@ -318,8 +398,9 @@
   &--play {
     width: 36px;
     height: 36px;
-    
-    img, svg {
+
+    img,
+    svg {
       width: 16px;
       height: 16px;
     }
@@ -327,8 +408,9 @@
 
   &:hover:not(:disabled) {
     transform: scale(1.1);
-    
-    img, svg {
+
+    img,
+    svg {
       filter: brightness(0) invert(1) drop-shadow(0 0 4px rgba(255, 255, 255, 0.5));
     }
   }
@@ -524,7 +606,7 @@
   padding: 1rem;
   border-bottom: 1px solid #e9ecef;
   background: #f8f9fa;
-  
+
   h3 {
     margin: 0 0 0.25rem 0;
     font-size: 1.1rem;
@@ -547,21 +629,21 @@
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 0.5rem;
   align-content: start;
-  
+
   // Custom scrollbar
   &::-webkit-scrollbar {
     width: 8px;
   }
-  
+
   &::-webkit-scrollbar-track {
     background: #f1f1f1;
     border-radius: 4px;
   }
-  
+
   &::-webkit-scrollbar-thumb {
     background: #c1c1c1;
     border-radius: 4px;
-    
+
     &:hover {
       background: #a8a8a8;
     }
@@ -575,32 +657,32 @@
     border: 2px solid transparent;
     border-radius: 4px;
     overflow: hidden;
-    
+
     &:hover {
       transform: translateY(-2px);
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
       border-color: #0066cc;
     }
-    
+
     // Center frame gets orange border
     &.center {
       border-color: #ff8800;
       box-shadow: 0 0 6px rgba(255, 136, 0, 0.4);
     }
-    
+
     // Current frame gets red border
     &.current {
       border-color: #ff4444;
       box-shadow: 0 0 8px rgba(255, 68, 68, 0.5);
     }
-    
+
     // Current frame takes priority over center frame
     &.current.center {
       border-color: #ff4444;
       box-shadow: 0 0 8px rgba(255, 68, 68, 0.5);
     }
   }
-  
+
   .frame-item__thumbnail img {
     // height: 80px;
     object-fit: cover;
@@ -615,7 +697,7 @@
   padding: 2rem;
   text-align: center;
   color: #6c757d;
-  
+
   p {
     margin: 0;
     font-style: italic;
@@ -627,11 +709,11 @@
   .video-player-container {
     width: 95vw;
   }
-  
+
   .video-player__layout {
     height: 75vh;
   }
-  
+
   .video-player__gallery-section {
     min-width: 280px;
     max-width: none;
@@ -642,27 +724,27 @@
   .video-player-container {
     width: 98vw;
   }
-  
+
   .video-player__layout {
     flex-direction: column;
     height: 85vh;
   }
-  
+
   .video-player__video-section {
     flex: 2;
   }
-  
+
   .video-player__gallery-section {
     min-width: auto;
     max-width: none;
     min-height: 200px;
   }
-  
+
   .video-player__gallery {
     grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
     gap: 0.375rem;
     padding: 0.375rem;
-    
+
     .video-player__gallery-item .frame-item__thumbnail img {
       height: 60px;
     }
@@ -694,17 +776,19 @@
   .video-player__control-btn {
     width: 28px;
     height: 28px;
-    
-    img, svg {
+
+    img,
+    svg {
       width: 12px;
       height: 12px;
     }
-    
+
     &--play {
       width: 32px;
       height: 32px;
-      
-      img, svg {
+
+      img,
+      svg {
         width: 14px;
         height: 14px;
       }
@@ -720,7 +804,7 @@
   .video-player-container {
     width: 100vw;
   }
-  
+
   .video-player__layout {
     height: 90vh;
     border-radius: 0;
@@ -728,7 +812,7 @@
 
   .video-player__gallery {
     grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
-    
+
     .video-player__gallery-item .frame-item__thumbnail img {
       height: 50px;
     }
