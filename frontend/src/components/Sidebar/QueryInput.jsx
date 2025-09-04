@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useCallback } from 'react';
 import { translatorService } from '../../services/TranslatorService';
 import { useToast } from '../Toast/ToastProvider';
+import { useSpeech } from '../../contexts/SpeechContext';
 import './QueryInput.scss';
 
 const QueryInput = ({
@@ -18,6 +19,20 @@ const QueryInput = ({
 }) => {
   const toast = useToast();
   const fileInputRef = useRef(null);
+  
+  // Speech-to-text functionality using SpeechContext
+  const {
+    isRecording: isVoiceRecording,
+    isInitializing: isVoiceInitializing,
+    wsConnected,
+    connectionStatus,
+    finalTranscript,
+    interimTranscript,
+    getCombinedTranscript,
+    startRecording: startVoiceRecording,
+    stopRecording: stopVoiceRecording,
+    clearTranscripts
+  } = useSpeech();
   // Helper function to safely get string values, avoiding null/undefined display
   const getSafeValue = (value) => {
     if (value === null || value === undefined || value === 'null' || value === 'undefined') {
@@ -191,6 +206,67 @@ const QueryInput = ({
       // Start recording
       setIsRecording(true);
       // Here you would implement actual recording start logic
+    }
+  };
+
+  // Auto-update text field with voice transcript in real-time
+  useEffect(() => {
+    if (isVoiceRecording) {
+      const currentTranscript = getCombinedTranscript();
+      if (currentTranscript) {
+        // During recording, only show the current transcript (no base text concatenation)
+        updateCurrentLocalQuery({ 
+          text: currentTranscript.trim()
+        });
+      }
+    }
+  }, [finalTranscript, interimTranscript, isVoiceRecording, getCombinedTranscript]);
+
+  // Handle final transcript when recording completes
+  useEffect(() => {
+    if (!isVoiceRecording && finalTranscript) {
+      // When recording stops and we have a final transcript, replace entire text
+      updateCurrentLocalQuery({ 
+        text: finalTranscript.trim(),
+        baseText: undefined // Clear base text tracking
+      });
+    }
+  }, [isVoiceRecording, finalTranscript]);
+
+  // Voice recording functionality (new voice feature)
+  const handleVoiceRecording = async () => {
+    if (isVoiceRecording) {
+      try {
+        stopVoiceRecording();
+        
+        console.log('🎤 Voice recording completed');
+        toast.success('Voice recording completed', 2000);
+        
+      } catch (error) {
+        console.error('Error stopping voice recording:', error);
+        toast.error('Failed to stop voice recording');
+      }
+    } else {
+      try {
+        if (!wsConnected) {
+          toast.error('Speech service not connected. Please wait...');
+          return;
+        }
+        
+        // Clear the input field when starting new recording
+        updateCurrentLocalQuery({ 
+          text: '',
+          baseText: undefined 
+        });
+        
+        clearTranscripts(); // Clear previous transcripts
+        await startVoiceRecording();
+        toast.success('Voice recording started. Speak now...', 2000);
+        
+      } catch (error) {
+        console.error('Error starting voice recording:', error);
+        toast.error('Failed to start voice recording');
+      }
     }
   };
 
@@ -437,14 +513,26 @@ const QueryInput = ({
           onBlur={handleInputBlur}
         />
         <div className="sidebar__input-actions">
+          {/* Voice recording button using mic button style */}
           <button
-            onClick={handleMicrophoneClick}
-            className={`sidebar__mic-btn ${isRecording ? 'recording' : ''}`}
-            title={isRecording ? "Stop recording" : "Start recording"}
+            onClick={handleVoiceRecording}
+            disabled={isVoiceInitializing || !wsConnected}
+            className={`sidebar__mic-btn ${isVoiceRecording ? 'recording' : ''} ${!wsConnected ? 'disconnected' : ''}`}
+            title={
+              !wsConnected ? 'Speech service disconnected' :
+              isVoiceInitializing ? 'Initializing...' :
+              isVoiceRecording ? 'Stop voice recording' : 'Start voice recording'
+            }
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 1c-1.66 0-3 1.34-3 3v8c0 1.66 1.34 3 3 3s3-1.34 3-3V4c0-1.66-1.34-3-3-3zm5.91 9.38c0 3.45-2.79 6.26-6.26 6.26S5.39 13.83 5.39 10.38H3.61c0 4.7 3.41 8.6 7.87 9.48v2.05c0 .55.45 1 1s1-.45 1-1v-2.05c4.46-.88 7.87-4.78 7.87-9.48h-1.78z"/>
-            </svg>
+            {isVoiceInitializing ? (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="sidebar__voice-loading">
+                <path d="M12,4a8,8 0 0,1 7.89,6.7 1.53,1.53 0 0,0 1.49,1.3h0a1.5,1.5 0 0,0 1.48-1.75 11,11 0 0,0 -21.72,0A1.5,1.5 0 0,0 2.62,12h0a1.53,1.53 0 0,0 1.49-1.3A8,8 0 0,1 12,4Z"/>
+              </svg>
+            ) : (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 1c-1.66 0-3 1.34-3 3v8c0 1.66 1.34 3 3 3s3-1.34 3-3V4c0-1.66-1.34-3-3-3zm5.91 9.38c0 3.45-2.79 6.26-6.26 6.26S5.39 13.83 5.39 10.38H3.61c0 4.7 3.41 8.6 7.87 9.48v2.05c0 .55.45 1 1s1-.45 1-1v-2.05c4.46-.88 7.87-4.78 7.87-9.48h-1.78z"/>
+              </svg>
+            )}
           </button>
 
           <button 
@@ -461,6 +549,12 @@ const QueryInput = ({
           </button>
         </div>
       </div>
+
+      {!wsConnected && (
+        <div className="sidebar__voice-warning">
+          <span>⚠️ Speech service disconnected</span>
+        </div>
+      )}
     </div>
   );
 };

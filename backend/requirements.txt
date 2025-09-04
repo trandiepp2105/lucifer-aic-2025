@@ -13,3 +13,7 @@ uvicorn==0.32.1
 psutil==6.0.0  # For detailed CPU monitoring and optimization
 tqdm
 requests
+channels==4.0.0
+channels-redis==4.1.0
+websockets==12.0
+google-cloud-speech==2.21.0
