@@ -60,7 +60,7 @@ export const SpeechProvider = ({ children }) => {
             if (result.is_final) {
               setFinalTranscript(prev => prev + result.transcript + ' ');
               setInterimTranscript('');
-              setCurrentTranscript(prev => prev + result.transcript + ' ');
+              // Don't accumulate in currentTranscript - it will be calculated by getCombinedTranscript
             } else {
               setInterimTranscript(result.transcript);
             }
@@ -131,7 +131,8 @@ export const SpeechProvider = ({ children }) => {
 
       audioResourcesRef.current = audioResources;
       setIsRecording(true);
-      setCurrentTranscript(''); // Reset transcript for new recording
+      // Reset all transcripts for new recording session
+      setCurrentTranscript('');
       setFinalTranscript('');
       setInterimTranscript('');
       
