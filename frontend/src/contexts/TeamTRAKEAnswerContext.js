@@ -32,7 +32,6 @@ export const TeamTRAKEAnswerProvider = ({ children }) => {
 
   // Fetch TRAKE answers
   const fetchAllTRAKEAnswers = useCallback(async () => {
-    console.log('🎯 Context fetchAllTRAKEAnswers called - fetching all TRAKE answers');
     
     if (queryMode !== 'tra') {
       console.log('❌ Not in tra mode, skipping fetch');
@@ -41,13 +40,10 @@ export const TeamTRAKEAnswerProvider = ({ children }) => {
     
     try {
       setIsLoadingTRAKEAnswers(true);
-      console.log('📡 Making API call to fetch all TRAKE answers...');
       const response = await TeamTRAKEAnswerService.getTRAKEAnswers();
-      console.log('📡 All TRAKE answers response:', response);
       
       if (response && response.data) {
         setAllTRAKEAnswers(response.data || []);
-        console.log('✅ All TRAKE answers set:', response.data.length, 'groups');
       } else {
         console.error('Failed to fetch TRAKE answers:', response);
         toast.error('Failed to load TRAKE answers');
@@ -68,17 +64,14 @@ export const TeamTRAKEAnswerProvider = ({ children }) => {
 
   // Load TRAKE answers when queryMode changes
   useEffect(() => {
-    console.log('🔄 useEffect triggered: queryMode =', queryMode);
     
     if (queryMode === 'tra') {
-      console.log('🔄 Fetching all TRAKE answers');
       // Force clear old data first
       setAllTRAKEAnswers([]);
       // Then fetch new data
       fetchAllTRAKEAnswers();
     } else {
       // Clear TRAKE answers when not in 'tra' mode
-      console.log('🧹 Clearing TRAKE answers - not in tra mode');
       setAllTRAKEAnswers([]);
     }
   }, [queryMode, fetchAllTRAKEAnswers]);
@@ -90,7 +83,6 @@ export const TeamTRAKEAnswerProvider = ({ children }) => {
 
   // Initialize SSE permanently (don't depend on queryMode)
   useEffect(() => {
-    console.log('🚀 Starting TRAKE SSE permanently for mode detection');
     
     // Initialize SSE connection immediately
     const initializeSSE = () => {
@@ -103,7 +95,6 @@ export const TeamTRAKEAnswerProvider = ({ children }) => {
 
         // Create new EventSource connection
         const sseUrl = `${apiConfig.baseURL}/team-trake-answers/sse/`;
-        console.log('🔗 Initializing TRAKE SSE connection to:', sseUrl);
         
         const eventSource = new EventSource(sseUrl);
         eventSourceRef.current = eventSource;
@@ -112,7 +103,6 @@ export const TeamTRAKEAnswerProvider = ({ children }) => {
         eventSource.onmessage = (event) => {
           try {
             const data = JSON.parse(event.data);
-            console.log('📡 TRAKE SSE message received:', data);
 
             switch (data.type) {
               case 'connected':
@@ -128,7 +118,6 @@ export const TeamTRAKEAnswerProvider = ({ children }) => {
               case 'group_update': // Add support for backend event type
                 // Simply refresh all TRAKE answers when any changes happen
                 if (queryMode === 'tra') {
-                  console.log(`📡 SSE ${data.type} event - refreshing all TRAKE answers`, data);
                   fetchAllTRAKEAnswers();
                   
                   // Show appropriate toast message
@@ -175,13 +164,11 @@ export const TeamTRAKEAnswerProvider = ({ children }) => {
 
         // Handle connection open
         eventSource.onopen = (event) => {
-          console.log('✅ TRAKE SSE connection opened');
           setSseConnected(true);
         };
 
         // Handle connection errors
         eventSource.onerror = (event) => {
-          console.error('❌ TRAKE SSE connection error:', event);
           setSseConnected(false);
           
           if (eventSource.readyState === EventSource.CLOSED) {
@@ -201,7 +188,6 @@ export const TeamTRAKEAnswerProvider = ({ children }) => {
     // Cleanup only on unmount
     return () => {
       if (eventSourceRef.current) {
-        console.log('🔌 Closing TRAKE SSE connection on unmount');
         eventSourceRef.current.close();
         eventSourceRef.current = null;
         setSseConnected(false);
@@ -212,7 +198,6 @@ export const TeamTRAKEAnswerProvider = ({ children }) => {
   // Manual refresh function that can be called from components
   const manualRefreshTRAKEAnswers = useCallback(() => {
     if (queryMode === 'tra') {
-      console.log('🔄 Manual refresh all TRAKE answers');
       setAllTRAKEAnswers([]); // Clear first
       fetchAllTRAKEAnswers();
     }
@@ -227,9 +212,7 @@ export const TeamTRAKEAnswerProvider = ({ children }) => {
 
     try {
       setIsLoadingTRAKEAnswers(true);
-      console.log('🗑️ Deleting all TRAKE answers for queryIndex:', queryIndex);
       const response = await TeamTRAKEAnswerService.deleteAllTRAKEAnswers(queryIndex);
-      console.log('🗑️ Delete response:', response);
       
       if (response && response.success) {
         // Refresh all data to update the UI
@@ -256,8 +239,7 @@ export const TeamTRAKEAnswerProvider = ({ children }) => {
       return [];
     }
     
-    console.log('🔍 Filtering TRAKE answers for queryIndex:', queryIndex);
-    console.log('🔍 All TRAKE answers:', allTRAKEAnswers);
+
     
     // Find the query data that matches current queryIndex
     const currentQueryData = allTRAKEAnswers.find(queryData => 
@@ -265,11 +247,9 @@ export const TeamTRAKEAnswerProvider = ({ children }) => {
     );
     
     if (!currentQueryData || !currentQueryData.data || !Array.isArray(currentQueryData.data)) {
-      console.log('🔍 No data found for queryIndex:', queryIndex);
       return [];
     }
     
-    console.log('🔍 Found data for queryIndex:', queryIndex, currentQueryData.data);
     return currentQueryData.data;
   }, [allTRAKEAnswers, queryIndex]);
 

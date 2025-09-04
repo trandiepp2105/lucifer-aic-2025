@@ -227,7 +227,6 @@ const TeamAnswer = ({
 
   // Initialize TRAKE SSE connection
   const initializeTRAKESSE = () => {
-    console.log('🔗 Initializing TRAKE SSE connection...');
     try {
       // Close existing connection if any
       if (trakeEventSourceRef.current) {
@@ -237,7 +236,6 @@ const TeamAnswer = ({
 
       // Create new EventSource connection for TRAKE
       const sseUrl = `${apiConfig.baseURL}/team-trake-answers/sse/`;
-      console.log('🔗 TRAKE SSE URL:', sseUrl);
       
       const eventSource = new EventSource(sseUrl);
       trakeEventSourceRef.current = eventSource;
@@ -305,11 +303,9 @@ const TeamAnswer = ({
 
       // Handle connection open
       eventSource.onopen = (event) => {
-        console.log('🟢 TRAKE SSE connection opened');
         setTRAKEsseConnected(true);
         // Fetch initial TRAKE data when connection is established
         if (onRefresh) {
-          console.log('📡 Fetching initial TRAKE data');
           // Call onRefresh with no parameters - the context will handle fetching all data
           onRefresh();
         }
@@ -317,7 +313,6 @@ const TeamAnswer = ({
 
       // Handle connection errors
       eventSource.onerror = (event) => {
-        console.log('🔴 TRAKE SSE connection error:', event);
         setTRAKEsseConnected(false);
         
         if (eventSource.readyState === EventSource.CLOSED) {
@@ -333,7 +328,6 @@ const TeamAnswer = ({
 
   // Close TRAKE SSE connection
   const closeTRAKESSE = () => {
-    console.log('🔴 Closing TRAKE SSE connection...');
     if (trakeEventSourceRef.current) {
       trakeEventSourceRef.current.close();
       trakeEventSourceRef.current = null;
@@ -649,10 +643,8 @@ const TeamAnswer = ({
   // Initialize TRAKE SSE connection based on queryMode
   useEffect(() => {
     if (queryMode === 'tra') {
-      console.log('🔗 Initializing TRAKE SSE connection for queryMode:', queryMode);
       initializeTRAKESSE();
     } else {
-      console.log('🔗 Closing TRAKE SSE connection for queryMode:', queryMode);
       closeTRAKESSE();
     }
 

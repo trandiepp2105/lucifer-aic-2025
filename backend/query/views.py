@@ -185,6 +185,11 @@ class QueryListCreateAPIView(APIView):
             # Thêm ocr nếu có và không rỗng
             if query_data.get('ocr') and query_data['ocr'].strip() and query_data['ocr'].lower() != 'null':
                 query_item['ocr'] = query_data['ocr']
+
+            # thêm speech nếu có và không rỗng
+            if query_data.get('speech') and query_data['speech'].strip() and query_data['speech'].lower() != 'null':
+                query_item['speech'] = query_data['speech']
+                
             # Xử lý image nếu có
             if query_data.get('image'):
                 # Luôn chuẩn hóa path ảnh
