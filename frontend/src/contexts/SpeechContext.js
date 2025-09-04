@@ -30,7 +30,6 @@ export const SpeechProvider = ({ children }) => {
    */
   const initializeWebSocket = useCallback(async () => {
     if (ws && ws.readyState === WebSocket.OPEN) {
-      console.log('🎤 WebSocket already connected');
       return ws;
     }
 
@@ -45,16 +44,13 @@ export const SpeechProvider = ({ children }) => {
 
       setWsInfo(infoResponse.data);
       const websocketUrl = infoResponse.data.websocket_url;
-      console.log(`🎤 WebSocket URL: ${websocketUrl}`);
       // Create WebSocket connection
       const newWs = speechService.createWebSocketConnection(websocketUrl, {
         onOpen: () => {
-          console.log('🎤 Speech WebSocket opened');
           setWsConnected(true);
           setConnectionStatus('connected');
         },
         onMessage: (result) => {
-          console.log('🎤 Speech result:', result);
           
           if (result.transcript) {
             if (result.is_final) {
@@ -67,7 +63,6 @@ export const SpeechProvider = ({ children }) => {
           }
         },
         onClose: (event) => {
-          console.log('🎤 Speech WebSocket closed:', event.code, event.reason);
           setWsConnected(false);
           setConnectionStatus('disconnected');
           setWs(null);
@@ -93,7 +88,6 @@ export const SpeechProvider = ({ children }) => {
    */
   const startRecording = useCallback(async () => {
     if (isRecording) {
-      console.log('🎤 Already recording');
       return;
     }
 
@@ -136,7 +130,6 @@ export const SpeechProvider = ({ children }) => {
       setFinalTranscript('');
       setInterimTranscript('');
       
-      console.log('🎤 Voice recording started');
       
     } catch (error) {
       console.error('Error starting recording:', error);
@@ -152,7 +145,6 @@ export const SpeechProvider = ({ children }) => {
    */
   const stopRecording = useCallback(() => {
     if (!isRecording) {
-      console.log('🎤 Not currently recording');
       return;
     }
 
@@ -171,7 +163,6 @@ export const SpeechProvider = ({ children }) => {
       setIsRecording(false);
       volumeLevel.current = 0;
       
-      console.log('🎤 Voice recording stopped');
       
     } catch (error) {
       console.error('Error stopping recording:', error);
@@ -253,7 +244,6 @@ export const SpeechProvider = ({ children }) => {
       // Only auto-reconnect if we were previously connected
       if (ws === null) {
         reconnectTimer = setTimeout(() => {
-          console.log('🎤 Attempting to reconnect WebSocket...');
           initializeWebSocket().catch(error => {
             console.error('Auto-reconnect failed:', error);
           });

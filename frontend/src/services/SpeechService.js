@@ -41,7 +41,6 @@ class SpeechService {
       const ws = new WebSocket(websocketUrl);
 
       ws.onopen = () => {
-        console.log('🎤 Speech WebSocket connected');
         if (callbacks.onOpen) {
           callbacks.onOpen();
         }
@@ -50,7 +49,6 @@ class SpeechService {
       ws.onmessage = (event) => {
         try {
           const result = JSON.parse(event.data);
-          console.log('🎤 Speech result received:', result);
           
           if (callbacks.onMessage) {
             callbacks.onMessage(result);
@@ -64,7 +62,6 @@ class SpeechService {
       };
 
       ws.onclose = (event) => {
-        console.log('🎤 Speech WebSocket disconnected', event.code, event.reason);
         if (callbacks.onClose) {
           callbacks.onClose(event);
         }
@@ -91,7 +88,6 @@ class SpeechService {
     if (ws && ws.readyState === WebSocket.OPEN) {
       const command = { command: "start_recognition" };
       ws.send(JSON.stringify(command));
-      console.log('🎤 Started speech recognition');
     } else {
       throw new Error('WebSocket is not connected');
     }
@@ -104,7 +100,6 @@ class SpeechService {
     if (ws && ws.readyState === WebSocket.OPEN) {
       const command = { command: "stop_recognition" };
       ws.send(JSON.stringify(command));
-      console.log('🎤 Stopped speech recognition');
     } else {
       console.warn('WebSocket is not connected - cannot stop recognition');
     }
@@ -156,15 +151,7 @@ class SpeechService {
     } = options;
 
     try {
-      // Debug browser compatibility
-      console.log('🔍 Browser compatibility check:');
-      console.log('navigator:', !!navigator);
-      console.log('navigator.mediaDevices:', !!navigator.mediaDevices);
-      console.log('navigator.mediaDevices.getUserMedia:', !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia));
-      console.log('User Agent:', navigator.userAgent);
-      console.log('Location protocol:', location.protocol);
-      console.log('Location hostname:', location.hostname);
-      console.log('isSecureContext:', window.isSecureContext);
+
 
       // Check browser compatibility for getUserMedia
       if (!navigator) {
@@ -173,7 +160,6 @@ class SpeechService {
 
       // Polyfill for mediaDevices if not available
       if (!navigator.mediaDevices) {
-        console.log('🔧 MediaDevices not available, trying polyfill...');
         
         // Check for legacy getUserMedia
         const legacyGetUserMedia = navigator.getUserMedia || 
@@ -182,7 +168,6 @@ class SpeechService {
                                   navigator.msGetUserMedia;
         
         if (legacyGetUserMedia) {
-          console.log('📱 Found legacy getUserMedia, creating polyfill');
           
           // Create polyfill for mediaDevices
           navigator.mediaDevices = {};
@@ -211,7 +196,6 @@ class SpeechService {
         throw new Error('Microphone access requires HTTPS or localhost. Please use a secure connection.');
       }
 
-      console.log('✅ Browser compatibility checks passed');
 
       // Request microphone access
       const stream = await navigator.mediaDevices.getUserMedia({ 

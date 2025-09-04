@@ -34,7 +34,6 @@ export const TeamTRAKEAnswerProvider = ({ children }) => {
   const fetchAllTRAKEAnswers = useCallback(async () => {
     
     if (queryMode !== 'tra') {
-      console.log('❌ Not in tra mode, skipping fetch');
       return;
     }
     
@@ -139,8 +138,6 @@ export const TeamTRAKEAnswerProvider = ({ children }) => {
                       toast.info(`TRAKE group updated (${data.updated_count || 'items'} moved to group ${data.new_group || 'unknown'})`, 1000);
                       break;
                   }
-                } else {
-                  console.log(`📡 SSE ${data.type} event ignored - not in tra mode`);
                 }
                 break;
 
@@ -154,7 +151,6 @@ export const TeamTRAKEAnswerProvider = ({ children }) => {
                 break;
 
               default:
-                console.log('Unknown TRAKE SSE message type:', data.type);
                 break;
             }
           } catch (error) {
@@ -206,7 +202,6 @@ export const TeamTRAKEAnswerProvider = ({ children }) => {
   // Function to delete all TRAKE answers for current query
   const deleteAllTRAKEAnswers = useCallback(async () => {
     if (queryMode !== 'tra' || queryIndex === null || queryIndex === undefined) {
-      console.log('❌ Cannot delete TRAKE answers - not in tra mode or no queryIndex');
       return;
     }
 

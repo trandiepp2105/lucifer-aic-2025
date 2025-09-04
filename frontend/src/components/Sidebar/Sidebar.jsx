@@ -115,7 +115,6 @@ const Sidebar = ({
           ...updates,
           updated_at: new Date().toISOString()
         };
-        console.log("Updated existing query at stage", stage, "with:", updatedQueries[currentStageIndex]);
         return updatedQueries;
       } else {
         // Create new query for current stage
@@ -199,8 +198,8 @@ const Sidebar = ({
   // Check if query has content to allow operations
   const queryHasContent = useCallback((query) => {
     return (query.text && query.text.trim()) || 
-           (query.ocr && query.ocr.trim()) || 
-           query.image;
+           (query.ocr && query.ocr.trim()) || (query.speech && query.speech.trim()) ||
+           (query.image);
   }, []);
 
   // Sync localQueries to backend
@@ -255,14 +254,12 @@ const Sidebar = ({
           file: q.imageFile
         }));
 
-
       const response = await QueryService.batchUpdateQueries(session, queriesToSync, imageFiles);
       
       if (response.success) {
         // No need for separate image uploads anymore - they're handled in batch request
         // Reload all queries from server to get fresh data
         await loadQueries(session);
-        toast.success('Queries synced successfully', 2000);
       } else {
         console.error('Sync failed:', response.error);
         toast.error(response.error || 'Failed to sync queries', 4000);
@@ -464,19 +461,6 @@ const Sidebar = ({
       return;
     }
 
-    // DEBUG: Log current query state
-    console.log('🔍 handleSendMessage - currentQuery:', {
-      stage: currentQuery.stage,
-      hasText: !!hasText,
-      hasOcr: !!hasOcr,
-      hasSpeech: !!hasSpeech,
-      hasImage: !!hasImage,
-      hasImageFile: !!currentQuery.imageFile,
-      imageFileSize: currentQuery.imageFile?.size,
-      hasImageUrl: !!currentQuery.image,
-      imageRemoved: currentQuery.imageRemoved
-    });
-
     // Update current query
     updateCurrentLocalQuery({
       text: hasText || null,
@@ -503,12 +487,11 @@ const Sidebar = ({
       if (messagesEndRef.current) {
         messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
       }
-    }, 100);
+    }, 0);
   };
   const handleSendQueryIfReady = () => {
     // Get the most up-to-date query from localQueries instead of currentLocalQuery
     const currentQuery = localQueries.find(q => q.stage === stage) || currentLocalQuery;
-    console.log("current local query: ", currentQuery)
     if (!currentQuery) return;
     
     const hasText = currentQuery.text?.trim();
@@ -908,7 +891,6 @@ const Sidebar = ({
       
       // Only auto-detect for chat mode (not for team-answer/answer modes)
       if (mode === 'chat') {
-        console.log(`🔄 Auto-detecting mode for query index: ${newQueryIndex}`);
         const detectedMode = await QueryModeUtils.detectQueryMode(newQueryIndex);
         
         if (detectedMode !== 'unknown' && detectedMode !== queryMode) {
@@ -916,12 +898,7 @@ const Sidebar = ({
           setQueryMode(detectedMode);
           const modeName = QueryModeUtils.getModeName(detectedMode);
           toast.success(`Switched to ${modeName} mode for query ${newQueryIndex}`);
-          console.log(`✅ Auto-switched to ${detectedMode} mode for query ${newQueryIndex}`);
-        } else if (detectedMode === 'unknown') {
-          console.log(`ℹ️ No data found for query ${newQueryIndex}, keeping current mode`);
-        } else {
-          console.log(`ℹ️ Query ${newQueryIndex} already in correct mode: ${detectedMode}`);
-        }
+        } 
       }
     } catch (error) {
       console.error('Error in handleQueryIndexChange:', error);

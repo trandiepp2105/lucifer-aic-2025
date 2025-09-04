@@ -32,7 +32,6 @@ export const useFrameActions = (queryMode = 'kis', allTeamAnswers = []) => {
     
     // If queryMode is 'qa', open TeamAnswerModal for QA input
     if (queryMode === 'qa') {
-      console.log('🎤 Opening TeamAnswerModal for QA input:', { frame, allTeamAnswersCount: allTeamAnswers.length });
       setFrameToSubmit(frame);
       setIsTeamAnswerModalOpen(true);
       return;
@@ -77,24 +76,18 @@ export const useFrameActions = (queryMode = 'kis', allTeamAnswers = []) => {
   };
 
   const handleSubmitFrame = (frame) => {
-    console.log('🎯 handleSubmitFrame called with:', { frame, queryMode });
-    
     // Determine submission type based on queryMode
     if (queryMode === 'kis') {
-      console.log('💡 Submitting KIS answer');
       submitKISAnswer(frame);
     } else if (queryMode === 'qa') {
       // For QA, we might need to get QA text from TeamAnswerModal first
       // Or directly prompt for QA text in submission modal
-      console.log('💡 Submitting QA answer');
       submitQAAnswer(frame, ''); // TODO: Get QA text from user input
     } else if (queryMode === 'tra') {
       // This shouldn't happen for single frame, but handle gracefully
-      console.log('💡 Submitting TRA answer as KIS');
       submitKISAnswer(frame);
     } else {
       // Default to KIS
-      console.log('💡 Submitting default KIS answer');
       submitKISAnswer(frame);
     }
   };

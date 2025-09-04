@@ -293,7 +293,6 @@ const TeamAnswer = ({
               break;
 
             default:
-              console.log('Unknown TRAKE SSE message type:', data.type);
               break;
           }
         } catch (error) {

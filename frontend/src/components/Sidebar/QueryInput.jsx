@@ -123,14 +123,14 @@ const QueryInput = ({
         }
       }
 
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        // Use setTimeout to ensure any pending onChange events are processed first
-        setTimeout(() => {
-          onSendMessage();
-        }, 0);
-        return;
-      }
+      // if (e.key === 'Enter' && !e.shiftKey) {
+      //   e.preventDefault();
+      //   // Use setTimeout to ensure any pending onChange events are processed first
+      //   setTimeout(() => {
+      //     onSendMessage();
+      //   }, 0);
+      //   return;
+      // }
     };
 
     document.addEventListener('keydown', handleKeyDown, true);
@@ -169,23 +169,15 @@ const QueryInput = ({
 
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
-    console.log('🔍 handleImageUpload called with file:', file);
     if (file) {
       const reader = new FileReader();
       reader.onload = (e) => {
-        console.log('🔍 Image loaded, updating query with:', {
-          imageSize: file.size,
-          imageType: file.type,
-          imageName: file.name,
-          imageDataUrl: e.target.result?.substring(0, 50) + '...'
-        });
-        console.log('🔍 Before updateCurrentLocalQuery - currentLocalQuery:', currentLocalQuery);
+
         updateCurrentLocalQuery({
           image: e.target.result,
           imageFile: file,
           imageRemoved: false
         });
-        console.log('🔍 After updateCurrentLocalQuery called');
       };
       reader.readAsDataURL(file);
     }
@@ -244,7 +236,6 @@ const QueryInput = ({
       try {
         stopVoiceRecording();
         
-        console.log('🎤 Voice recording completed');
         toast.success('Voice recording completed', 2000);
         
       } catch (error) {
@@ -291,7 +282,6 @@ const QueryInput = ({
         toast.success('Text translated successfully!');
       }
     } catch (error) {
-      console.log('Translation error:', error);
       toast.error('Failed to translate text');
     } finally {
       setIsTranslating(false);
@@ -315,7 +305,6 @@ const QueryInput = ({
         toast.success('Text translated successfully!');
       }
     } catch (error) {
-      console.log('Translation error:', error);
       toast.error('Failed to translate text');
     } finally {
       setIsTranslating(false);

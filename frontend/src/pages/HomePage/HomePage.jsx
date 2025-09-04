@@ -110,7 +110,6 @@ const HomePage = () => {
   const scrollDisplayListFrameToTop = useCallback(() => {
     if (displayListFrameRef.current && displayListFrameRef.current.scrollToTop) {
       displayListFrameRef.current.scrollToTop();
-      console.log('📜 Scrolled DisplayListFrame to top via ref method');
     } else if (displayListFrameRef.current) {
       // Fallback: manual scroll if ref method not available
       const frameContent = displayListFrameRef.current.querySelector('.display-frame__content');
@@ -119,13 +118,11 @@ const HomePage = () => {
           top: 0,
           behavior: 'smooth'
         });
-        console.log('📜 Fallback: Scrolled DisplayListFrame content to top');
       } else {
         displayListFrameRef.current.scrollTo({
           top: 0,
           behavior: 'smooth'
         });
-        console.log('📜 Fallback: Scrolled DisplayListFrame container to top');
       }
     }
   }, []);
@@ -133,7 +130,6 @@ const HomePage = () => {
   // Enhanced function to load queries and scroll to top
   const loadQueriesWithScroll = useCallback(async () => {
     if (loadQueriesRef.current) {
-      console.log('📜 Loading queries with scroll to top...');
       // Execute the original loadQueries function
       await loadQueriesRef.current();
       // After queries are loaded, scroll to top
@@ -412,7 +408,6 @@ const HomePage = () => {
         
         // Only update if different from current mode
         if (detectedMode !== queryMode) {
-          console.log(`Auto-detected queryMode: ${detectedMode} for queryIndex: ${queryIndex}`);
           setQueryMode(detectedMode);
         }
       }
