@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "aic-468010",
+  "private_key_id": "c3b12ec40f9ea1fc37ec19940e9727c4fedcd42b",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQClOHCKnlSgk0Zp\nwtG+cwyu9qt2sI1YvUOw/5B+fB9xKPE0TLpV9s0hAXpkZ/U+mSYN9lswhujlaLM8\nDrIGJI8IzrQG7oMNPoRkFFWfQMSG95MqBwdc4BQWmVG+3VgJNnsRyhR8KXfPjg+2\nXFpL52xnquov0p6GK/iZ6rpWgSINyITT/EqeagReLQf/YHSiVEZsW3eJy3/+dIiM\nlYGIY3qsnG5WL6BgKSzWunCATLk/2/0lSQnh5Kc9/0ILXWNnnWYAfxcYTskl7URr\nTBzIJAE7OsZ6hp5RoV0go0c8uvaUlk2mRCeJt6cBz7WdFz0YEjAD23UgTvnvA63J\n7GxaQHxPAgMBAAECgf9mgh3740BJCxck3JBFxBvvx3DwCET/nxiLOK+YdRUM9doG\nw5QuFxzY3ZHnue2Zvmtd6Puq9V6KTJY9LODx7rzP5MTNiC4ciYKalViKS3pOQveL\nm9DK+ZF9HqMZSJDWe8w1Eqv4XRd42dXlzxGMW967yHnZh1PTlcnTCqTnXDdEqk/B\nKgLq6G477KcLhXpXt97Rcx66Xaq56Cyu5DQAh7QR5eS2yVW6JOC6MfJ1jG9cw18E\nk3c9Lgt2NPLWnpX3w6y/i+YnydpGVf6Tzq/WKDjKENQfk7eBFO+KIyvKY0GJeRsF\nPnxGzYgUKEKpz1vcXxetEbBaOO/u+nbR6qsTY60CgYEA1Cw+RyMQzv3jZlqHzfgi\nukp7kUb5SpH4sE9pS+qzg4jXfeZVTILe1GK86Ux6tysEXdex/54qcxvOxKTuQX9W\ns4nY7ea5j8BY6SXNMvpGKdD5AmSNbYJbaxZCxQkVK7vFsnHB0Cj2zOSgdjfZWwlx\n//HNpA9X8gSqBvEPpCT+dOUCgYEAx1lXxqQKei8YHlXb1m4+GRobGL6uHRlcCcoY\nPuvABTc3KgLFBwQBpcGBaSLnZmwYQNTLLgVwriE/I+AC/6a0VcR2YHlFsrarSwZr\naj5nSJe6dRLm6cL48mHUwKOR1smr1+zCiIDK1O6tOTzVnuTi4dLvaTwWh8xmcS2r\n6ULdbSMCgYEAtEE6T7lsyE5OaWC0S7pp1pb8z/naRQ4ql69/p62oATG60g1jnnL4\n2Lth/1qoTwFO3mMnqCE5sz2Gtu3gNOj4QeP01njUYVpqrvkckhiqj1AonW3L8aN0\nA1CQPVFwGQ2X8fhPTofe1UfPQ2BDWuJ1ZZqKuL0IXGa2BNu8DBoZzDkCgYEAr2zn\n2V4x+iPHTaqwspqA+wYGIlhqUCEo5VR60aQUboKQgN+/EtVrvbnzb9nPWEp3bVXV\nFsKizhljvuY6vU6uE2u34F3X/9TQGE2l6PDRYwhihPQFUGDLQkDlQECw7hq6pmEr\nL4Rm+cqvlVb7hcBWB/PfyvOdwBMXczGFvtegk5ECgYBZpJMG/I37LDxU2+7nEyBK\n4P9PeNm9aDJzbYB0Rrc8lPcL3O38WddGQc0lA57SKt2pnHIl6fNlP/Er6AWBrftL\nju4uNNJEZ1oaSbxrV9dX4m3iu7vy/8+xxkUna48b9El2TnGaDf2fd4rndweW4R9q\nirj2AyIU8bRkgrIuXuHhBw==\n-----END PRIVATE KEY-----\n",
+  "client_email": "lucier-speech-to@aic-468010.iam.gserviceaccount.com",
+  "client_id": "110458551908716598383",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/lucier-speech-to%40aic-468010.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}

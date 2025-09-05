@@ -54,12 +54,14 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'channels',
     'rest_framework',
     'corsheaders',
     'drf_yasg',
     'query',  # Query management app
     'answer',  # Answer management app
     'media',  # Media management app
+    'speech',  # Speech recognition app
     # 'search',  # OCR Search service (no views, just service)
 ]
 
@@ -92,6 +94,24 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'core.wsgi.application'
+
+# ASGI Configuration for WebSocket support
+ASGI_APPLICATION = 'core.asgi.application'
+# Redis Configuration
+REDIS_HOST = os.environ.get('REDIS_HOST', 'localhost')
+REDIS_PORT = os.environ.get('REDIS_PORT', '6379')
+REDIS_PASSWORD = os.environ.get('REDIS_PASSWORD', 'redis_password123')
+REDIS_DB = os.environ.get('REDIS_DB', '0')
+
+# Channel layers configuration (using Redis)
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            "hosts": [f'redis://:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/2'],
+        },
+    },
+}
 
 
 # Database
@@ -153,11 +173,6 @@ STATIC_URL = 'staticfiles/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Redis Configuration
-REDIS_HOST = os.environ.get('REDIS_HOST', 'localhost')
-REDIS_PORT = os.environ.get('REDIS_PORT', '6379')
-REDIS_PASSWORD = os.environ.get('REDIS_PASSWORD', 'redis_password123')
-REDIS_DB = os.environ.get('REDIS_DB', '0')
 
 # Cache Configuration with Redis
 CACHES = {
@@ -192,6 +207,10 @@ def get_cors_allowed_origins():
         "http://127.0.0.1:3001",
         "http://127.0.0.1",
         "http://localhost",
+        # ZeroTier IP
+        "http://10.147.20.158",
+        "http://10.147.20.158:3000",
+        "http://10.147.20.158:3001",
     ]
     origins.extend(default_origins)
     

@@ -103,8 +103,6 @@ const TeamAnswerModal = ({
       if (!modalRef.current.contains(e.target)) return;
       
       if (e.key === 'Enter' && !e.shiftKey) {
-        console.log('🔥 TeamAnswerModal: Intercepting Enter key - BLOCKING all other handlers');
-        
         // IMMEDIATELY stop all propagation to prevent other handlers
         e.preventDefault();
         e.stopPropagation();
@@ -124,13 +122,11 @@ const TeamAnswerModal = ({
       // Use capture phase with highest priority to intercept before other handlers
       // Add listener first so it runs before Sidebar's listener
       document.addEventListener('keydown', handleKeyDown, { capture: true, passive: false });
-      console.log('🟢 TeamAnswerModal: Added Enter key blocker with highest priority');
     }
 
     return () => {
       if (isOpen) {
         document.removeEventListener('keydown', handleKeyDown, { capture: true, passive: false });
-        console.log('🔴 TeamAnswerModal: Removed Enter key blocker');
       }
     };
   }, [isOpen, isSubmitting, qaText, handleSubmit]);

@@ -140,12 +140,10 @@ const DisplayListFrame = forwardRef(({
       : Array.from({ length: availableStages }, (_, i) => i + 1);
     
     if (newStage >= 1 && newStage <= maxStage && validStages.includes(newStage)) {
-      console.log('🎯 Stage change requested:', newStage, 'from current:', currentStage);
       if (onStageChange) {
         onStageChange(newStage);
       }
     } else {
-      console.warn('⚠️ Invalid stage change attempt:', newStage, 'valid stages:', validStages);
     }
   };
 
@@ -167,9 +165,6 @@ const DisplayListFrame = forwardRef(({
 
   // Handle push TRAKE group
   const handlePushTrakeGroup = async () => {
-    console.log('🚀 handlePushTrakeGroup called');
-    console.log('📊 activeGroup:', activeGroup);
-    console.log('📊 tempTrakeItems:', tempTrakeItems);
     
     if (!tempTrakeItems || tempTrakeItems.length === 0) {
       toast.error('No items selected for TRAKE group');
@@ -192,16 +187,9 @@ const DisplayListFrame = forwardRef(({
         ...(activeGroup && { group: activeGroup })
       }));
 
-      console.log('📤 About to submit TRAKE answers:', traKeAnswers);
-      console.log('📤 Each item group value:', traKeAnswers.map(item => ({ frame_index: item.frame_index, group: item.group })));
-
-      console.log('🔥 About to call TeamTRAKEAnswerService.createBulkTRAKEAnswers...');
-      
       // Submit the TRAKE group
       const response = await TeamTRAKEAnswerService.createBulkTRAKEAnswers({ items: traKeAnswers });
-      
-      console.log('🔥 API call completed, response:', response);
-      
+            
       // Clear temp items on success
       clearTempTrakeItems();
       
@@ -456,10 +444,8 @@ const DisplayListFrame = forwardRef(({
           <div className="display-frame__stages">
             {(() => {
               const stages = Array.isArray(availableStages) ? availableStages : Array.from({ length: availableStages }, (_, i) => i + 1);
-              console.log('🎯 Rendering stages - currentStage:', currentStage, 'availableStages:', availableStages, 'stages to render:', stages);
               return stages.map((stage) => {
                 const isActive = currentStage === stage;
-                console.log(`🎯 Stage ${stage} - currentStage: ${currentStage}, isActive: ${isActive}`);
                 return (
                   <button
                     key={stage}

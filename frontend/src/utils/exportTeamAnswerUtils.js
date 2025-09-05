@@ -13,15 +13,11 @@ export class ExportTeamAnswerUtils {
    */
   static async exportAllAnswers(fileNameFormat = "query-p1-{query_index}-{type}") {
     try {
-      console.log('Starting export process...');
-      
       // Fetch both team answers and TRAKE answers in parallel
       const [teamAnswers, trakeData] = await Promise.all([
         this.fetchTeamAnswers(),
         this.fetchTRAKEAnswers()
       ]);
-
-      console.log('Raw fetched data:', { teamAnswers, trakeData });
 
       const files = [];
 

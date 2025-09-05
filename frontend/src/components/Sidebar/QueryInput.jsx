@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useCallback } from 'react';
 import { translatorService } from '../../services/TranslatorService';
 import { useToast } from '../Toast/ToastProvider';
+import { useSpeech } from '../../contexts/SpeechContext';
 import './QueryInput.scss';
 
 const QueryInput = ({
@@ -14,10 +15,23 @@ const QueryInput = ({
   setCurrentInputIndex,
   loading,
   onSendMessage,
-  onKeyPress
 }) => {
   const toast = useToast();
   const fileInputRef = useRef(null);
+  
+  // Speech-to-text functionality using SpeechContext
+  const {
+    isRecording: isVoiceRecording,
+    isInitializing: isVoiceInitializing,
+    wsConnected,
+    connectionStatus,
+    finalTranscript,
+    interimTranscript,
+    getCombinedTranscript,
+    startRecording: startVoiceRecording,
+    stopRecording: stopVoiceRecording,
+    clearTranscripts
+  } = useSpeech();
   // Helper function to safely get string values, avoiding null/undefined display
   const getSafeValue = (value) => {
     if (value === null || value === undefined || value === 'null' || value === 'undefined') {
@@ -28,10 +42,10 @@ const QueryInput = ({
 
   const textareaRef = useRef(null);
   const ocrTextareaRef = useRef(null);
-  // const speechTextareaRef = useRef(null); // Commented out - Speech input disabled for now
+  const speechTextareaRef = useRef(null);
 
-  // Input refs for navigation - Speech temporarily removed
-  const inputRefs = [ocrTextareaRef, textareaRef]; // [ocrTextareaRef, speechTextareaRef, textareaRef];
+  // Input refs for navigation - Speech restored
+  const inputRefs = [ocrTextareaRef, speechTextareaRef, textareaRef];
 
   // Auto-resize textarea
   const adjustTextareaHeight = useCallback(() => {
@@ -65,14 +79,14 @@ const QueryInput = ({
     }
   };
 
-  // Auto-resize Speech textarea - COMMENTED OUT (Speech input disabled)
-  // const adjustSpeechTextareaHeight = () => {
-  //   const textarea = speechTextareaRef.current;
-  //   if (textarea) {
-  //     textarea.style.height = 'auto';
-  //     textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
-  //   }
-  // };
+  // Auto-resize Speech textarea
+  const adjustSpeechTextareaHeight = () => {
+    const textarea = speechTextareaRef.current;
+    if (textarea) {
+      textarea.style.height = 'auto';
+      textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
+    }
+  };
 
   useEffect(() => {
     adjustTextareaHeight();
@@ -82,16 +96,15 @@ const QueryInput = ({
     adjustOcrTextareaHeight();
   }, [currentLocalQuery?.ocr]);
 
-  // Speech auto-resize effect - COMMENTED OUT (Speech input disabled)
-  // useEffect(() => {
-  //   adjustSpeechTextareaHeight();
-  // }, [currentLocalQuery?.speech]);
+  useEffect(() => {
+    adjustSpeechTextareaHeight();
+  }, [currentLocalQuery?.speech]);
 
   // Initial resize on mount
   useEffect(() => {
     adjustTextareaHeight();
     adjustOcrTextareaHeight();
-    // adjustSpeechTextareaHeight(); // Commented out - Speech input disabled
+    adjustSpeechTextareaHeight();
   }, [adjustTextareaHeight]);
 
   // Keyboard navigation between inputs
@@ -109,6 +122,15 @@ const QueryInput = ({
           navigateInputs('up');
         }
       }
+
+      // if (e.key === 'Enter' && !e.shiftKey) {
+      //   e.preventDefault();
+      //   // Use setTimeout to ensure any pending onChange events are processed first
+      //   setTimeout(() => {
+      //     onSendMessage();
+      //   }, 0);
+      //   return;
+      // }
     };
 
     document.addEventListener('keydown', handleKeyDown, true);
@@ -116,31 +138,29 @@ const QueryInput = ({
     return () => {
       document.removeEventListener('keydown', handleKeyDown, true);
     };
-  }, [currentInputIndex]);
+  }, [currentInputIndex, onSendMessage]); // Add onSendMessage as dependency
 
   // Navigation function for input fields
   const navigateInputs = (direction) => {
     let nextIndex;
     
-    if (direction === 'down') {
-      if (currentInputIndex === -1) {
-        // No focus -> go to top (OCR)
-        nextIndex = 0;
-      } else {
-        // Move down cyclically: OCR(0) -> Text(1) -> OCR(0) (Speech removed)
-        nextIndex = (currentInputIndex + 1) % inputRefs.length;
-      }
-    } else if (direction === 'up') {
-      if (currentInputIndex === -1) {
-        // No focus -> go to bottom (Text)
-        nextIndex = inputRefs.length - 1; // Text (index 1)
-      } else {
-        // Move up cyclically: Text(1) -> OCR(0) -> Text(1) (Speech removed)
-        nextIndex = currentInputIndex === 0 ? inputRefs.length - 1 : currentInputIndex - 1;
-      }
-    }
-    
-    // Focus on the target input
+      if (direction === 'down') {
+        if (currentInputIndex === -1) {
+          // No focus -> go to top (OCR)
+          nextIndex = 0;
+        } else {
+          // Move down cyclically: OCR(0) -> Speech(1) -> Text(2) -> OCR(0)
+          nextIndex = (currentInputIndex + 1) % inputRefs.length;
+        }
+      } else if (direction === 'up') {
+        if (currentInputIndex === -1) {
+          // No focus -> go to bottom (Text)
+          nextIndex = inputRefs.length - 1; // Text (index 2)
+        } else {
+          // Move up cyclically: Text(2) -> Speech(1) -> OCR(0) -> Text(2)
+          nextIndex = currentInputIndex === 0 ? inputRefs.length - 1 : currentInputIndex - 1;
+        }
+      }    // Focus on the target input
     if (inputRefs[nextIndex] && inputRefs[nextIndex].current) {
       inputRefs[nextIndex].current.focus();
       setCurrentInputIndex(nextIndex);
@@ -149,23 +169,15 @@ const QueryInput = ({
 
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
-    console.log('🔍 handleImageUpload called with file:', file);
     if (file) {
       const reader = new FileReader();
       reader.onload = (e) => {
-        console.log('🔍 Image loaded, updating query with:', {
-          imageSize: file.size,
-          imageType: file.type,
-          imageName: file.name,
-          imageDataUrl: e.target.result?.substring(0, 50) + '...'
-        });
-        console.log('🔍 Before updateCurrentLocalQuery - currentLocalQuery:', currentLocalQuery);
+
         updateCurrentLocalQuery({
           image: e.target.result,
           imageFile: file,
           imageRemoved: false
         });
-        console.log('🔍 After updateCurrentLocalQuery called');
       };
       reader.readAsDataURL(file);
     }
@@ -194,6 +206,66 @@ const QueryInput = ({
     }
   };
 
+  // Auto-update text field with voice transcript in real-time
+  useEffect(() => {
+    if (isVoiceRecording) {
+      const currentTranscript = getCombinedTranscript();
+      if (currentTranscript) {
+        // During recording, update text field instead of speech field
+        updateCurrentLocalQuery({ 
+          text: currentTranscript.trim()
+        });
+      }
+    }
+  }, [finalTranscript, interimTranscript, isVoiceRecording, getCombinedTranscript]);
+
+  // Handle final transcript when recording completes
+  useEffect(() => {
+    if (!isVoiceRecording && finalTranscript) {
+      // When recording stops and we have a final transcript, update text field
+      updateCurrentLocalQuery({ 
+        text: finalTranscript.trim(),
+        baseText: undefined // Clear base text tracking
+      });
+    }
+  }, [isVoiceRecording, finalTranscript]);
+
+  // Voice recording functionality (new voice feature)
+  const handleVoiceRecording = async () => {
+    if (isVoiceRecording) {
+      try {
+        stopVoiceRecording();
+        
+        toast.success('Voice recording completed', 2000);
+        
+      } catch (error) {
+        console.error('Error stopping voice recording:', error);
+        toast.error('Failed to stop voice recording');
+      }
+    } else {
+      try {
+        if (!wsConnected) {
+          toast.error('Speech service not connected. Please wait...');
+          return;
+        }
+        
+        // Clear the text field when starting new recording
+        updateCurrentLocalQuery({ 
+          text: '',
+          baseText: undefined 
+        });
+        
+        clearTranscripts(); // Clear previous transcripts
+        await startVoiceRecording();
+        toast.success('Voice recording started. Speak now...', 2000);
+        
+      } catch (error) {
+        console.error('Error starting voice recording:', error);
+        toast.error('Failed to start voice recording');
+      }
+    }
+  };
+
   const handleTranslateOcr = async () => {
     const ocrValue = getSafeValue(currentLocalQuery?.ocr).trim();
     if (!ocrValue) return;
@@ -210,36 +282,34 @@ const QueryInput = ({
         toast.success('Text translated successfully!');
       }
     } catch (error) {
-      console.log('Translation error:', error);
       toast.error('Failed to translate text');
     } finally {
       setIsTranslating(false);
     }
   };
 
-  // Speech translation function - COMMENTED OUT (Speech input disabled)
-  // const handleTranslateSpeech = async () => {
-  //   const speechValue = getSafeValue(currentLocalQuery?.speech).trim();
-  //   if (!speechValue) return;
-  //   
-  //   setIsTranslating(true);
-  //   try {
-  //     // Detect if text is Vietnamese, then translate to English, otherwise to Vietnamese
-  //     const detectedLang = await translatorService.detectLanguage(speechValue);
-  //     const targetLang = (detectedLang === 'vi') ? 'en' : 'vi';
-  //     
-  //     const translated = await translatorService.translateText(speechValue, targetLang);
-  //     if (translated && translated !== speechValue) {
-  //       updateCurrentLocalQuery({ speech: translated });
-  //       toast.success('Text translated successfully!');
-  //     }
-  //   } catch (error) {
-  //     console.log('Translation error:', error);
-  //     toast.error('Failed to translate text');
-  //   } finally {
-  //     setIsTranslating(false);
-  //   }
-  // };
+  // Speech translation function
+  const handleTranslateSpeech = async () => {
+    const speechValue = getSafeValue(currentLocalQuery?.speech).trim();
+    if (!speechValue) return;
+    
+    setIsTranslating(true);
+    try {
+      // Detect if text is Vietnamese, then translate to English, otherwise to Vietnamese
+      const detectedLang = await translatorService.detectLanguage(speechValue);
+      const targetLang = (detectedLang === 'vi') ? 'en' : 'vi';
+      
+      const translated = await translatorService.translateText(speechValue, targetLang);
+      if (translated && translated !== speechValue) {
+        updateCurrentLocalQuery({ speech: translated });
+        toast.success('Text translated successfully!');
+      }
+    } catch (error) {
+      toast.error('Failed to translate text');
+    } finally {
+      setIsTranslating(false);
+    }
+  };
 
   // Track focus changes to update currentInputIndex
   const handleInputFocus = (index) => {
@@ -366,6 +436,15 @@ const QueryInput = ({
             ref={ocrTextareaRef}
             value={getSafeValue(currentLocalQuery?.ocr)}
             onChange={(e) => updateCurrentLocalQuery({ ocr: e.target.value })}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                // Use setTimeout to ensure onChange is processed first
+                setTimeout(() => {
+                  onSendMessage();
+                }, 0);
+              }
+            }}
             placeholder="OCR text from images..."
             className="sidebar__input-field"
             rows={1}
@@ -385,15 +464,24 @@ const QueryInput = ({
         </div>
       </div>
 
-      {/* Speech Text Input Section - COMMENTED OUT (Speech input disabled for now) */}
-      {/* 
+      {/* Speech Text Input Section */}
       <div className="sidebar__input-section">
-        <label className="sidebar__input-label">Speech:</label>
+        <label className="sidebar__input-label">Subtitle:</label>
         <div className="sidebar__input-container">
           <textarea
+            id="speech-input"
             ref={speechTextareaRef}
             value={getSafeValue(currentLocalQuery?.speech)}
             onChange={(e) => updateCurrentLocalQuery({ speech: e.target.value })}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                // Use setTimeout to ensure onChange is processed first
+                setTimeout(() => {
+                  onSendMessage();
+                }, 0);
+              }
+            }}
             placeholder="Speech to text result..."
             className="sidebar__input-field"
             rows={1}
@@ -412,7 +500,6 @@ const QueryInput = ({
           )}
         </div>
       </div>
-      */}
 
       {/* Main Chat Input - Text input with Send and Mic only */}
       <div className="sidebar__input-container sidebar__main-input-container">
@@ -429,22 +516,40 @@ const QueryInput = ({
             // Also trigger on input event for better responsiveness
             setTimeout(() => adjustTextareaHeight(), 0);
           }}
-          onKeyPress={onKeyPress}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              // Use setTimeout to ensure onChange is processed first
+              setTimeout(() => {
+                onSendMessage();
+              }, 0);
+            }
+          }}
           placeholder="Type your query here..."
           className="sidebar__input-field"
           rows={1}
-          onFocus={() => handleInputFocus(1)} // Updated from index 2 to 1 (Speech removed)
+          onFocus={() => handleInputFocus(2)} // Updated from index 1 to 2 (Speech restored)
           onBlur={handleInputBlur}
         />
         <div className="sidebar__input-actions">
+          {/* Voice recording button using mic button style */}
           <button
-            onClick={handleMicrophoneClick}
-            className={`sidebar__mic-btn ${isRecording ? 'recording' : ''}`}
-            title={isRecording ? "Stop recording" : "Start recording"}
+            onClick={handleVoiceRecording}
+            disabled={isVoiceInitializing || !wsConnected}
+            className={`sidebar__mic-btn ${isVoiceRecording ? 'recording' : ''} ${!wsConnected ? 'disconnected' : ''}`}
+            title={
+              !wsConnected ? 'Speech service disconnected' :
+              isVoiceInitializing ? 'Initializing...' :
+              isVoiceRecording ? 'Stop voice recording' : 'Start voice recording'
+            }
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 1c-1.66 0-3 1.34-3 3v8c0 1.66 1.34 3 3 3s3-1.34 3-3V4c0-1.66-1.34-3-3-3zm5.91 9.38c0 3.45-2.79 6.26-6.26 6.26S5.39 13.83 5.39 10.38H3.61c0 4.7 3.41 8.6 7.87 9.48v2.05c0 .55.45 1 1s1-.45 1-1v-2.05c4.46-.88 7.87-4.78 7.87-9.48h-1.78z"/>
-            </svg>
+            {isVoiceInitializing ? (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="sidebar__voice-loading">
+                <path d="M12,4a8,8 0 0,1 7.89,6.7 1.53,1.53 0 0,0 1.49,1.3h0a1.5,1.5 0 0,0 1.48-1.75 11,11 0 0,0 -21.72,0A1.5,1.5 0 0,0 2.62,12h0a1.53,1.53 0 0,0 1.49-1.3A8,8 0 0,1 12,4Z"/>
+              </svg>
+            ) : (
+              <img src="/assets/mic-solid-svgrepo-com.svg" alt="Microphone" width="16" height="16" />
+            )}
           </button>
 
           <button 
@@ -452,8 +557,8 @@ const QueryInput = ({
             disabled={loading || (
               !getSafeValue(currentLocalQuery?.text).trim() && 
               !currentLocalQuery?.image && 
-              !getSafeValue(currentLocalQuery?.ocr).trim()
-              // !getSafeValue(currentLocalQuery?.speech).trim() // Commented out - Speech disabled
+              !getSafeValue(currentLocalQuery?.ocr).trim() &&
+              !getSafeValue(currentLocalQuery?.speech).trim()
             )}
             className="sidebar__send-btn"
           >
@@ -461,6 +566,12 @@ const QueryInput = ({
           </button>
         </div>
       </div>
+
+      {!wsConnected && (
+        <div className="sidebar__voice-warning">
+          <span>⚠️ Speech service disconnected</span>
+        </div>
+      )}
     </div>
   );
 };

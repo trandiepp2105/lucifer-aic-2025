@@ -12,26 +12,17 @@ export class QueryModeUtils {
    */
   static async detectQueryMode(queryIndex) {
     try {
-      console.log(`🔍 Detecting query mode for query index: ${queryIndex}`);
       
       // Fetch team answers first
-      console.log(`📡 Fetching team answers for query ${queryIndex}`);
       const teamAnswers = await this.fetchTeamAnswersByQuery(queryIndex);
-      console.log(`✅ Team answers fetched: ${teamAnswers.length} items`);
       
       // Fetch TRAKE answers second
-      console.log(`📡 Fetching TRAKE answers for query ${queryIndex}`);
       const trakeAnswers = await this.fetchTRAKEAnswersByQuery(queryIndex);
-      console.log(`✅ TRAKE answers fetched: ${trakeAnswers.length} items`);
 
-      console.log(`📊 Data found:`, { 
-        teamAnswersCount: teamAnswers.length, 
-        trakeAnswersCount: trakeAnswers.length 
-      });
+
 
       // If we have TRAKE answers, it's a TRAKE query
       if (trakeAnswers.length > 0) {
-        console.log(`✅ Query ${queryIndex} detected as TRAKE mode`);
         return 'tra';
       }
 
@@ -39,12 +30,10 @@ export class QueryModeUtils {
       if (teamAnswers.length > 0) {
         const firstItem = teamAnswers[0];
         const type = firstItem.qa ? 'qa' : 'kis';
-        console.log(`✅ Query ${queryIndex} detected as ${type.toUpperCase()} mode`);
         return type;
       }
 
       // No data found
-      console.log(`⚠️ Query ${queryIndex} has no data - unknown mode`);
       return 'unknown';
       
     } catch (error) {
@@ -82,10 +71,8 @@ export class QueryModeUtils {
    * @returns {Promise<Array>} - Array of TRAKE answers (flattened)
    */
   static async fetchTRAKEAnswersByQuery(queryIndex) {
-    console.log(`🚀 fetchTRAKEAnswersByQuery called with queryIndex: ${queryIndex}`);
     try {
       const response = await fetch(`${apiConfig.baseURL}/team-trake-answers/?query_index=${queryIndex}`);
-      console.log('🔍 TRAKE fetch response:', response);
       if (!response.ok) {
         if (response.status === 404) {
           return []; // No data found is okay
@@ -94,7 +81,6 @@ export class QueryModeUtils {
       }
       
       const result = await response.json();
-      console.log(`🔍 TRAKE response for query ${queryIndex}:`, result);
       
       // When query_index is provided, format is: {data: [{group, items}, {group, items}]}
       const allItems = [];
@@ -106,7 +92,6 @@ export class QueryModeUtils {
         });
       }
       
-      console.log(`🔍 Flattened TRAKE items count: ${allItems.length}`);
       return allItems;
     } catch (error) {
       console.error('Error fetching TRAKE answers by query:', error);

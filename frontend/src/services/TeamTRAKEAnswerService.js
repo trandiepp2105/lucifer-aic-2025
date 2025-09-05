@@ -30,8 +30,6 @@ class TeamTRAKEAnswerService {
 
   static async createBulkTRAKEAnswers(data) {
     try {
-      console.log('🔵 createBulkTRAKEAnswers called with data:', data);
-      
       const response = await fetch(`${apiConfig.baseURL}/team-trake-answers/`, {
         method: 'POST',
         headers: {
@@ -40,20 +38,15 @@ class TeamTRAKEAnswerService {
         body: JSON.stringify(data),
       });
 
-      console.log('🔵 Response status:', response.status);
-      console.log('🔵 Response ok:', response.ok);
-
       if (!response.ok) {
         const errorData = await response.json();
-        console.error('🔴 Response error data:', errorData);
         throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
       }
 
       const result = await response.json();
-      console.log('🟢 Response success data:', result);
       return result;
     } catch (error) {
-      console.error('🔴 Error creating bulk TRAKE answers:', error);
+      console.error('Error creating bulk TRAKE answers:', error);
       throw error;
     }
   }
@@ -127,11 +120,9 @@ class TeamTRAKEAnswerService {
       }
       
       const responseData = await getTRAKEResponse.json();
-      console.log('🔍 Fetched all TRAKE answers response:', responseData);
       
       // Extract the data array from the response
       const allTRAKEAnswers = responseData.data || [];
-      console.log('🔍 All TRAKE answers array:', allTRAKEAnswers);
       
       // Find the data for current query index
       const currentQueryData = allTRAKEAnswers.find(queryData => 
@@ -143,31 +134,23 @@ class TeamTRAKEAnswerService {
       }
       
       const traKEAnswers = currentQueryData.data;
-      console.log('🔍 TRAKE answers for queryIndex', queryIndex, ':', traKEAnswers);
       
       // Collect all IDs from all groups
       const allIds = [];
       traKEAnswers.forEach((group, index) => {
-        console.log(`🔍 Group ${index}:`, group);
         if (group.items && Array.isArray(group.items)) {
           group.items.forEach((item, itemIndex) => {
-            console.log(`🔍 Group ${index} Item ${itemIndex}:`, item);
             if (item.id) allIds.push(item.id);
           });
         }
       });
       
-      console.log('🔍 Collected IDs:', allIds);
-      
       if (allIds.length === 0) {
         return { success: true, message: 'No TRAKE answer items to delete' };
       }
       
-      console.log('🗑️ About to delete TRAKE answers with IDs:', allIds);
-      
       // Now delete all by IDs
       const requestBody = { ids: allIds };
-      console.log('🗑️ DELETE request body:', requestBody);
       
       const response = await fetch(`${apiConfig.baseURL}/team-trake-answers/bulk-delete/`, {
         method: 'DELETE',
@@ -176,17 +159,13 @@ class TeamTRAKEAnswerService {
         },
         body: JSON.stringify(requestBody),
       });
-
-      console.log('🗑️ DELETE response status:', response.status);
       
       if (!response.ok) {
         const errorData = await response.json();
-        console.error('🗑️ DELETE error response:', errorData);
         throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
       }
 
       const result = await response.json();
-      console.log('🗑️ DELETE success response:', result);
       return result;
     } catch (error) {
       console.error('Error deleting all TRAKE answers:', error);
@@ -196,49 +175,35 @@ class TeamTRAKEAnswerService {
 
   static async deleteGroupTRAKEAnswers(groupNumber, queryIndex) {
     try {
-      console.log('🗑️ deleteGroupTRAKEAnswers called with:', { groupNumber, queryIndex });
-      
       // First, get all TRAKE answers for this query to find items in the group
-      console.log('🔍 Fetching TRAKE answers to find group items...');
       const getTRAKEResponse = await fetch(`${apiConfig.baseURL}/team-trake-answers/?query_index=${queryIndex}`);
-      
-      console.log('🔍 Fetch response status:', getTRAKEResponse.status);
       
       if (!getTRAKEResponse.ok) {
         throw new Error(`Failed to fetch TRAKE answers: ${getTRAKEResponse.status}`);
       }
       
       const responseData = await getTRAKEResponse.json();
-      console.log('🔍 Fetched TRAKE answers for group delete:', responseData);
       
       // Extract the data array from the response
       const traKEAnswers = responseData.data || [];
-      console.log('🔍 Extracted TRAKE answers array:', traKEAnswers);
       
       if (!Array.isArray(traKEAnswers) || traKEAnswers.length === 0) {
-        console.log('ℹ️ No TRAKE answers found');
         return { success: true, message: 'No TRAKE answers found' };
       }
       
       // Find the specific group and collect its item IDs
       const targetGroup = traKEAnswers.find(group => group.group === groupNumber);
-      console.log('🎯 Target group found:', targetGroup);
       
       if (!targetGroup || !targetGroup.items || targetGroup.items.length === 0) {
-        console.log('ℹ️ Group not found or empty');
         return { success: true, message: `Group ${groupNumber} not found or empty` };
       }
       
       // Collect all IDs from the target group
       const groupIds = targetGroup.items.map(item => item.id).filter(id => id);
-      console.log(`🔍 Collected IDs for group ${groupNumber}:`, groupIds);
       
       if (groupIds.length === 0) {
-        console.log('ℹ️ No items found in group');
         return { success: true, message: `No items found in group ${groupNumber}` };
       }
-      
-      console.log(`🗑️ About to delete group ${groupNumber} with IDs:`, groupIds);
       
       // Use bulk delete to remove all items in the group
       const response = await fetch(`${apiConfig.baseURL}/team-trake-answers/bulk-delete/`, {
@@ -248,21 +213,16 @@ class TeamTRAKEAnswerService {
         },
         body: JSON.stringify({ ids: groupIds }),
       });
-
-      console.log('🗑️ Group DELETE response status:', response.status);
-      console.log('🗑️ Group DELETE response ok:', response.ok);
       
       if (!response.ok) {
         const errorData = await response.json();
-        console.error('🗑️ Group DELETE error response:', errorData);
         throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
       }
 
       const result = await response.json();
-      console.log('🗑️ Group DELETE success response:', result);
       return result;
     } catch (error) {
-      console.error('🔴 Error deleting group TRAKE answers:', error);
+      console.error('Error deleting group TRAKE answers:', error);
       throw error;
     }
   }

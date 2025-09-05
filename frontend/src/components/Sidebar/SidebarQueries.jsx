@@ -45,13 +45,11 @@ const SidebarQueries = ({
   );
 
   const handleDragStart = (event) => {
-    console.log('🔥 Drag started:', event.active.id);
     setActiveId(event.active.id);
   };
 
   const handleDragEnd = (event) => {
     const { active, over } = event;
-    console.log('🔥 Drag ended:', { activeId: active.id, overId: over?.id });
     setActiveId(null);
 
     if (active.id !== over?.id) {
@@ -62,7 +60,6 @@ const SidebarQueries = ({
         (query.id || `stage-${query.stage}`) === over.id
       );
 
-      console.log('🔥 Reordering:', { oldIndex, newIndex });
 
       if (oldIndex !== -1 && newIndex !== -1) {
         const reorderedQueries = arrayMove(filteredQueries, oldIndex, newIndex);

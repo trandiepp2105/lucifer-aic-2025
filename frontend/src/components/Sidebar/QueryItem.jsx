@@ -149,7 +149,8 @@ const QueryItem = ({
           const hasText = hasValidValue(query.text);
           const hasOcr = hasValidValue(query.ocr);
           const hasImage = hasValidValue(query.image);
-          const hasAnyContent = hasText || hasOcr || hasImage;
+          const hasSpeech = hasValidValue(query.speech);
+          const hasAnyContent = hasText || hasOcr || hasImage || hasSpeech;
 
           return (
             <>
@@ -168,13 +169,13 @@ const QueryItem = ({
               )}
               
               {/* Speech field - COMMENTED OUT (Speech input disabled) */}
-              {/* 
+              
               {hasValidValue(query.speech) && (
                 <div className="sidebar__message-field">
                   <strong>Speech:</strong> {query.speech}
                 </div>
               )}
-              */}
+             
               
               {/* Image field */}
               {hasImage && (

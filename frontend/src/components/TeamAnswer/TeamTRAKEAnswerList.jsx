@@ -62,7 +62,6 @@ const SortableGroupItem = ({ group, onDeleteItem, onDeleteGroup, onFrameSelect, 
     event.stopPropagation();
     
     try {
-      console.log('🗑️ Direct delete TRAKE item:', item);
       await TeamTRAKEAnswerService.deleteTRAKEAnswersByIds([item.id]);
       if (onDeleteItem) {
         onDeleteItem(item.id);
@@ -125,7 +124,6 @@ const SortableGroupItem = ({ group, onDeleteItem, onDeleteGroup, onFrameSelect, 
 
   const handleActiveGroupChange = (event) => {
     const isChecked = event.target.checked;
-    console.log('Active group change:', { group: group.group, isChecked, currentActiveGroup: activeGroup });
     if (onSetActiveGroup) {
       onSetActiveGroup(isChecked ? group.group : null);
     }
@@ -142,7 +140,6 @@ const SortableGroupItem = ({ group, onDeleteItem, onDeleteGroup, onFrameSelect, 
       toast.error('No frames to submit in this group');
       return;
     }
-    console.log("opening submission modal for group:", group.group, frameList);
     // Open submission modal instead of calling callback
     openSubmissionModal('trake', frameList);
   };
@@ -293,11 +290,6 @@ const TeamTRAKEAnswerList = ({
     handleSubmissionConfirm
   } = useSubmission();
 
-  // Debug: Log submissionModal state changes
-  React.useEffect(() => {
-    console.log("TeamTRAKEAnswerList - submissionModal state changed:", submissionModal);
-  }, [submissionModal]);
-
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, {
@@ -370,13 +362,10 @@ const TeamTRAKEAnswerList = ({
         }
       });
 
-      console.log('🔄 Group updates to apply:', groupUpdates);
-
       // Apply updates to backend - each will trigger SSE events
       for (const update of groupUpdates) {
         // Update all items in this group to new group number
         const itemIds = update.items.map(item => item.id);
-        console.log(`📡 Updating group ${update.oldGroup} -> ${update.newGroup} for items:`, itemIds);
         await TeamTRAKEAnswerService.updateGroupForItems(itemIds, update.newGroup);
       }
 
@@ -384,7 +373,6 @@ const TeamTRAKEAnswerList = ({
       // If no SSE, fallback to manual refresh after a short delay
       setTimeout(() => {
         if (onRefresh) {
-          console.log('📡 Fallback refresh after group updates');
           onRefresh();
         }
       }, 500);

@@ -103,12 +103,6 @@ const Sidebar = ({
 
   // Update current stage query in localQueries directly
   const updateCurrentLocalQuery = useCallback((updates) => {
-    console.log('🔍 updateCurrentLocalQuery called with updates:', {
-      ...updates,
-      imageFile: updates.imageFile ? `File(${updates.imageFile.size} bytes)` : updates.imageFile,
-      image: updates.image ? (typeof updates.image === 'string' ? `DataURL(${updates.image.substring(0, 50)}...)` : `File(${updates.image.size} bytes)`) : updates.image
-    });
-    
     setLocalQueries(prev => {
       const currentStageIndex = prev.findIndex(q => q.stage === stage);
       
@@ -121,22 +115,12 @@ const Sidebar = ({
           ...updates,
           updated_at: new Date().toISOString()
         };
-        console.log('🔍 Updated existing query at stage', stage, 'with:', {
-          ...updatedQueries[currentStageIndex],
-          imageFile: updatedQueries[currentStageIndex].imageFile ? `File(${updatedQueries[currentStageIndex].imageFile.size} bytes)` : updatedQueries[currentStageIndex].imageFile,
-          image: updatedQueries[currentStageIndex].image ? (typeof updatedQueries[currentStageIndex].image === 'string' ? `DataURL(${updatedQueries[currentStageIndex].image.substring(0, 50)}...)` : `File(${updatedQueries[currentStageIndex].image.size} bytes)`) : updatedQueries[currentStageIndex].image
-        });
         return updatedQueries;
       } else {
         // Create new query for current stage
         const newQuery = createLocalQuery({
           stage: stage,
           ...updates
-        });
-        console.log('🔍 Created new query for stage', stage, 'with:', {
-          ...newQuery,
-          imageFile: newQuery.imageFile ? `File(${newQuery.imageFile.size} bytes)` : newQuery.imageFile,
-          image: newQuery.image ? (typeof newQuery.image === 'string' ? `DataURL(${newQuery.image.substring(0, 50)}...)` : `File(${newQuery.image.size} bytes)`) : newQuery.image
         });
         return [...prev, newQuery];
       }
@@ -149,22 +133,9 @@ const Sidebar = ({
         ...updates,
         updated_at: new Date().toISOString()
       };
-      console.log('🔍 Updated currentLocalQuery:', {
-        ...updated,
-        imageFile: updated.imageFile ? `File(${updated.imageFile.size} bytes)` : updated.imageFile,
-        image: updated.image ? (typeof updated.image === 'string' ? `DataURL(${updated.image.substring(0, 50)}...)` : `File(${updated.image.size} bytes)`) : updated.image
-      });
       return updated;
     });
   }, [stage, createLocalQuery]);
-
-  const updateUrlWithSession = (sessionId) => {
-    updateUrlParams({ 
-      session: sessionId,
-      stage: stage,
-      viewmode: viewMode 
-    });
-  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -227,8 +198,8 @@ const Sidebar = ({
   // Check if query has content to allow operations
   const queryHasContent = useCallback((query) => {
     return (query.text && query.text.trim()) || 
-           (query.ocr && query.ocr.trim()) || 
-           query.image;
+           (query.ocr && query.ocr.trim()) || (query.speech && query.speech.trim()) ||
+           (query.image);
   }, []);
 
   // Sync localQueries to backend
@@ -242,14 +213,6 @@ const Sidebar = ({
       const queriesToSync = localQueries
         .filter(query => query.id || queryHasContent(query))
         .map(query => {
-          console.log('🔍 Processing query for sync:', {
-            stage: query.stage,
-            hasImageFile: !!query.imageFile,
-            imageFileSize: query.imageFile?.size,
-            hasImage: !!query.image,
-            imageRemoved: query.imageRemoved,
-            imageIsUrl: query.image && query.image.startsWith('http')
-          });
           
           const syncQuery = {
             stage: query.stage,
@@ -291,15 +254,12 @@ const Sidebar = ({
           file: q.imageFile
         }));
 
-      console.log('🔍 Sending image files for stages:', imageFiles.map(f => f.stage));
-
       const response = await QueryService.batchUpdateQueries(session, queriesToSync, imageFiles);
       
       if (response.success) {
         // No need for separate image uploads anymore - they're handled in batch request
         // Reload all queries from server to get fresh data
         await loadQueries(session);
-        toast.success('Queries synced successfully', 2000);
       } else {
         console.error('Sync failed:', response.error);
         toast.error(response.error || 'Failed to sync queries', 4000);
@@ -470,6 +430,8 @@ const Sidebar = ({
         updateCurrentLocalQuery({ text: translatedText });
       } else if (activeElement.id === 'ocr-input') {
         updateCurrentLocalQuery({ ocr: translatedText });
+      } else if (activeElement.id === 'speech-input') {
+        updateCurrentLocalQuery({ speech: translatedText });
       }
       
       toast.success(`Translated to ${targetLanguage === 'en' ? 'English' : 'Vietnamese'}`, 2000);
@@ -480,51 +442,32 @@ const Sidebar = ({
     }
   };
 
-  const handleSendQueryIfReady = () => {
-    if (!currentLocalQuery) return;
-    
-    const hasText = currentLocalQuery.text?.trim();
-    const hasOcr = currentLocalQuery.ocr?.trim();
-    const hasImage = currentLocalQuery.image || currentLocalQuery.imageFile;
-    
-    if (!hasText && !hasOcr && !hasImage) return;
-    
-    handleSendMessage();
-  };
+
 
   // Send message function
   const handleSendMessage = async () => {
-    if (!currentLocalQuery) return;
+    // Get the most up-to-date query from localQueries instead of currentLocalQuery
+    const currentQuery = localQueries.find(q => q.stage === stage) || currentLocalQuery;
+    if (!currentQuery) return;
     
-    const hasText = currentLocalQuery.text?.trim();
-    const hasOcr = currentLocalQuery.ocr?.trim();
-    const hasImage = currentLocalQuery.image || currentLocalQuery.imageFile;
-    
-    if (!hasText && !hasOcr && !hasImage) return;
-    
+    const hasText = currentQuery.text?.trim();
+    const hasOcr = currentQuery.ocr?.trim();
+    const hasImage = currentQuery.image || currentQuery.imageFile;
+    const hasSpeech = currentQuery.speech?.trim();
+    if (!hasText && !hasOcr && !hasImage && !hasSpeech) return;
+
     if (!session || sessionLoading) {
       toast.error('No active session. Please wait for session to load.');
       return;
     }
 
-    // DEBUG: Log current query state
-    console.log('🔍 handleSendMessage - currentLocalQuery:', {
-      stage: currentLocalQuery.stage,
-      hasText: !!hasText,
-      hasOcr: !!hasOcr,
-      hasImage: !!hasImage,
-      hasImageFile: !!currentLocalQuery.imageFile,
-      imageFileSize: currentLocalQuery.imageFile?.size,
-      hasImageUrl: !!currentLocalQuery.image,
-      imageRemoved: currentLocalQuery.imageRemoved
-    });
-
     // Update current query
     updateCurrentLocalQuery({
       text: hasText || null,
       ocr: hasOcr || null,
+      speech: hasSpeech || null,
       // Keep the data URL in image field, imageFile is handled separately
-      image: currentLocalQuery.imageRemoved ? null : currentLocalQuery.image,
+      image: currentQuery.imageRemoved ? null : currentQuery.image,
     });
 
     // Create next stage query
@@ -544,9 +487,21 @@ const Sidebar = ({
       if (messagesEndRef.current) {
         messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
       }
-    }, 100);
+    }, 0);
   };
+  const handleSendQueryIfReady = () => {
+    // Get the most up-to-date query from localQueries instead of currentLocalQuery
+    const currentQuery = localQueries.find(q => q.stage === stage) || currentLocalQuery;
+    if (!currentQuery) return;
+    
+    const hasText = currentQuery.text?.trim();
+    const hasOcr = currentQuery.ocr?.trim();
+    const hasImage = currentQuery.image || currentQuery.imageFile;
+    const hasSpeech = currentQuery.speech?.trim();
+    if (!hasText && !hasOcr && !hasImage && !hasSpeech) return;
 
+    handleSendMessage();
+  };
   // Initialize session when component mounts
   useEffect(() => {
     const initializeApp = async () => {
@@ -669,11 +624,7 @@ const Sidebar = ({
         return;
       }
 
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        handleSendQueryIfReady();
-        return;
-      }
+
 
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
         return;
@@ -940,7 +891,6 @@ const Sidebar = ({
       
       // Only auto-detect for chat mode (not for team-answer/answer modes)
       if (mode === 'chat') {
-        console.log(`🔄 Auto-detecting mode for query index: ${newQueryIndex}`);
         const detectedMode = await QueryModeUtils.detectQueryMode(newQueryIndex);
         
         if (detectedMode !== 'unknown' && detectedMode !== queryMode) {
@@ -948,12 +898,7 @@ const Sidebar = ({
           setQueryMode(detectedMode);
           const modeName = QueryModeUtils.getModeName(detectedMode);
           toast.success(`Switched to ${modeName} mode for query ${newQueryIndex}`);
-          console.log(`✅ Auto-switched to ${detectedMode} mode for query ${newQueryIndex}`);
-        } else if (detectedMode === 'unknown') {
-          console.log(`ℹ️ No data found for query ${newQueryIndex}, keeping current mode`);
-        } else {
-          console.log(`ℹ️ Query ${newQueryIndex} already in correct mode: ${detectedMode}`);
-        }
+        } 
       }
     } catch (error) {
       console.error('Error in handleQueryIndexChange:', error);

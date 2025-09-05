@@ -80,7 +80,7 @@
 .sidebar__input-actions {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  // gap: 0.5rem;
   flex-shrink: 0;
   
   .sidebar__main-input-container & {
@@ -259,6 +259,48 @@
     opacity: 0.5;
     cursor: not-allowed;
   }
+  
+  &.disconnected {
+    color: #dc3545;
+    opacity: 0.6;
+    
+    &:hover {
+      background: #f8d7da;
+      color: #dc3545;
+    }
+  }
+}
+
+.sidebar__voice-loading {
+  animation: spin 1s linear infinite;
+}
+
+.sidebar__voice-warning {
+  background: #fff3cd;
+  border: 1px solid #ffeaa7;
+  border-radius: 6px;
+  padding: 0.25rem 0.5rem;
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  color: #856404;
+  text-align: center;
+}
+
+// Animations
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.7;
+    transform: scale(1.1);
+  }
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
 // Drop zone styles
