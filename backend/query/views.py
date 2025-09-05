@@ -186,10 +186,10 @@ class QueryListCreateAPIView(APIView):
             if query_data.get('ocr') and query_data['ocr'].strip() and query_data['ocr'].lower() != 'null':
                 query_item['ocr'] = query_data['ocr']
 
-            # thêm speech nếu có và không rỗng
+            # Thêm subtitle nếu có và không rỗng
             if query_data.get('speech') and query_data['speech'].strip() and query_data['speech'].lower() != 'null':
-                query_item['speech'] = query_data['speech']
-                
+                query_item['subtitle'] = query_data['speech']
+
             # Xử lý image nếu có
             if query_data.get('image'):
                 # Luôn chuẩn hóa path ảnh
@@ -221,7 +221,7 @@ class QueryListCreateAPIView(APIView):
         queries_structure_str = json.dumps(queries_structure)
         
         # Default weights - có thể được override bởi request params
-        default_weights = {'text': 0.4, 'ocr': 0.4, 'image': 0.2}
+        default_weights = {'text': 0.3, 'ocr': 0.3, 'subtitle': 0.3, 'image': 0.2}
         
         # Cho phép client gửi custom weights qua query params
         weights = {}
@@ -229,6 +229,8 @@ class QueryListCreateAPIView(APIView):
             weights['text'] = float(request.query_params.get('text_weight'))
         if request.query_params.get('ocr_weight'):
             weights['ocr'] = float(request.query_params.get('ocr_weight'))
+        if request.query_params.get('subtitle_weight'):
+            weights['subtitle'] = float(request.query_params.get('subtitle_weight'))
         if request.query_params.get('image_weight'):
             weights['image'] = float(request.query_params.get('image_weight'))
         
@@ -238,10 +240,6 @@ class QueryListCreateAPIView(APIView):
                 "model_name": "ViT-H-14-378-quickgelu",
                 "weight": 0.55  
             },
-            # {
-            #     "model_name": "ViT-H-14-quickgelu",   
-            #     "weight": 1
-            # },
             {
                 "model_name": "ViT-gopt-16-SigLIP2-384",
                 "weight": 0.45
