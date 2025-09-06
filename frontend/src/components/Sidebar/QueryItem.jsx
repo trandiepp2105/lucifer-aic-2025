@@ -60,7 +60,7 @@ const QueryItem = ({
 
   // Check if query has content to allow creating new query after it
   const hasContent = () => {
-    return hasValidValue(query.text) || hasValidValue(query.ocr) || hasValidValue(query.image);
+    return hasValidValue(query.text) || hasValidValue(query.ocr) || hasValidValue(query.speech) || hasValidValue(query.image);
   };
 
   // When sending query, ensure only image path is sent
