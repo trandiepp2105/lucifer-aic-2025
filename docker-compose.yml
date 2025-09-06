@@ -137,7 +137,7 @@ services:
       - SECRET_KEY=${SECRET_KEY}
       - DEBUG=${DEBUG}
       - ALLOWED_HOSTS=${ALLOWED_HOSTS}
-      - SERVER_TYPE=django
+      - SERVER_TYPE=uvicorn
       - HOST=${HOST}
     depends_on:
       mysql:
