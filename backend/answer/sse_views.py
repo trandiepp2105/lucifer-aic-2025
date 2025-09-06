@@ -1,9 +1,11 @@
 import json
 import logging
 import time
+import asyncio
 from django.views import View
 from django.http import StreamingHttpResponse
 from django.utils import timezone
+from asgiref.sync import sync_to_async
 from .sse_service import team_answer_sse_service
 
 logger = logging.getLogger(__name__)
@@ -15,7 +17,7 @@ class TeamAnswerSSEView(View):
     Clean implementation using Django View and existing SSE service
     """
     
-    def get(self, request):
+    async def get(self, request):
         """
         Establish SSE connection for real-time team answer updates
         
@@ -47,9 +49,9 @@ class TeamAnswerSSEView(View):
         
         return response
     
-    def _event_stream(self):
+    async def _event_stream(self):
         """
-        Generator function for SSE events
+        Async generator function for SSE events
         Uses existing SSE service for Redis connection and message handling
         
         Yields:
@@ -58,8 +60,9 @@ class TeamAnswerSSEView(View):
         pubsub = None
         
         try:
-            # Check and ensure Redis connection
-            if not team_answer_sse_service.ensure_redis_connection():
+            # Check and ensure Redis connection (make it async)
+            redis_connected = await sync_to_async(team_answer_sse_service.ensure_redis_connection)()
+            if not redis_connected:
                 logger.error("Failed to establish Redis connection for SSE")
                 yield self._format_sse_message({
                     'type': 'error', 
@@ -67,9 +70,9 @@ class TeamAnswerSSEView(View):
                 })
                 return
             
-            # Subscribe to Redis channel
-            pubsub = team_answer_sse_service.redis_client.pubsub()
-            pubsub.subscribe(team_answer_sse_service.CHANNEL_NAME)
+            # Subscribe to Redis channel (make it async)
+            pubsub = await sync_to_async(team_answer_sse_service.redis_client.pubsub)()
+            await sync_to_async(pubsub.subscribe)(team_answer_sse_service.CHANNEL_NAME)
             
             logger.info("Client subscribed to team answers SSE")
             
@@ -83,8 +86,8 @@ class TeamAnswerSSEView(View):
             # Listen for messages with non-blocking approach
             while True:
                 try:
-                    # Get message with timeout to prevent blocking
-                    message = pubsub.get_message(timeout=1.0)
+                    # Get message with timeout to prevent blocking (make it async)
+                    message = await sync_to_async(pubsub.get_message)(timeout=1.0)
                     
                     if message is not None:
                         if message['type'] == 'message':
@@ -101,10 +104,14 @@ class TeamAnswerSSEView(View):
                     else:
                         # No message received, send keep-alive to prevent timeout
                         yield ": keep-alive\n\n"
+                    
+                    # Use async sleep instead of blocking
+                    await asyncio.sleep(0.1)
                         
                 except Exception as e:
                     logger.error(f"Error in SSE message loop: {e}")
                     # Don't break on Redis timeout, continue the loop
+                    await asyncio.sleep(0.5)
                     continue
                     
         except Exception as e:
@@ -117,8 +124,8 @@ class TeamAnswerSSEView(View):
         finally:
             if pubsub:
                 try:
-                    pubsub.unsubscribe(team_answer_sse_service.CHANNEL_NAME)
-                    pubsub.close()
+                    await sync_to_async(pubsub.unsubscribe)(team_answer_sse_service.CHANNEL_NAME)
+                    await sync_to_async(pubsub.close)()
                     logger.info("Client unsubscribed from team answers SSE")
                 except Exception as e:
                     logger.warning(f"Error closing pubsub connection: {e}")

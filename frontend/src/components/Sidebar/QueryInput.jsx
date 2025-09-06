@@ -123,14 +123,14 @@ const QueryInput = ({
         }
       }
 
-      // if (e.key === 'Enter' && !e.shiftKey) {
-      //   e.preventDefault();
-      //   // Use setTimeout to ensure any pending onChange events are processed first
-      //   setTimeout(() => {
-      //     onSendMessage();
-      //   }, 0);
-      //   return;
-      // }
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        // Use setTimeout to ensure any pending onChange events are processed first
+        setTimeout(() => {
+          onSendMessage();
+        }, 0);
+        return;
+      }
     };
 
     document.addEventListener('keydown', handleKeyDown, true);
@@ -436,15 +436,15 @@ const QueryInput = ({
             ref={ocrTextareaRef}
             value={getSafeValue(currentLocalQuery?.ocr)}
             onChange={(e) => updateCurrentLocalQuery({ ocr: e.target.value })}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                // Use setTimeout to ensure onChange is processed first
-                setTimeout(() => {
-                  onSendMessage();
-                }, 0);
-              }
-            }}
+            // onKeyDown={(e) => {
+            //   if (e.key === 'Enter' && !e.shiftKey) {
+            //     e.preventDefault();
+            //     // Use setTimeout to ensure onChange is processed first
+            //     setTimeout(() => {
+            //       onSendMessage();
+            //     }, 0);
+            //   }
+            // }}
             placeholder="OCR text from images..."
             className="sidebar__input-field"
             rows={1}
@@ -473,15 +473,15 @@ const QueryInput = ({
             ref={speechTextareaRef}
             value={getSafeValue(currentLocalQuery?.speech)}
             onChange={(e) => updateCurrentLocalQuery({ speech: e.target.value })}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                // Use setTimeout to ensure onChange is processed first
-                setTimeout(() => {
-                  onSendMessage();
-                }, 0);
-              }
-            }}
+            // onKeyDown={(e) => {
+            //   if (e.key === 'Enter' && !e.shiftKey) {
+            //     e.preventDefault();
+            //     // Use setTimeout to ensure onChange is processed first
+            //     setTimeout(() => {
+            //       onSendMessage();
+            //     }, 0);
+            //   }
+            // }}
             placeholder="Speech to text result..."
             className="sidebar__input-field"
             rows={1}
@@ -516,15 +516,15 @@ const QueryInput = ({
             // Also trigger on input event for better responsiveness
             setTimeout(() => adjustTextareaHeight(), 0);
           }}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              // Use setTimeout to ensure onChange is processed first
-              setTimeout(() => {
-                onSendMessage();
-              }, 0);
-            }
-          }}
+          // onKeyDown={(e) => {
+          //   if (e.key === 'Enter' && !e.shiftKey) {
+          //     e.preventDefault();
+          //     // Use setTimeout to ensure onChange is processed first
+          //     setTimeout(() => {
+          //       onSendMessage();
+          //     }, 0);
+          //   }
+          // }}
           placeholder="Type your query here..."
           className="sidebar__input-field"
           rows={1}
