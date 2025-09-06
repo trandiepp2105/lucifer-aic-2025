@@ -340,15 +340,12 @@ const VideoPlayer = ({
         if (data.fatal) {
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
-              console.log('Fatal network error encountered, try to recover');
               hls.startLoad();
               break;
             case Hls.ErrorTypes.MEDIA_ERROR:
-              console.log('Fatal media error encountered, try to recover');
               hls.recoverMediaError();
               break;
             default:
-              console.log('Fatal error, destroying HLS instance');
               setVideoError('HLS playback error occurred. The video stream may be corrupted or unavailable.');
               setIsLoading(false);
               hls.destroy();
@@ -366,7 +363,6 @@ const VideoPlayer = ({
       video.src = videoSrc;
       
       const handleLoadedMetadata = () => {
-        console.log('Video metadata loaded (Safari native HLS)');
         setIsLoading(false);
         setIsReady(true);
         setDuration(video.duration);

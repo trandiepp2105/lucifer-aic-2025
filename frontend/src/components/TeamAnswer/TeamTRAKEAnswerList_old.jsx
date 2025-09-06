@@ -353,21 +353,17 @@ const TeamTRAKEAnswerList = ({
 
   // Initialize SSE connection when component mounts and when queryIndex changes
   useEffect(() => {
-    console.log('🎯 TeamTRAKEAnswerList useEffect:', { isVisible, queryIndex, onRefresh });
     
     if (isVisible && queryIndex) {
-      console.log('🔗 Initializing TRAKE SSE connection...');
       initializeSSE();
       
       // Also fetch initial data
       if (onRefresh) {
-        console.log('📡 Fetching initial TRAKE data...');
         onRefresh();
       }
     }
 
     return () => {
-      console.log('🔌 Closing TRAKE SSE connection...');
       closeSSE();
     };
   }, [isVisible, queryIndex]);
@@ -394,7 +390,6 @@ const TeamTRAKEAnswerList = ({
         <button
           className="team-trake-answer-list__refresh"
           onClick={() => {
-            console.log('🔄 Manual refresh clicked');
             if (onRefresh) {
               onRefresh();
             }

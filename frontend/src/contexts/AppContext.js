@@ -17,7 +17,7 @@ const getInitialStateFromURL = () => {
     section: 'chat',      // 'chat' hoặc 'history'
     k: 50,                // top k results (1-200)
     searchUrl: '',        // search server endpoint
-    csvFormat: 'query-p1-{query_index}-{type}', // CSV filename format
+    csvFormat: 'query-p2-{query_index}-{type}', // CSV filename format
     tempTrakeItems: [],   // temporary TRAKE items for collection before submission
   };
 
