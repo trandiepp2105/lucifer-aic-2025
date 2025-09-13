@@ -17,7 +17,7 @@ const getInitialStateFromURL = () => {
     section: 'chat',      // 'chat' hoặc 'history'
     k: 50,                // top k results (1-200)
     searchUrl: '',        // search server endpoint
-    csvFormat: 'query-p2-{query_index}-{type}', // CSV filename format
+    csvFormat: 'query-p3-{query_index}-{type}', // CSV filename format
     tempTrakeItems: [],   // temporary TRAKE items for collection before submission
   };
 
@@ -72,7 +72,7 @@ const getInitialStateFromURL = () => {
   const kParam = urlParams.get('k');
   if (kParam) {
     const k = parseInt(kParam, 10);
-    if (k >= 1 && k <= 200) {
+    if (k >= 1 && k <= 1000) {
       urlState.k = k;
     }
   }

@@ -268,13 +268,13 @@ const ActivityBar = ({ onSectionChange, activeSection, onRoundChange, onQueryMod
                     type="range"
                     className="activity-bar__top-k-slider"
                     min="1"
-                    max="200"
+                    max="1000"
                     value={currentK}
                     onChange={(e) => handleKChange(parseInt(e.target.value, 10))}
                   />
                   <div className="activity-bar__top-k-range">
                     <span>1</span>
-                    <span>200</span>
+                    <span>1000</span>
                   </div>
                 </div>
               </div>
