@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Answer, TeamAnswer, TeamTRAKEAnswer
+from .models import Answer, TeamAnswer, TeamTRAKEAnswer, DresSession
 
 @admin.register(Answer)
 class AnswerAdmin(admin.ModelAdmin):
@@ -84,3 +84,28 @@ class TeamTRAKEAnswerAdmin(admin.ModelAdmin):
     def get_queryset(self, request):
         """Optimize queryset for admin list view"""
         return super().get_queryset(request).select_related()
+
+
+@admin.register(DresSession)
+class DresSessionAdmin(admin.ModelAdmin):
+    list_display = ('id', 'username', 'role', 'session_id_short', 'evaluation_id', 'created_at')
+    list_filter = ('role', 'created_at')
+    search_fields = ('username', 'session_id', 'evaluation_id')
+    ordering = ('-created_at',)
+    readonly_fields = ('id', 'created_at')
+    
+    fieldsets = (
+        ('Session Information', {
+            'fields': ('username', 'role', 'session_id', 'evaluation_id')
+        }),
+        ('Metadata', {
+            'fields': ('id', 'created_at'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def session_id_short(self, obj):
+        """Display shortened session ID for better readability"""
+        return f"{obj.session_id[:12]}..." if len(obj.session_id) > 12 else obj.session_id
+    session_id_short.short_description = 'Session ID'
+    session_id_short.admin_order_field = 'session_id'

@@ -4,6 +4,8 @@ from rest_framework import status
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 import sys
@@ -35,6 +37,7 @@ from .serializers import (
     QueryUpdateSerializer, QuerySessionSerializer
 )
 
+@method_decorator(csrf_exempt, name='dispatch')
 class QueryListCreateAPIView(APIView):
     def _normalize_image_path(self, image_value):
         """

@@ -6,48 +6,55 @@ from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 import logging
 import random
+import requests
+import os
+from .models import DresSession
 
 logger = logging.getLogger(__name__)
 
 
 class SubmitKISAnswerView(APIView):
     """
-    API endpoint for submitting KIS answers
+    API endpoint for submitting KIS answers to DRES server
     """
     parser_classes = [JSONParser]
 
     @swagger_auto_schema(
-        operation_summary="Submit KIS answer",
-        operation_description="Submit a single frame item as KIS answer",
+        operation_summary="Submit KIS answer to DRES",
+        operation_description="Submit a single frame item as KIS answer with temporal segment to DRES server",
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
-            required=['video_name', 'frame_index'],
+            required=['video_name', 'frame_index', 'fps'],
             properties={
                 'video_name': openapi.Schema(type=openapi.TYPE_STRING, description="Name of the video"),
                 'frame_index': openapi.Schema(type=openapi.TYPE_INTEGER, description="Frame index in the video"),
+                'fps': openapi.Schema(type=openapi.TYPE_NUMBER, description="Frames per second of the video"),
             }
         ),
         responses={
             200: openapi.Response(
-                description="KIS answer submitted successfully",
+                description="KIS answer submitted successfully to DRES",
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'status': openapi.Schema(type=openapi.TYPE_STRING, description="correct or incorrect"),
+                        'status': openapi.Schema(type=openapi.TYPE_STRING, description="DRES verdict status"),
                         'message': openapi.Schema(type=openapi.TYPE_STRING),
                     }
                 )
             ),
             400: openapi.Response(description="Invalid data"),
+            401: openapi.Response(description="No DRES session found"),
+            502: openapi.Response(description="DRES server error"),
         }
     )
     def post(self, request):
-        """Submit KIS answer"""
+        """Submit KIS answer to DRES server"""
         try:
             video_name = request.data.get('video_name')
             frame_index = request.data.get('frame_index')
+            fps = request.data.get('fps')
 
-            # Validate required fields only
+            # Validate required fields
             if not video_name:
                 return Response({
                     'status': 'error',
@@ -60,65 +67,145 @@ class SubmitKISAnswerView(APIView):
                     'message': 'frame_index is required'
                 }, status=status.HTTP_400_BAD_REQUEST)
 
-            logger.info(f"Submitting KIS answer - Video: {video_name}, Frame: {frame_index}")
+            if not fps:
+                return Response({
+                    'status': 'error',
+                    'message': 'fps is required'
+                }, status=status.HTTP_400_BAD_REQUEST)
 
-            # Mock evaluation logic - randomly return correct/incorrect
-            is_correct = random.choice([True, False])
-            submission_status = "correct" if is_correct else "incorrect"
-            
-            return Response({
-                'status': submission_status,
-                'message': f'KIS answer {submission_status}'
-            }, status=status.HTTP_200_OK)
+            # Get latest DRES session
+            try:
+                dres_session = DresSession.objects.order_by('-created_at').first()
+                if not dres_session:
+                    return Response({
+                        'status': 'error',
+                        'message': 'No DRES session found. Please login to DRES first.'
+                    }, status=status.HTTP_401_UNAUTHORIZED)
+
+                if not dres_session.evaluation_id:
+                    return Response({
+                        'status': 'error',
+                        'message': 'No evaluation ID configured. Please set evaluation ID first.'
+                    }, status=status.HTTP_401_UNAUTHORIZED)
+
+            except Exception as e:
+                logger.error(f"Error retrieving DRES session: {e}")
+                return Response({
+                    'status': 'error',
+                    'message': 'Error retrieving DRES session'
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+            # Calculate time from frame_index and fps (in milliseconds)
+            time_in_seconds = frame_index / fps
+            time_in_milliseconds = int(time_in_seconds * 1000)
+
+            # Build DRES payload for KIS (temporal segment)
+            dres_payload = {
+                "answerSets": [
+                    {
+                        "answers": [
+                            {
+                                "mediaItemName": video_name,
+                                "start": time_in_milliseconds,
+                                "end": time_in_milliseconds
+                            }
+                        ]
+                    }
+                ]
+            }
+
+            logger.info(f"Submitting KIS answer to DRES - Video: {video_name}, Frame: {frame_index}, Time: {time_in_milliseconds}ms")
+
+            # Get DRES submit endpoint from environment
+            dres_submit_base_url = os.getenv('DRES_SUBMIT_ENDPOINT', "http://127.0.0.1:8080/api/v2/submit")
+            dres_submit_url = f"{dres_submit_base_url}/{dres_session.evaluation_id}"
+
+            # Submit to DRES server
+            try:
+                response = requests.post(
+                    dres_submit_url,
+                    json=dres_payload,
+                    params={'session': dres_session.session_id},
+                    headers={'Content-Type': 'application/json'},
+                    timeout=30
+                )
+
+                if response.status_code in [200, 202]:
+                    response_data = response.json()
+                    # Forward DRES response directly to client with DRES status code
+                    return Response(response_data, status=response.status_code)
+                else:
+                    logger.error(f"DRES submission failed: {response.status_code} - {response.text}")
+                    return Response({
+                        'status': 'error',
+                        'message': f'DRES server error: {response.text}'
+                    }, status=status.HTTP_502_BAD_GATEWAY)
+
+            except requests.exceptions.ConnectionError:
+                logger.error("Failed to connect to DRES server")
+                return Response({
+                    'status': 'error',
+                    'message': 'Unable to connect to DRES server'
+                }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+            except requests.exceptions.Timeout:
+                logger.error("DRES server request timed out")
+                return Response({
+                    'status': 'error',
+                    'message': 'DRES server request timed out'
+                }, status=status.HTTP_504_GATEWAY_TIMEOUT)
 
         except Exception as error:
             logger.error(f"Error submitting KIS answer: {error}")
             return Response({
-                'message': f'Error submitting KIS answer: {str(error)}',
-                'data': None
+                'status': 'error',
+                'message': f'Error submitting KIS answer: {str(error)}'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class SubmitQAAnswerView(APIView):
     """
-    API endpoint for submitting QA answers
+    API endpoint for submitting QA answers to DRES server
     """
     parser_classes = [JSONParser]
 
     @swagger_auto_schema(
-        operation_summary="Submit QA answer",
-        operation_description="Submit a single frame item with QA text as QA answer",
+        operation_summary="Submit QA answer to DRES",
+        operation_description="Submit a single frame item with QA text as QA answer to DRES server",
         request_body=openapi.Schema(
             type=openapi.TYPE_OBJECT,
-            required=['video_name', 'frame_index', 'qa'],
+            required=['video_name', 'frame_index', 'qa', 'fps'],
             properties={
                 'video_name': openapi.Schema(type=openapi.TYPE_STRING, description="Name of the video"),
                 'frame_index': openapi.Schema(type=openapi.TYPE_INTEGER, description="Frame index in the video"),
                 'qa': openapi.Schema(type=openapi.TYPE_STRING, description="Question and answer text"),
+                'fps': openapi.Schema(type=openapi.TYPE_NUMBER, description="Frames per second of the video"),
             }
         ),
         responses={
             200: openapi.Response(
-                description="QA answer submitted successfully",
+                description="QA answer submitted successfully to DRES",
                 schema=openapi.Schema(
                     type=openapi.TYPE_OBJECT,
                     properties={
-                        'status': openapi.Schema(type=openapi.TYPE_STRING, description="correct or incorrect"),
+                        'status': openapi.Schema(type=openapi.TYPE_STRING, description="DRES verdict status"),
                         'message': openapi.Schema(type=openapi.TYPE_STRING),
                     }
                 )
             ),
             400: openapi.Response(description="Invalid data"),
+            401: openapi.Response(description="No DRES session found"),
+            502: openapi.Response(description="DRES server error"),
         }
     )
     def post(self, request):
-        """Submit QA answer"""
+        """Submit QA answer to DRES server"""
         try:
             video_name = request.data.get('video_name')
             frame_index = request.data.get('frame_index')
             qa = request.data.get('qa')
+            fps = request.data.get('fps')
 
-            # Validate required fields only
+            # Validate required fields
             if not video_name:
                 return Response({
                     'status': 'error',
@@ -137,16 +224,91 @@ class SubmitQAAnswerView(APIView):
                     'message': 'qa is required'
                 }, status=status.HTTP_400_BAD_REQUEST)
 
-            logger.info(f"Submitting QA answer - Video: {video_name}, Frame: {frame_index}, QA: {qa[:50]}...")
+            if not fps:
+                return Response({
+                    'status': 'error',
+                    'message': 'fps is required'
+                }, status=status.HTTP_400_BAD_REQUEST)
 
-            # Mock evaluation logic - randomly return correct/incorrect
-            is_correct = random.choice([True, False])
-            submission_status = "correct" if is_correct else "incorrect"
-            
-            return Response({
-                'status': submission_status,
-                'message': f'QA answer {submission_status}'
-            }, status=status.HTTP_200_OK)
+            # Get latest DRES session
+            try:
+                dres_session = DresSession.objects.order_by('-created_at').first()
+                if not dres_session:
+                    return Response({
+                        'status': 'error',
+                        'message': 'No DRES session found. Please login to DRES first.'
+                    }, status=status.HTTP_401_UNAUTHORIZED)
+
+                if not dres_session.evaluation_id:
+                    return Response({
+                        'status': 'error',
+                        'message': 'No evaluation ID configured. Please set evaluation ID first.'
+                    }, status=status.HTTP_401_UNAUTHORIZED)
+
+            except Exception as e:
+                logger.error(f"Error retrieving DRES session: {e}")
+                return Response({
+                    'status': 'error',
+                    'message': 'Error retrieving DRES session'
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+            # Calculate time from frame_index and fps (in milliseconds)
+            time_in_seconds = frame_index / fps
+            time_in_milliseconds = int(time_in_seconds * 1000)
+
+            # Build DRES payload for QA (text-based with metadata)
+            text_answer = f"{qa}-{video_name}-{time_in_milliseconds}"
+            dres_payload = {
+                "answerSets": [
+                    {
+                        "answers": [
+                            {
+                                "text": text_answer
+                            }
+                        ]
+                    }
+                ]
+            }
+
+            logger.info(f"Submitting QA answer to DRES - Video: {video_name}, Frame: {frame_index}, QA: {qa[:50]}..., Time: {time_in_milliseconds}ms")
+
+            # Get DRES submit endpoint from environment
+            dres_submit_base_url = os.getenv('DRES_SUBMIT_ENDPOINT', "http://127.0.0.1:8080/api/v2/submit")
+            dres_submit_url = f"{dres_submit_base_url}/{dres_session.evaluation_id}"
+
+            # Submit to DRES server
+            try:
+                response = requests.post(
+                    dres_submit_url,
+                    json=dres_payload,
+                    params={'session': dres_session.session_id},
+                    headers={'Content-Type': 'application/json'},
+                    timeout=30
+                )
+
+                if response.status_code in [200, 202]:
+                    response_data = response.json()
+                    # Forward DRES response directly to client with DRES status code
+                    return Response(response_data, status=response.status_code)
+                else:
+                    logger.error(f"DRES QA submission failed: {response.status_code} - {response.text}")
+                    return Response({
+                        'status': 'error',
+                        'message': f'DRES server error: {response.text}'
+                    }, status=status.HTTP_502_BAD_GATEWAY)
+
+            except requests.exceptions.ConnectionError:
+                logger.error("Failed to connect to DRES server for QA submission")
+                return Response({
+                    'status': 'error',
+                    'message': 'Unable to connect to DRES server'
+                }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+            except requests.exceptions.Timeout:
+                logger.error("DRES server QA request timed out")
+                return Response({
+                    'status': 'error',
+                    'message': 'DRES server request timed out'
+                }, status=status.HTTP_504_GATEWAY_TIMEOUT)
 
         except Exception as error:
             logger.error(f"Error submitting QA answer: {error}")

@@ -1,6 +1,7 @@
 from django.urls import path
 from . import views
 from .sse_views import TeamAnswerSSEView
+from .dres_views import DresLoginView, DresSessionView
 from .team_trake_sse_views import (
     TeamTRAKEAnswerSSEView,
     TeamTRAKEAnswerListCreateSSEAPIView,
@@ -40,6 +41,10 @@ urlpatterns = [
     path('api/submit/kis/', SubmitKISAnswerView.as_view(), name='submit-kis-answer'),
     path('api/submit/qa/', SubmitQAAnswerView.as_view(), name='submit-qa-answer'),
     path('api/submit/trake/', SubmitTRAKEAnswerView.as_view(), name='submit-trake-answer'),
+    
+    # DRES endpoints
+    path('api/dres-login/', DresLoginView.as_view(), name='dres-login'),
+    path('api/dres-session/', DresSessionView.as_view(), name='dres-session'),
 ]
 
 # Available endpoints:
