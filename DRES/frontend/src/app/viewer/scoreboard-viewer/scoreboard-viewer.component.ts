@@ -174,8 +174,9 @@ export class ScoreboardViewerComponent implements OnInit {
           ] as ApexAxisChartSeries;
         } else {
           const combined = team
-            .map((t, i) => {
-              return { team: t, score: Math.round(scores.scores[i].score) };
+            .map((t) => {
+              const teamScore = scores.scores.find((s) => s.teamId === t.id);
+              return { team: t, score: Math.round(teamScore ? teamScore.score : 0) };
             })
             .sort((a, b) => b.score - a.score);
           return [
@@ -223,9 +224,10 @@ export class ScoreboardViewerComponent implements OnInit {
           .map((t) => {
             const sum = scores
               .map((so) => so.scores.find((s) => s.teamId === t.id))
+              .filter((score) => score !== undefined) // Filter out undefined scores
               .reduce((a, b) => {
-                return { teamId: a.teamId, score: a.score + b.score } as ApiScore;
-              });
+                return { teamId: t.id, score: (a?.score || 0) + (b?.score || 0) } as ApiScore;
+              }, { teamId: t.id, score: 0 } as ApiScore); // Provide initial value with correct teamId
             return { team: t, score: sum };
           })
           .sort((t1, t2) => t2.score.score - t1.score.score);
@@ -248,7 +250,11 @@ export class ScoreboardViewerComponent implements OnInit {
               return {
                 name: s.name,
                 data: teamsOrdered.map((t) => {
-                  return { x: t.team.name, y: Math.round(s.scores.find((ss) => ss.teamId === t.team.id).score) };
+                  const teamScore = s.scores.find((ss) => ss.teamId === t.team.id);
+                  return { 
+                    x: t.team.name, 
+                    y: Math.round(teamScore ? teamScore.score : 0) 
+                  };
                 }),
               };
             }

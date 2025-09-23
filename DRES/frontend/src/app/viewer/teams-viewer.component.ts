@@ -181,7 +181,14 @@ export class TeamsViewerComponent implements AfterViewInit, OnDestroy {
       ),
       map((sc: ApiScoreOverview) => {
         const scores = new Map<string, number>();
-        sc.scores.forEach((v) => scores.set(v.teamId, v.score));
+        // Ensure consistent team ID mapping by using team ID as key directly
+        if (sc && sc.scores) {
+          sc.scores.forEach((v) => {
+            if (v && v.teamId) {
+              scores.set(v.teamId, v.score || 0);
+            }
+          });
+        }
         return scores;
       }),
       shareReplay({ bufferSize: 1, refCount: true }) /* Cache last successful loading of score. */
