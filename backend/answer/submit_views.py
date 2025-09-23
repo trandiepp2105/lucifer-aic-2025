@@ -9,7 +9,7 @@ import random
 import requests
 import os
 from .models import DresSession
-
+from types import SimpleNamespace
 logger = logging.getLogger(__name__)
 
 
@@ -73,27 +73,33 @@ class SubmitKISAnswerView(APIView):
                     'message': 'fps is required'
                 }, status=status.HTTP_400_BAD_REQUEST)
 
+            # use dres session and evaluation id from request if provided
+            dres_session['session_id'] = request.data.get('dres_session', None)
+            dres_session['evaluation_id'] = request.data.get('evaluation_id', None)
+            dres_session = SimpleNamespace(**dres_session)
+
+
             # Get latest DRES session
-            try:
-                dres_session = DresSession.objects.order_by('-created_at').first()
-                if not dres_session:
-                    return Response({
-                        'status': 'error',
-                        'message': 'No DRES session found. Please login to DRES first.'
-                    }, status=status.HTTP_401_UNAUTHORIZED)
+            # try:
+            #     dres_session = DresSession.objects.order_by('-created_at').first()
+            #     if not dres_session:
+            #         return Response({
+            #             'status': 'error',
+            #             'message': 'No DRES session found. Please login to DRES first.'
+            #         }, status=status.HTTP_401_UNAUTHORIZED)
 
-                if not dres_session.evaluation_id:
-                    return Response({
-                        'status': 'error',
-                        'message': 'No evaluation ID configured. Please set evaluation ID first.'
-                    }, status=status.HTTP_401_UNAUTHORIZED)
+            #     if not dres_session.evaluation_id:
+            #         return Response({
+            #             'status': 'error',
+            #             'message': 'No evaluation ID configured. Please set evaluation ID first.'
+            #         }, status=status.HTTP_401_UNAUTHORIZED)
 
-            except Exception as e:
-                logger.error(f"Error retrieving DRES session: {e}")
-                return Response({
-                    'status': 'error',
-                    'message': 'Error retrieving DRES session'
-                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            # except Exception as e:
+            #     logger.error(f"Error retrieving DRES session: {e}")
+            #     return Response({
+            #         'status': 'error',
+            #         'message': 'Error retrieving DRES session'
+            #     }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
             # Calculate time from frame_index and fps (in milliseconds)
             time_in_seconds = frame_index / fps
@@ -119,6 +125,7 @@ class SubmitKISAnswerView(APIView):
             # Get DRES submit endpoint from environment
             dres_submit_base_url = os.getenv('DRES_SUBMIT_ENDPOINT', "http://127.0.0.1:8080/api/v2/submit")
             dres_submit_url = f"{dres_submit_base_url}/{dres_session.evaluation_id}"
+
 
             # Submit to DRES server
             try:
@@ -230,27 +237,31 @@ class SubmitQAAnswerView(APIView):
                     'message': 'fps is required'
                 }, status=status.HTTP_400_BAD_REQUEST)
 
-            # Get latest DRES session
-            try:
-                dres_session = DresSession.objects.order_by('-created_at').first()
-                if not dres_session:
-                    return Response({
-                        'status': 'error',
-                        'message': 'No DRES session found. Please login to DRES first.'
-                    }, status=status.HTTP_401_UNAUTHORIZED)
+            # use dres session and evaluation id from request if provided
+            dres_session['session_id'] = request.data.get('dres_session', None)
+            dres_session['evaluation_id'] = request.data.get('evaluation_id', None)
+            dres_session = SimpleNamespace(**dres_session)
+            # # Get latest DRES session
+            # try:
+            #     dres_session = DresSession.objects.order_by('-created_at').first()
+            #     if not dres_session:
+            #         return Response({
+            #             'status': 'error',
+            #             'message': 'No DRES session found. Please login to DRES first.'
+            #         }, status=status.HTTP_401_UNAUTHORIZED)
 
-                if not dres_session.evaluation_id:
-                    return Response({
-                        'status': 'error',
-                        'message': 'No evaluation ID configured. Please set evaluation ID first.'
-                    }, status=status.HTTP_401_UNAUTHORIZED)
+            #     if not dres_session.evaluation_id:
+            #         return Response({
+            #             'status': 'error',
+            #             'message': 'No evaluation ID configured. Please set evaluation ID first.'
+            #         }, status=status.HTTP_401_UNAUTHORIZED)
 
-            except Exception as e:
-                logger.error(f"Error retrieving DRES session: {e}")
-                return Response({
-                    'status': 'error',
-                    'message': 'Error retrieving DRES session'
-                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            # except Exception as e:
+            #     logger.error(f"Error retrieving DRES session: {e}")
+            #     return Response({
+            #         'status': 'error',
+            #         'message': 'Error retrieving DRES session'
+            #     }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
             # Calculate time from frame_index and fps (in milliseconds)
             time_in_seconds = frame_index / fps
