@@ -91,13 +91,23 @@ export const useSubmission = () => {
           return;
       }
 
-      // Handle response
-      if (response.status === 'correct') {
-        toast.success(`✓ ${response.message || 'Submission correct!'}`);
-      } else if (response.status === 'incorrect') {
-        toast.error(`✗ ${response.message || 'Submission incorrect'}`);
+      // Handle response based on DRES format
+      if (response.status === true) {
+        // DRES returned successful submission
+        if (response.submission === 'CORRECT') {
+          toast.success(`✓ ${response.description || 'Submission correct, well done!'}`);
+        } else if (response.submission === 'WRONG') {
+          toast.error(`✗ ${response.description || 'Submission wrong, try again!'}`);
+        } else {
+          // Unknown submission status but status is true
+          toast.success(`✓ ${response.description || 'Submission processed'}`);
+        }
+      } else if (response.status === false) {
+        // DRES rejected the submission
+        toast.warning(`⚠ ${response.description || 'Submission rejected'}`);
       } else {
-        toast.error('Unexpected response from server');
+        // Fallback for unexpected response format
+        toast.error('Unexpected response format from server');
       }
 
       closeSubmissionModal();

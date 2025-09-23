@@ -1,4 +1,5 @@
 import { apiConfig } from './apiConfig';
+import { fetchVideoMetadata } from '../utils/videoMetadata';
 
 class SubmissionService {
   constructor() {
@@ -13,6 +14,20 @@ class SubmissionService {
    */
   async submitKISAnswer(videoName, frameIndex) {
     try {
+      // Fetch fps from video metadata
+      let fps = 25; // default fps
+      try {
+        // Create minimal frame object for metadata fetching
+        const frameObject = { 
+          video_name: videoName,
+          url: `${process.env.REACT_APP_CFRAMES_PATH}/${videoName}/metadata.json`
+        };
+        const metadata = await fetchVideoMetadata(frameObject);
+        fps = metadata.fps || 25;
+      } catch (error) {
+        console.warn('Failed to fetch video metadata, using default fps:', error);
+      }
+
       const response = await fetch(`${this.baseURL}/kis/`, {
         method: 'POST',
         headers: {
@@ -20,7 +35,8 @@ class SubmissionService {
         },
         body: JSON.stringify({
           video_name: videoName,
-          frame_index: frameIndex
+          frame_index: frameIndex,
+          fps: fps
         })
       });
       
@@ -45,6 +61,20 @@ class SubmissionService {
    */
   async submitQAAnswer(videoName, frameIndex, qa) {
     try {
+      // Fetch fps from video metadata
+      let fps = 25; // default fps
+      try {
+        // Create minimal frame object for metadata fetching
+        const frameObject = { 
+          video_name: videoName,
+          url: `${process.env.REACT_APP_CFRAMES_PATH}/${videoName}/metadata.json`
+        };
+        const metadata = await fetchVideoMetadata(frameObject);
+        fps = metadata.fps || 25;
+      } catch (error) {
+        console.warn('Failed to fetch video metadata, using default fps:', error);
+      }
+
       const response = await fetch(`${this.baseURL}/qa/`, {
         method: 'POST',
         headers: {
@@ -53,7 +83,8 @@ class SubmissionService {
         body: JSON.stringify({
           video_name: videoName,
           frame_index: frameIndex,
-          qa: qa
+          qa: qa,
+          fps: fps
         })
       });
       
@@ -76,12 +107,34 @@ class SubmissionService {
    */
   async submitTRAKEAnswer(frameItems) {
     try {
+      // Get fps from first item's video metadata only (optimization)
+      let fps = 25; // default fps
+      if (frameItems.length > 0) {
+        try {
+          // Create minimal frame object for metadata fetching using first item
+          const frameObject = { 
+            video_name: frameItems[0].video_name,
+            url: `${process.env.REACT_APP_CFRAMES_PATH}/${frameItems[0].video_name}/metadata.json`
+          };
+          const metadata = await fetchVideoMetadata(frameObject);
+          fps = metadata.fps || 25;
+        } catch (error) {
+          console.warn(`Failed to fetch video metadata for ${frameItems[0].video_name}, using default fps:`, error);
+        }
+      }
+      
+      // Add fps to each frame item (all items use same fps from first item)
+      const frameItemsWithFps = frameItems.map(item => ({
+        ...item,
+        fps: fps
+      }));
+      
       const response = await fetch(`${this.baseURL}/trake/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(frameItems)
+        body: JSON.stringify(frameItemsWithFps)
       });
       
       if (!response.ok) {

@@ -7,6 +7,7 @@ import ImageZoomModal from '../ImageZoomModal/ImageZoomModal';
 import TeamAnswer from '../TeamAnswer/TeamAnswer';
 import { useApp } from '../../contexts/AppContext';
 import { useFrameActions } from '../../hooks/useFrameActions';
+import { fetchVideoMetadata } from '../../utils/videoMetadata';
 import './VideoPlayer.scss';
 
 const VideoPlayer = ({ 
@@ -87,15 +88,6 @@ const VideoPlayer = ({
     const hlsUrl = `${context}/media/videos_hls/${videoName}/playlist.m3u8`;
     
     return hlsUrl;
-  };
-
-  // Generate metadata URL from frame URL
-  const generateMetadataUrl = (frameUrl) => {
-    if (!frameUrl) return '';
-    // Extract base path and add /metadata.json
-    // "http://127.0.0.1/media/frames/L09_V025/9590.jpg" -> "http://127.0.0.1/media/frames/L09_V025/metadata.json"
-    const basePath = frameUrl.substring(0, frameUrl.lastIndexOf('/'));
-    return `${basePath}/metadata.json`;
   };
 
   // Generate neighboring frames based on centerFrame for gallery display
@@ -197,32 +189,18 @@ const VideoPlayer = ({
         } else {
           setVideoError(null);
         }
-        
-        const metadataUrl = generateMetadataUrl(currentFrame.thumbnail || currentFrame.url);
-        let metadata;
-        
-        try {
-          // Try to fetch video metadata
-          const response = await fetch(metadataUrl, { 
-            method: 'GET',
-            mode: 'cors',
-            credentials: 'omit'
-          });
-          if (!response.ok) throw new Error(`Metadata not found: ${response.status}`);
-          metadata = await response.json();
-          
-          // Validate metadata structure
-          if (!metadata.fps || !metadata.duration) {
-            throw new Error('Invalid metadata structure');
-          }
-        } catch (error) {
-          console.log('Metadata not available, using defaults:', error);
-          // Fallback to default values if metadata not found - use fps=25 as default
-          metadata = { fps: 25, duration: 21.06 };
-        }
-        
-        setVideoInfo(metadata);
         setVideoSrc(videoUrl);
+        
+        // Use shared utility to fetch video metadata
+        try {
+          const metadata = await fetchVideoMetadata(currentFrame);
+          setVideoInfo(metadata);
+        } catch (error) {
+          console.error('Failed to load video metadata:', error);
+          // Set hardcoded default values if all else fails
+          const hardcodedInfo = { fps: 25, duration: 21.06 };
+          setVideoInfo(hardcodedInfo);
+        }
         
         // Initialize both frames when video opens
         const isDifferentVideo = internalCurrentFrame?.video_name !== currentFrame.video_name;

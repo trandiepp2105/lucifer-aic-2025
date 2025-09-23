@@ -2,17 +2,24 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../../contexts/AppContext';
 import { useToast } from '../Toast/ToastProvider';
 import { QueryModeUtils } from '../../utils/queryModeUtils';
+import { DresLoginService, DresSessionService } from '../../services/DresLoginService';
 import './ActivityBar.scss';
 
 const ActivityBar = ({ onSectionChange, activeSection, onRoundChange, onQueryModeChange, onKChange, selectedRound = 'prelims', selectedQueryMode = 'kis', selectedK = 50 }) => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isDresLoginOpen, setIsDresLoginOpen] = useState(false);
+  const [dresLoginData, setDresLoginData] = useState({ username: '', password: '' });
+  const [dresLoginLoading, setDresLoginLoading] = useState(false);
+  const [evaluationIdInput, setEvaluationIdInput] = useState('');
+  const [evaluationIdLoading, setEvaluationIdLoading] = useState(false);
   const [currentRound, setCurrentRound] = useState(selectedRound);
   const [currentQueryMode, setCurrentQueryMode] = useState(selectedQueryMode);
   const [currentK, setCurrentK] = useState(selectedK);
   const settingsRef = useRef(null);
+  const dresLoginRef = useRef(null);
   
   // Use AppContext for search URL, queryIndex, and csvFormat
-  const { searchUrl, setSearchUrl, queryIndex, csvFormat, setCsvFormat } = useApp();
+  const { searchUrl, setSearchUrl, dresSession, setDresSession, evaluationId, setEvaluationId, queryIndex, csvFormat, setCsvFormat } = useApp();
   const toast = useToast();
 
   // Update internal state when props change
@@ -27,6 +34,11 @@ const ActivityBar = ({ onSectionChange, activeSection, onRoundChange, onQueryMod
   useEffect(() => {
     setCurrentK(selectedK);
   }, [selectedK]);
+
+  // Update evaluation ID input when context changes
+  useEffect(() => {
+    setEvaluationIdInput(evaluationId || '');
+  }, [evaluationId]);
 
   const allSections = [
     { id: 'chat', icon: '/assets/chat.svg', title: 'Chat' },
@@ -53,8 +65,14 @@ const ActivityBar = ({ onSectionChange, activeSection, onRoundChange, onQueryMod
   // Close settings dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (settingsRef.current && !settingsRef.current.contains(event.target)) {
+      // Close settings dropdown only if clicked outside settings AND outside dres login popup
+      if (settingsRef.current && !settingsRef.current.contains(event.target) &&
+          (!dresLoginRef.current || !dresLoginRef.current.contains(event.target))) {
         setIsSettingsOpen(false);
+      }
+      // Close dres login popup if clicked outside of it
+      if (dresLoginRef.current && !dresLoginRef.current.contains(event.target)) {
+        setIsDresLoginOpen(false);
       }
     };
 
@@ -127,8 +145,78 @@ const ActivityBar = ({ onSectionChange, activeSection, onRoundChange, onQueryMod
     setSearchUrl(url);
   };
 
+  const handleDresSessionChange = (session) => {
+    setDresSession(session);
+  };
+
+  const handleDresLoginToggle = () => {
+    setIsDresLoginOpen(!isDresLoginOpen);
+  };
+
+  const handleDresLoginInputChange = (field, value) => {
+    setDresLoginData(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const handleDresLogin = async () => {
+    if (!dresLoginData.username || !dresLoginData.password) {
+      toast.error('Please enter both username and password');
+      return;
+    }
+
+    setDresLoginLoading(true);
+    try {
+      const response = await DresLoginService.login({
+        username: dresLoginData.username,
+        password: dresLoginData.password
+      });
+
+      if (response.success && response.data) {
+        const { session_id } = response.data;
+        if (session_id) {
+          setDresSession(session_id);
+          toast.success('DRES login successful');
+          setIsDresLoginOpen(false);
+          setDresLoginData({ username: '', password: '' });
+        } else {
+          toast.error('No session ID received from server');
+        }
+      } else {
+        toast.error(response.error || 'Login failed');
+      }
+    } catch (error) {
+      console.error('DRES login error:', error);
+      toast.error('Login failed: ' + error.message);
+    } finally {
+      setDresLoginLoading(false);
+    }
+  };
+
+  const handleEvaluationIdApply = async () => {
+    setEvaluationIdLoading(true);
+    try {
+      const response = await DresSessionService.updateEvaluationId(evaluationIdInput);
+      
+      if (response.success) {
+        setEvaluationId(evaluationIdInput);
+        toast.success('Evaluation ID updated successfully');
+        console.log('Evaluation ID updated:', evaluationIdInput);
+      } else {
+        toast.error('Failed to update Evaluation ID: ' + response.error);
+        console.error('Evaluation ID update failed:', response.error);
+      }
+    } catch (error) {
+      toast.error('Failed to update Evaluation ID: ' + error.message);
+      console.error('Evaluation ID update error:', error);
+    } finally {
+      setEvaluationIdLoading(false);
+    }
+  };
+
   // Update CSS variable for slider progress
-  const progress = ((currentK - 1) / (200 - 1)) * 100;
+  const progress = ((currentK - 1) / (500 - 1)) * 100;
 
   return (
     <div className="activity-bar">
@@ -193,10 +281,17 @@ const ActivityBar = ({ onSectionChange, activeSection, onRoundChange, onQueryMod
             <div className="activity-bar__settings-dropdown">
               <div className="activity-bar__settings-header">
                 <h3>Settings</h3>
+                <button
+                  className="activity-bar__dres-login-toggle"
+                  onClick={handleDresLoginToggle}
+                  title="DRES Login"
+                >
+                  DRES
+                </button>
               </div>
               
               <div className="activity-bar__settings-section">
-                <label className="activity-bar__settings-label">
+                <label className="activity-bar__settings-label" style={{ maxWidth: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   Round
                 </label>
                 <div className="activity-bar__round-selector">
@@ -218,7 +313,7 @@ const ActivityBar = ({ onSectionChange, activeSection, onRoundChange, onQueryMod
               </div>
 
               <div className="activity-bar__settings-section">
-                <label className="activity-bar__settings-label" htmlFor="csv-format-input">
+                <label className="activity-bar__settings-label" htmlFor="csv-format-input" style={{ maxWidth: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   CSV Filename Format
                 </label>
                 <div className="activity-bar__csv-format">
@@ -237,7 +332,7 @@ const ActivityBar = ({ onSectionChange, activeSection, onRoundChange, onQueryMod
               </div>
 
               <div className="activity-bar__settings-section">
-                <label className="activity-bar__settings-label" htmlFor="search-url-input">
+                <label className="activity-bar__settings-label" htmlFor="search-url-input" style={{ maxWidth: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   Search URL
                 </label>
                 <div className="activity-bar__search-url">
@@ -256,7 +351,54 @@ const ActivityBar = ({ onSectionChange, activeSection, onRoundChange, onQueryMod
               </div>
 
               <div className="activity-bar__settings-section">
-                <label className="activity-bar__settings-label" htmlFor="top-k-slider">
+                <label className="activity-bar__settings-label" htmlFor="dres-url-input" style={{ maxWidth: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  DRES Session
+                </label>
+                <div className="activity-bar__search-url">
+                  {/* don't allow textarea to edit*/}
+                  <textarea
+                    id="dres-url-input"
+                    className="activity-bar__search-url-input"
+                    readOnly
+                    value={dresSession}
+                    onChange={(e) => handleDresSessionChange(e.target.value)}
+                    placeholder="DRES session will appear here after login..."
+                    rows={3}
+                  />
+                  <div className="activity-bar__search-url-help">
+                    DRES session ID from server
+                  </div>
+                </div>
+              </div>
+
+              <div className="activity-bar__settings-section">
+                <label className="activity-bar__settings-label" htmlFor="evaluation-id-input" style={{ maxWidth: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  Evaluation ID
+                </label>
+                <div className="activity-bar__search-url">
+                  <textarea
+                    id="evaluation-id-input"
+                    className="activity-bar__search-url-input"
+                    value={evaluationIdInput}
+                    onChange={(e) => setEvaluationIdInput(e.target.value)}
+                    placeholder="Enter DRES evaluation ID..."
+                    rows={2}
+                  />
+                  <div className="activity-bar__search-url-help">
+                    DRES evaluation/competition ID
+                  </div>
+                  <button
+                    className="activity-bar__apply-button"
+                    onClick={handleEvaluationIdApply}
+                    disabled={evaluationIdLoading}
+                  >
+                    {evaluationIdLoading ? 'Applying...' : 'Apply'}
+                  </button>
+                </div>
+              </div>
+
+              <div className="activity-bar__settings-section">
+                <label className="activity-bar__settings-label" htmlFor="top-k-slider" style={{ maxWidth: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   Top K Results: {currentK}
                 </label>
                 <div className="activity-bar__top-k">
@@ -268,19 +410,68 @@ const ActivityBar = ({ onSectionChange, activeSection, onRoundChange, onQueryMod
                     type="range"
                     className="activity-bar__top-k-slider"
                     min="1"
-                    max="1000"
+                    max="500"
                     value={currentK}
                     onChange={(e) => handleKChange(parseInt(e.target.value, 10))}
                   />
                   <div className="activity-bar__top-k-range">
                     <span>1</span>
-                    <span>1000</span>
+                    <span>500</span>
                   </div>
                 </div>
               </div>
             </div>
           )}
         </div>
+
+        {/* DRES Login Popup */}
+        {isDresLoginOpen && (
+          <div className="activity-bar__dres-login-popup" ref={dresLoginRef}>
+            <div className="activity-bar__dres-login-header">
+              <h3>DRES Login</h3>
+            </div>
+            <div className="activity-bar__dres-login-form">
+              <div className="activity-bar__dres-login-field">
+                <label htmlFor="dres-username">Username</label>
+                <input
+                  id="dres-username"
+                  type="text"
+                  value={dresLoginData.username}
+                  onChange={(e) => handleDresLoginInputChange('username', e.target.value)}
+                  placeholder="Enter username"
+                  disabled={dresLoginLoading}
+                />
+              </div>
+              <div className="activity-bar__dres-login-field">
+                <label htmlFor="dres-password">Password</label>
+                <input
+                  id="dres-password"
+                  type="password"
+                  value={dresLoginData.password}
+                  onChange={(e) => handleDresLoginInputChange('password', e.target.value)}
+                  placeholder="Enter password"
+                  disabled={dresLoginLoading}
+                />
+              </div>
+              <div className="activity-bar__dres-login-actions">
+                <button
+                  className="activity-bar__dres-login-btn activity-bar__dres-login-btn--cancel"
+                  onClick={() => setIsDresLoginOpen(false)}
+                  disabled={dresLoginLoading}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="activity-bar__dres-login-btn activity-bar__dres-login-btn--login"
+                  onClick={handleDresLogin}
+                  disabled={dresLoginLoading || !dresLoginData.username || !dresLoginData.password}
+                >
+                  {dresLoginLoading ? 'Logging in...' : 'Login'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

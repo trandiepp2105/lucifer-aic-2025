@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useReducer, useEffect } from 'react';
 import { TeamAnswerService } from '../services/TeamAnswerService';
 import { QueryService } from '../services/QueryService';
+import { DresSessionService } from '../services/DresLoginService';
 
 // Store session param from URL for validation (outside of state)
 let urlSessionParam = null;
@@ -11,12 +12,14 @@ const getInitialStateFromURL = () => {
     session: null,        // số
     sessionLoading: true, // loading state for session validation
     queryMode: 'kis',     // 'kis', 'qa', hoặc 'tra'
-    round: 'prelims',     // 'prelims' hoặc 'final'
+    round: 'final',     // 'prelims' hoặc 'final'
     viewMode: 'gallery',  // 'gallery' hoặc 'samevideo'
     stage: 1,             // số
     section: 'chat',      // 'chat' hoặc 'history'
     k: 50,                // top k results (1-200)
     searchUrl: '',        // search server endpoint
+    dresSession: '',      // DRES session ID
+    evaluationId: '',     // DRES evaluation ID
     csvFormat: 'query-p3-{query_index}-{type}', // CSV filename format
     tempTrakeItems: [],   // temporary TRAKE items for collection before submission
   };
@@ -72,7 +75,7 @@ const getInitialStateFromURL = () => {
   const kParam = urlParams.get('k');
   if (kParam) {
     const k = parseInt(kParam, 10);
-    if (k >= 1 && k <= 1000) {
+    if (k >= 1 && k <= 500) {
       urlState.k = k;
     }
   }
@@ -80,6 +83,11 @@ const getInitialStateFromURL = () => {
   const searchUrlParam = urlParams.get('searchurl');
   if (searchUrlParam) {
     urlState.searchUrl = decodeURIComponent(searchUrlParam);
+  }
+  
+  const dresSessionParam = urlParams.get('dressession');
+  if (dresSessionParam) {
+    urlState.dresSession = decodeURIComponent(dresSessionParam);
   }
   
   const csvFormatParam = urlParams.get('csvformat');
@@ -113,6 +121,8 @@ const ActionTypes = {
   SET_QUERY_INDEX: 'SET_QUERY_INDEX',
   SET_K: 'SET_K',
   SET_SEARCH_URL: 'SET_SEARCH_URL',
+  SET_DRES_SESSION: 'SET_DRES_SESSION',
+  SET_EVALUATION_ID: 'SET_EVALUATION_ID',
   SET_CSV_FORMAT: 'SET_CSV_FORMAT',
   UPDATE_FROM_URL: 'UPDATE_FROM_URL',
   RESET_STATE: 'RESET_STATE',
@@ -149,6 +159,10 @@ const appReducer = (state, action) => {
       return { ...state, k: action.payload };
     case ActionTypes.SET_SEARCH_URL:
       return { ...state, searchUrl: action.payload };
+    case ActionTypes.SET_DRES_SESSION:
+      return { ...state, dresSession: action.payload };
+    case ActionTypes.SET_EVALUATION_ID:
+      return { ...state, evaluationId: action.payload };
     case ActionTypes.SET_CSV_FORMAT:
       return { ...state, csvFormat: action.payload };
     case ActionTypes.AUTO_DETECT_QUERY_MODE:
@@ -220,6 +234,11 @@ export const AppProvider = ({ children }) => {
     } else {
       urlParams.delete('searchurl');
     }
+    if (newState.dresSession !== undefined && newState.dresSession !== '') {
+      urlParams.set('dressession', encodeURIComponent(newState.dresSession));
+    } else {
+      urlParams.delete('dressession');
+    }
     if (newState.csvFormat !== undefined && newState.csvFormat !== '') {
       urlParams.set('csvformat', encodeURIComponent(newState.csvFormat));
     } else {
@@ -232,6 +251,30 @@ export const AppProvider = ({ children }) => {
 
   // Load initial state from URL - REMOVED since we read URL in initialState
   // This prevents race condition between default state and URL params
+  
+  // Load DRES session on app initialization
+  useEffect(() => {
+    const loadDresSession = async () => {
+      try {
+        const response = await DresSessionService.getLatestSession();
+        if (response.success && response.data && response.data.session_id) {
+          // Set DRES session if found
+          dispatch({ type: ActionTypes.SET_DRES_SESSION, payload: response.data.session_id });
+          // Set evaluation ID if found
+          if (response.data.evaluation_id) {
+            dispatch({ type: ActionTypes.SET_EVALUATION_ID, payload: response.data.evaluation_id });
+          }
+          console.log('Loaded DRES session:', response.data.session_id);
+        } else {
+          console.log('No DRES session found');
+        }
+      } catch (error) {
+        console.error('Error loading DRES session:', error);
+      }
+    };
+
+    loadDresSession();
+  }, []); // Empty dependency array - only run once on mount
   
   // Session validation and initialization
   useEffect(() => {
@@ -292,6 +335,7 @@ export const AppProvider = ({ children }) => {
       queryIndex: state.queryIndex,
       k: state.k,
       searchUrl: state.searchUrl,
+      dresSession: state.dresSession,
       csvFormat: state.csvFormat,
       // reset tempTrakeItems
       tempTrakeItems: [],
@@ -303,7 +347,7 @@ export const AppProvider = ({ children }) => {
     }
     
     updateUrlState(urlStateToUpdate);
-  }, [state.session, state.queryMode, state.round, state.viewMode, state.stage, state.section, state.queryIndex, state.k, state.searchUrl, state.csvFormat]);
+  }, [state.session, state.queryMode, state.round, state.viewMode, state.stage, state.section, state.queryIndex, state.k, state.searchUrl, state.dresSession, state.csvFormat]);
 
   // Actions
   const actions = {
@@ -316,6 +360,8 @@ export const AppProvider = ({ children }) => {
     setQueryIndex: (index) => dispatch({ type: ActionTypes.SET_QUERY_INDEX, payload: index }),
     setK: (k) => dispatch({ type: ActionTypes.SET_K, payload: k }),
     setSearchUrl: (url) => dispatch({ type: ActionTypes.SET_SEARCH_URL, payload: url }),
+    setDresSession: (session) => dispatch({ type: ActionTypes.SET_DRES_SESSION, payload: session }),
+    setEvaluationId: (evaluationId) => dispatch({ type: ActionTypes.SET_EVALUATION_ID, payload: evaluationId }),
     setCsvFormat: (format) => dispatch({ type: ActionTypes.SET_CSV_FORMAT, payload: format }),
     resetState: (keepState = {}) => dispatch({ type: ActionTypes.RESET_STATE, payload: keepState }),
     addTempTrakeItem: (item) => dispatch({ type: ActionTypes.ADD_TEMP_TRAKE_ITEM, payload: item }),
