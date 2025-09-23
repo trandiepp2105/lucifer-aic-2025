@@ -10,9 +10,11 @@ class SubmissionService {
    * Submit KIS answer
    * @param {string} videoName - The video name
    * @param {number} frameIndex - The frame index
+   * @param {string} dresSession - DRES session ID (optional)
+   * @param {string} evaluationId - DRES evaluation ID (optional)
    * @returns {Promise} API response
    */
-  async submitKISAnswer(videoName, frameIndex) {
+  async submitKISAnswer(videoName, frameIndex, dresSession = null, evaluationId = null) {
     try {
       // Fetch fps from video metadata
       let fps = 25; // default fps
@@ -28,16 +30,26 @@ class SubmissionService {
         console.warn('Failed to fetch video metadata, using default fps:', error);
       }
 
+      const requestBody = {
+        video_name: videoName,
+        frame_index: frameIndex,
+        fps: fps
+      };
+      
+      // Add DRES session info if provided
+      if (dresSession) {
+        requestBody.dres_session = dresSession;
+      }
+      if (evaluationId) {
+        requestBody.evaluation_id = evaluationId;
+      }
+
       const response = await fetch(`${this.baseURL}/kis/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          video_name: videoName,
-          frame_index: frameIndex,
-          fps: fps
-        })
+        body: JSON.stringify(requestBody)
       });
       
       if (!response.ok) {
@@ -57,9 +69,11 @@ class SubmissionService {
    * @param {string} videoName - The video name
    * @param {number} frameIndex - The frame index
    * @param {string} qa - The QA text
+   * @param {string} dresSession - DRES session ID (optional)
+   * @param {string} evaluationId - DRES evaluation ID (optional)
    * @returns {Promise} API response
    */
-  async submitQAAnswer(videoName, frameIndex, qa) {
+  async submitQAAnswer(videoName, frameIndex, qa, dresSession = null, evaluationId = null) {
     try {
       // Fetch fps from video metadata
       let fps = 25; // default fps
@@ -75,17 +89,27 @@ class SubmissionService {
         console.warn('Failed to fetch video metadata, using default fps:', error);
       }
 
+      const requestBody = {
+        video_name: videoName,
+        frame_index: frameIndex,
+        qa: qa,
+        fps: fps
+      };
+      
+      // Add DRES session info if provided
+      if (dresSession) {
+        requestBody.dres_session = dresSession;
+      }
+      if (evaluationId) {
+        requestBody.evaluation_id = evaluationId;
+      }
+
       const response = await fetch(`${this.baseURL}/qa/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          video_name: videoName,
-          frame_index: frameIndex,
-          qa: qa,
-          fps: fps
-        })
+        body: JSON.stringify(requestBody)
       });
       
       if (!response.ok) {
@@ -103,9 +127,11 @@ class SubmissionService {
   /**
    * Submit TRAKE answer
    * @param {Array} frameItems - Array of frame items with {video_name, frame_index, group}
+   * @param {string} dresSession - DRES session ID (optional)
+   * @param {string} evaluationId - DRES evaluation ID (optional)
    * @returns {Promise} API response
    */
-  async submitTRAKEAnswer(frameItems) {
+  async submitTRAKEAnswer(frameItems, dresSession = null, evaluationId = null) {
     try {
       // Get fps from first item's video metadata only (optimization)
       let fps = 25; // default fps
@@ -129,12 +155,30 @@ class SubmissionService {
         fps: fps
       }));
       
+      // Create request body
+      const requestBody = frameItemsWithFps;
+      
+      // Add DRES session info to the body if provided (as metadata)
+      const requestBodyWithMeta = {
+        frame_items: requestBody,
+      };
+      
+      if (dresSession) {
+        requestBodyWithMeta.dres_session = dresSession;
+      }
+      if (evaluationId) {
+        requestBodyWithMeta.evaluation_id = evaluationId;
+      }
+      
+      // If no DRES info, send just the frame items array for backwards compatibility
+      const finalRequestBody = (dresSession || evaluationId) ? requestBodyWithMeta : requestBody;
+      
       const response = await fetch(`${this.baseURL}/trake/`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(frameItemsWithFps)
+        body: JSON.stringify(finalRequestBody)
       });
       
       if (!response.ok) {

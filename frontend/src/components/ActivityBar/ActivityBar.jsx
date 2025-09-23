@@ -10,7 +10,6 @@ const ActivityBar = ({ onSectionChange, activeSection, onRoundChange, onQueryMod
   const [isDresLoginOpen, setIsDresLoginOpen] = useState(false);
   const [dresLoginData, setDresLoginData] = useState({ username: '', password: '' });
   const [dresLoginLoading, setDresLoginLoading] = useState(false);
-  const [evaluationIdInput, setEvaluationIdInput] = useState('');
   const [evaluationIdLoading, setEvaluationIdLoading] = useState(false);
   const [currentRound, setCurrentRound] = useState(selectedRound);
   const [currentQueryMode, setCurrentQueryMode] = useState(selectedQueryMode);
@@ -35,10 +34,6 @@ const ActivityBar = ({ onSectionChange, activeSection, onRoundChange, onQueryMod
     setCurrentK(selectedK);
   }, [selectedK]);
 
-  // Update evaluation ID input when context changes
-  useEffect(() => {
-    setEvaluationIdInput(evaluationId || '');
-  }, [evaluationId]);
 
   const allSections = [
     { id: 'chat', icon: '/assets/chat.svg', title: 'Chat' },
@@ -149,6 +144,10 @@ const ActivityBar = ({ onSectionChange, activeSection, onRoundChange, onQueryMod
     setDresSession(session);
   };
 
+  const handleEvaluationIdChange = (id) => {
+    setEvaluationId(id);
+  };
+
   const handleDresLoginToggle = () => {
     setIsDresLoginOpen(!isDresLoginOpen);
   };
@@ -197,12 +196,11 @@ const ActivityBar = ({ onSectionChange, activeSection, onRoundChange, onQueryMod
   const handleEvaluationIdApply = async () => {
     setEvaluationIdLoading(true);
     try {
-      const response = await DresSessionService.updateEvaluationId(evaluationIdInput);
+      const response = await DresSessionService.updateEvaluationId(evaluationId);
       
       if (response.success) {
-        setEvaluationId(evaluationIdInput);
         toast.success('Evaluation ID updated successfully');
-        console.log('Evaluation ID updated:', evaluationIdInput);
+        console.log('Evaluation ID updated:', evaluationId);
       } else {
         toast.error('Failed to update Evaluation ID: ' + response.error);
         console.error('Evaluation ID update failed:', response.error);
@@ -359,7 +357,7 @@ const ActivityBar = ({ onSectionChange, activeSection, onRoundChange, onQueryMod
                   <textarea
                     id="dres-url-input"
                     className="activity-bar__search-url-input"
-                    readOnly
+                    // readOnly
                     value={dresSession}
                     onChange={(e) => handleDresSessionChange(e.target.value)}
                     placeholder="DRES session will appear here after login..."
@@ -379,8 +377,8 @@ const ActivityBar = ({ onSectionChange, activeSection, onRoundChange, onQueryMod
                   <textarea
                     id="evaluation-id-input"
                     className="activity-bar__search-url-input"
-                    value={evaluationIdInput}
-                    onChange={(e) => setEvaluationIdInput(e.target.value)}
+                    value={evaluationId}
+                    onChange={(e) => handleEvaluationIdChange(e.target.value)}
                     placeholder="Enter DRES evaluation ID..."
                     rows={2}
                   />

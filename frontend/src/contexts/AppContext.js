@@ -17,6 +17,7 @@ const getInitialStateFromURL = () => {
     stage: 1,             // số
     section: 'chat',      // 'chat' hoặc 'history'
     k: 50,                // top k results (1-200)
+    temporalTime: 10,     // temporal time parameter (1-500)
     searchUrl: '',        // search server endpoint
     dresSession: '',      // DRES session ID
     evaluationId: '',     // DRES evaluation ID
@@ -80,6 +81,14 @@ const getInitialStateFromURL = () => {
     }
   }
   
+  const temporalTimeParam = urlParams.get('temporaltime');
+  if (temporalTimeParam) {
+    const temporalTime = parseInt(temporalTimeParam, 10);
+    if (temporalTime >= 1 && temporalTime <= 500) {
+      urlState.temporalTime = temporalTime;
+    }
+  }
+  
   const searchUrlParam = urlParams.get('searchurl');
   if (searchUrlParam) {
     urlState.searchUrl = decodeURIComponent(searchUrlParam);
@@ -88,6 +97,11 @@ const getInitialStateFromURL = () => {
   const dresSessionParam = urlParams.get('dressession');
   if (dresSessionParam) {
     urlState.dresSession = decodeURIComponent(dresSessionParam);
+  }
+  
+  const evaluationIdParam = urlParams.get('evaluationid');
+  if (evaluationIdParam) {
+    urlState.evaluationId = decodeURIComponent(evaluationIdParam);
   }
   
   const csvFormatParam = urlParams.get('csvformat');
@@ -120,6 +134,7 @@ const ActionTypes = {
   SET_SECTION: 'SET_SECTION',
   SET_QUERY_INDEX: 'SET_QUERY_INDEX',
   SET_K: 'SET_K',
+  SET_TEMPORAL_TIME: 'SET_TEMPORAL_TIME',
   SET_SEARCH_URL: 'SET_SEARCH_URL',
   SET_DRES_SESSION: 'SET_DRES_SESSION',
   SET_EVALUATION_ID: 'SET_EVALUATION_ID',
@@ -157,6 +172,8 @@ const appReducer = (state, action) => {
       return { ...state, queryIndex: action.payload };
     case ActionTypes.SET_K:
       return { ...state, k: action.payload };
+    case ActionTypes.SET_TEMPORAL_TIME:
+      return { ...state, temporalTime: action.payload };
     case ActionTypes.SET_SEARCH_URL:
       return { ...state, searchUrl: action.payload };
     case ActionTypes.SET_DRES_SESSION:
@@ -229,6 +246,9 @@ export const AppProvider = ({ children }) => {
     if (newState.k !== undefined) {
       urlParams.set('k', newState.k.toString());
     }
+    if (newState.temporalTime !== undefined) {
+      urlParams.set('temporaltime', newState.temporalTime.toString());
+    }
     if (newState.searchUrl !== undefined && newState.searchUrl !== '') {
       urlParams.set('searchurl', encodeURIComponent(newState.searchUrl));
     } else {
@@ -238,6 +258,11 @@ export const AppProvider = ({ children }) => {
       urlParams.set('dressession', encodeURIComponent(newState.dresSession));
     } else {
       urlParams.delete('dressession');
+    }
+    if (newState.evaluationId !== undefined && newState.evaluationId !== '') {
+      urlParams.set('evaluationid', encodeURIComponent(newState.evaluationId));
+    } else {
+      urlParams.delete('evaluationid');
     }
     if (newState.csvFormat !== undefined && newState.csvFormat !== '') {
       urlParams.set('csvformat', encodeURIComponent(newState.csvFormat));
@@ -334,8 +359,10 @@ export const AppProvider = ({ children }) => {
       section: state.section,
       queryIndex: state.queryIndex,
       k: state.k,
+      temporalTime: state.temporalTime,
       searchUrl: state.searchUrl,
       dresSession: state.dresSession,
+      evaluationId: state.evaluationId,
       csvFormat: state.csvFormat,
       // reset tempTrakeItems
       tempTrakeItems: [],
@@ -347,7 +374,7 @@ export const AppProvider = ({ children }) => {
     }
     
     updateUrlState(urlStateToUpdate);
-  }, [state.session, state.queryMode, state.round, state.viewMode, state.stage, state.section, state.queryIndex, state.k, state.searchUrl, state.dresSession, state.csvFormat]);
+  }, [state.session, state.queryMode, state.round, state.viewMode, state.stage, state.section, state.queryIndex, state.k, state.temporalTime, state.searchUrl, state.dresSession, state.evaluationId, state.csvFormat]);
 
   // Actions
   const actions = {
@@ -359,6 +386,7 @@ export const AppProvider = ({ children }) => {
     setSection: (section) => dispatch({ type: ActionTypes.SET_SECTION, payload: section }),
     setQueryIndex: (index) => dispatch({ type: ActionTypes.SET_QUERY_INDEX, payload: index }),
     setK: (k) => dispatch({ type: ActionTypes.SET_K, payload: k }),
+    setTemporalTime: (temporalTime) => dispatch({ type: ActionTypes.SET_TEMPORAL_TIME, payload: temporalTime }),
     setSearchUrl: (url) => dispatch({ type: ActionTypes.SET_SEARCH_URL, payload: url }),
     setDresSession: (session) => dispatch({ type: ActionTypes.SET_DRES_SESSION, payload: session }),
     setEvaluationId: (evaluationId) => dispatch({ type: ActionTypes.SET_EVALUATION_ID, payload: evaluationId }),
