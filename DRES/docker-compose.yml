@@ -1,0 +1,16 @@
+services:
+  dres:
+    build: .
+    container_name: dres
+    ports:
+      - "8080:8080"
+      - "8443:8443"
+    volumes:
+      - ./media:/data/media  
+      - dres-data:/dres-dist/lib/data  # ✅ Đúng path cho database
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+
+volumes:
+  dres-data:

@@ -1,0 +1,66 @@
+<mat-toolbar *ngIf="!(noUi | async)" color="primary">
+  <button mat-flat-button color="primary" (click)="openInfoDialog()" matTooltip="Click for server information"><h2 style="margin: 0;">DRES</h2></button>
+  <div class="spacer-small"></div>
+  <app-api-status></app-api-status>
+
+  <div class="spacer-flex"></div>
+
+  <button
+    *ngIf="isAdmin | async"
+    mat-button
+    aria-label="Evaluation template builder and overview"
+    matTooltip="Evaluation template builder and overview"
+    routerLink="/template/list"
+  >
+    <mat-icon>build</mat-icon> Evaluation Template Builder
+  </button>
+
+  <button *ngIf="loggedIn | async" mat-button aria-label="Ongoing runs" matTooltip="Ongoing runs" routerLink="/evaluation/list">
+    <mat-icon>directions_run</mat-icon> Evaluations
+  </button>
+
+  <button *ngIf="isAdmin | async" mat-button aria-label="User Management" matTooltip="User Management" routerLink="/user/list">
+    <mat-icon>people</mat-icon> User Management
+  </button>
+
+  <button
+    *ngIf="isAdmin | async"
+    mat-button
+    aria-label="Media Collection management"
+    matTooltip="Media collection management"
+    routerLink="/collection/list"
+  >
+    <mat-icon>perm_media</mat-icon> Media Collection Management
+  </button>
+
+  <div class="spacer-flex"></div>
+
+  <div>
+    <button
+      matTooltip="{{ (config.configAsObservable | async).effects.mute ? 'Unmute' : 'Mute' }}"
+      mat-button
+      (click)="toggleMute()"
+    >
+      <mat-icon *ngIf="!(config.configAsObservable | async).effects.mute">volume_up</mat-icon>
+      <mat-icon *ngIf="(config.configAsObservable | async).effects.mute">volume_off</mat-icon>
+    </button>
+  </div>
+
+  <div *ngIf="!(loggedIn | async)">
+    <button mat-button routerLink="/login">Login</button>
+  </div>
+  <div *ngIf="(loggedIn | async)">
+    <mat-menu #userMenu="matMenu">
+      <button mat-menu-item (click)="profile()">User profile</button>
+      <button mat-menu-item (click)="logout()">Logout</button>
+    </mat-menu>
+    <button mat-button [matMenuTriggerFor]="userMenu">
+      <mat-icon>person</mat-icon>
+      {{ (user | async)?.username }}
+    </button>
+  </div>
+</mat-toolbar>
+
+<div id="container">
+  <router-outlet></router-outlet>
+</div>

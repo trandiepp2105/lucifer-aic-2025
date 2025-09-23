@@ -1,0 +1,5 @@
+{
+    "dataPath" : "./data",
+    "externalPath": "./external",
+    "enableSsl" : false
+}

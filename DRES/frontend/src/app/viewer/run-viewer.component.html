@@ -1,0 +1,179 @@
+<div class="grid">
+  <div *ngIf="!(noUi | async)" class="header">
+    <mat-card appearance="outlined">
+      <mat-card-header>
+        <mat-card-title>
+          <app-back-button forceBack="true"></app-back-button>Viewer for '{{ (info | async)?.name }}'
+        </mat-card-title>
+        <mat-card-subtitle><strong>Description:</strong> {{ (info | async)?.name }}</mat-card-subtitle>
+
+        <div class="spacer-flex"></div>
+        <app-task-controls *ngIf="(info | async)?.type === 'ASYNCHRONOUS'" [asynchronous]="(info | async)?.type === 'ASYNCHRONOUS'" [runState]="state"></app-task-controls>
+        <div class="spacer-flex"></div>
+
+        <button mat-icon-button [matMenuTriggerFor]="animals">
+          <mat-icon>dashboard</mat-icon>
+        </button>
+
+        <mat-menu #animals="matMenu">
+          <button mat-menu-item [matMenuTriggerFor]="leftViews">Left</button>
+          <button mat-menu-item [matMenuTriggerFor]="rightViews">Right</button>
+          <button mat-menu-item [matMenuTriggerFor]="centerViews">Center</button>
+          <button mat-menu-item [matMenuTriggerFor]="bottomViews">Bottom</button>
+        </mat-menu>
+
+        <mat-menu #centerViews="matMenu">
+          <a *ngFor="let w of widgetsForPosition('CENTER')" mat-menu-item (click)="updateWidgetForPosition('center', w.name)">
+            <mat-icon *ngIf="(centerWidget | async)?.name === w.name">done</mat-icon>
+            <span>{{ w.label }}</span>
+          </a>
+          <button mat-menu-item (click)="updateWidgetForPosition('center', null)">
+            <mat-icon *ngIf="!(centerWidget | async)?.name">done</mat-icon>
+            <span>Disable</span>
+          </button>
+        </mat-menu>
+
+        <mat-menu #bottomViews="matMenu">
+          <button
+            *ngFor="let w of widgetsForPosition('BOTTOM')"
+            mat-menu-item
+            (click)="updateWidgetForPosition('bottom', w.name)"
+          >
+            <mat-icon *ngIf="(bottomWidget | async)?.name === w.name">done</mat-icon>
+            <span>{{ w.label }}</span>
+          </button>
+          <button mat-menu-item (click)="updateWidgetForPosition('bottom', null)">
+            <mat-icon *ngIf="!(bottomWidget | async)?.name">done</mat-icon>
+            <span>Disable</span>
+          </button>
+        </mat-menu>
+
+        <mat-menu #leftViews="matMenu">
+          <button *ngFor="let w of widgetsForPosition('LEFT')" mat-menu-item (click)="updateWidgetForPosition('left', w.name)">
+            <mat-icon *ngIf="(leftWidget | async)?.name === w.name">done</mat-icon>
+            <span>{{ w.label }}</span>
+          </button>
+          <button mat-menu-item (click)="updateWidgetForPosition('left', null)">
+            <mat-icon *ngIf="!(leftWidget | async)?.name">done</mat-icon>
+            <span>Disable</span>
+          </button>
+        </mat-menu>
+
+        <mat-menu #rightViews="matMenu">
+          <button
+            *ngFor="let w of widgetsForPosition('RIGHT')"
+            mat-menu-item
+            (click)="updateWidgetForPosition('right', w.name)"
+          >
+            <mat-icon *ngIf="(rightWidget | async)?.name === w.name">done</mat-icon>
+            <span>{{ w.label }}</span>
+          </button>
+          <button mat-menu-item (click)="updateWidgetForPosition('right', null)">
+            <mat-icon *ngIf="!(rightWidget | async)?.name">done</mat-icon>
+            <span>Disable</span>
+          </button>
+        </mat-menu>
+      </mat-card-header>
+    </mat-card>
+  </div>
+
+  <div class="body">
+    <div
+      class="left"
+      *ngIf="leftWidget | async"
+      [ngSwitch]="(leftWidget | async)?.name"
+      [style.width]="leftWidgetWidth() | async"
+    >
+      <app-task-viewer
+        *ngSwitchCase="'player'"
+        [evaluationId]="evaluationId"
+        [info]="info"
+        [state]="state"
+        [taskChanged]="taskChanged"
+        [taskStarted]="taskStarted"
+        [taskEnded]="taskEnded"
+      ></app-task-viewer>
+      <app-scoreboard-viewer
+        *ngSwitchCase="'competition_score'"
+        [competitionOverview]="true"
+        [info]="info"
+        [state]="state"
+      ></app-scoreboard-viewer>
+      <app-scoreboard-viewer
+        *ngSwitchCase="'task_type_score'"
+        [competitionOverview]="false"
+        [info]="info"
+        [state]="state"
+      ></app-scoreboard-viewer>
+    </div>
+
+    <div
+      class="main"
+      *ngIf="(centerWidget | async) !== null"
+      [ngSwitch]="(centerWidget | async)?.name"
+      [style.width]="centerWidgetWidth() | async"
+    >
+      <app-task-viewer
+        *ngSwitchCase="'player'"
+        [evaluationId]="evaluationId"
+        [info]="info"
+        [state]="state"
+        [taskChanged]="taskChanged"
+        [taskStarted]="taskStarted"
+        [taskEnded]="taskEnded"
+      ></app-task-viewer>
+      <app-scoreboard-viewer
+        *ngSwitchCase="'competition_score'"
+        [competitionOverview]="true"
+        [info]="info"
+        [state]="state"
+      ></app-scoreboard-viewer>
+      <app-scoreboard-viewer
+        *ngSwitchCase="'task_type_score'"
+        [competitionOverview]="false"
+        [info]="info"
+        [state]="state"
+      ></app-scoreboard-viewer>
+    </div>
+
+    <div
+      class="right"
+      *ngIf="(rightWidget | async) !== null"
+      [ngSwitch]="(rightWidget | async)?.name"
+      [style.width]="rightWidgetWidth() | async"
+    >
+      <app-task-viewer
+        *ngSwitchCase="'player'"
+        [evaluationId]="evaluationId"
+        [info]="info"
+        [state]="state"
+        [taskChanged]="taskChanged"
+        [taskStarted]="taskStarted"
+        [taskEnded]="taskEnded"
+      ></app-task-viewer>
+      <app-scoreboard-viewer
+        *ngSwitchCase="'competition_score'"
+        [competitionOverview]="true"
+        [info]="info"
+        [state]="state"
+      ></app-scoreboard-viewer>
+      <app-scoreboard-viewer
+        *ngSwitchCase="'task_type_score'"
+        [competitionOverview]="false"
+        [info]="info"
+        [state]="state"
+      ></app-scoreboard-viewer>
+    </div>
+  </div>
+
+  <div class="footer" *ngIf="bottomWidget | async" [ngSwitch]="(bottomWidget | async)?.name">
+    <app-teams-viewer
+      *ngSwitchCase="'team_score'"
+      [runId]="evaluationId"
+      [taskEnded]="taskEnded"
+      [info]="info"
+      [state]="state"
+    ></app-teams-viewer>
+  </div>
+</div>
+

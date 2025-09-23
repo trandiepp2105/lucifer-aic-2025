@@ -1,0 +1,95 @@
+.flex {
+  display: flex;
+  flex-wrap: nowrap;
+}
+
+.tile {
+  padding: 5px;
+  margin: 5px;
+
+  min-width: 100px;
+  max-width: 300px;
+
+  min-height: 200px;
+
+  flex-grow: 1;
+
+  border-radius: 15px;
+
+  overflow: hidden;
+}
+
+.tile .logo {
+  border-radius: 5px;
+}
+
+.tile .logo img {
+  max-width: 100%;
+  max-height: 100px;
+  display: block;
+  margin: auto;
+}
+
+.tile p {
+  padding-top: 8px;
+  padding-bottom: 8px;
+  margin: 0;
+}
+
+.submissions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-evenly;
+  margin-top: 10px;
+}
+
+.submission {
+  border-radius: 5px;
+  width: 50px;
+  height: 50px;
+  margin: 2px;
+}
+
+.submission img {
+  background-image: url('../../immutable/assets/images/load-icon.png');
+  background-size: 46px 46px;
+
+  width: 46px;
+  height: 46px;
+  margin: 2px;
+  object-fit: cover;
+}
+
+.submission p {
+  padding-top: 15px;
+  margin: 2px;
+  object-fit: contain;
+  text-align: center;
+  font-size: 3em;
+}
+
+.score {
+  font-size: 24px;
+  text-align: center;
+}
+
+.counter {
+  font-size: 18px;
+  text-align: center;
+}
+
+.CORRECT {
+  background-color: darkgreen;
+}
+
+.WRONG {
+  background-color: darkred;
+}
+
+.INDETERMINATE {
+  background-color: goldenrod;
+}
+
+.UNDECIDABLE {
+  background-color: grey;
+}
