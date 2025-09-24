@@ -152,7 +152,7 @@ class QueryListCreateAPIView(APIView):
         search_url = request.query_params.get('search_url')
         k_param = request.query_params.get('k', '10')
         viewmode = request.query_params.get('viewmode', 'gallery')
-        
+        temporal_time = request.query_params.get('temporal_time', '30')  # in seconds, default 30s
         # Sắp xếp queries theo stage
         sorted_queries = queryset.order_by('stage')
         sorted_queries_serializer = QuerySerializer(sorted_queries, many=True, context={'request': request})        
@@ -254,6 +254,7 @@ class QueryListCreateAPIView(APIView):
         
         payload = {
             'k': int(k_param),
+            'temporal_time': int(temporal_time),  # in seconds
             'queries_structure': queries_structure_str,
             'weights': weights_str,
             'vector_models_config': json.dumps(vector_models_config),

@@ -25,7 +25,7 @@ const Sidebar = ({
   allTeamAnswers = [], // All team answers data for export
   allAnswers = [] // All answers data for export
 }) => {
-  const { stage, viewMode, round, queryIndex, k, searchUrl, session, sessionLoading, queryMode, csvFormat, setStage, setViewMode, setQueryIndex, setQueryMode, setSession } = useApp();
+  const { stage, viewMode, round, queryIndex, k, searchUrl, session, sessionLoading, queryMode, csvFormat, temporalTime, setStage, setViewMode, setQueryIndex, setQueryMode, setSession } = useApp();
   const toast = useToast();
   
   // Local queries management - unified structure matching backend
@@ -158,6 +158,7 @@ const Sidebar = ({
         session: targetSessionId,
         viewmode: viewMode,
         k: k,
+        temporal_time: temporalTime,
         search_url: searchUrl
       });
 
