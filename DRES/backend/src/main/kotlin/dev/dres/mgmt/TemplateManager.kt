@@ -382,8 +382,9 @@ object TemplateManager {
         val template = getDbTemplate(templateId) ?: throw IllegalArgumentException("Template with id '$templateId' not found")
 
         val segmentTasks = template.getAllVideos()
-        val await = segmentTasks.map {source ->
-
+        
+        // Validate file existence only, skip pre-rendering to avoid infinite loop
+        segmentTasks.forEach { source ->
             when(source) {
                 is DbEvaluationTemplate.VideoSource.ItemSource -> {
                     val item = source.item
@@ -391,31 +392,20 @@ object TemplateManager {
                     if (!Files.exists(path)) {
                         throw IllegalStateException("Required media file $path not found for item ${item.name}.")
                     }
-
-                    cache.asyncPreviewVideo(item, source.range.start.toMilliseconds(), source.range.end.toMilliseconds())
                 }
                 is DbEvaluationTemplate.VideoSource.PathSource -> {
                     val path = DRES.EXTERNAL_ROOT.resolve(source.path)
                     if (!Files.exists(path)) {
                         throw IllegalStateException("Required media file $path not found.")
                     }
-
-                    cache.asyncPreviewVideo(path, source.range.start.toMilliseconds(), source.range.end.toMilliseconds())
                 }
             }
         }
 
-        println("start rendering ${segmentTasks.size} videos")
-
-        await.all {
-            try {
-                val result = it.get(3, TimeUnit.MINUTES)
-                println("completed rendering of $result")
-                true
-            } catch (e: Throwable) {
-                throw IllegalStateException("Required media file could not be prepared: ${e.message}")
-            }
-        }
+        println("Template preparation completed: ${segmentTasks.size} videos validated (pre-rendering skipped)")
+        
+        // SKIP PRE-RENDERING - Videos will be rendered on-demand during evaluation
+        // This prevents "Requested time is outside of video" errors and infinite rendering loops
 
 
     }
