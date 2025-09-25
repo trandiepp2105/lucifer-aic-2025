@@ -1,4 +1,4 @@
-import { AfterViewInit, Component, OnDestroy, ViewChild } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, OnDestroy, ViewChild } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog, MatDialogConfig } from '@angular/material/dialog';
@@ -30,6 +30,9 @@ export class CollectionViewerComponent implements AfterViewInit, OnDestroy {
 
   /** Material Table UI element for pagination. */
   @ViewChild('paginator') paginator: MatPaginator;
+
+  /** File input element for JSON import. */
+  @ViewChild('fileInput') fileInput: ElementRef<HTMLInputElement>;
 
   /** Data source for Material tabl.e */
   dataSource = new MatTableDataSource<ApiMediaItem>();
@@ -173,6 +176,134 @@ export class CollectionViewerComponent implements AfterViewInit, OnDestroy {
 
   resolveMediaItemById(_: number, item: ApiMediaItem) {
     return item.mediaItemId;
+  }
+
+  /**
+   * Triggers file input for JSON import
+   */
+  importFromJson() {
+    this.fileInput.nativeElement.click();
+  }
+
+  /**
+   * Handles file selection for JSON import
+   */
+  onFileSelected(event: Event) {
+    const file = (event.target as HTMLInputElement).files?.[0];
+    if (!file) {
+      return;
+    }
+
+    if (file.type !== 'application/json') {
+      this.snackBar.open('Error: Please select a JSON file', null, { duration: 5000 });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const jsonData = JSON.parse(e.target?.result as string);
+        this.processJsonImport(jsonData);
+      } catch (error) {
+        this.snackBar.open('Error: Invalid JSON file format', null, { duration: 5000 });
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  /**
+   * Processes the imported JSON data
+   */
+  private processJsonImport(jsonData: any) {
+    this.collectionId.subscribe((colId: string) => {
+      if (!jsonData.video_items || !Array.isArray(jsonData.video_items)) {
+        this.snackBar.open('Error: JSON must contain "video_items" array', null, { duration: 5000 });
+        return;
+      }
+
+      const mediaItems = jsonData.video_items.map((item: any) => ({
+        name: item.name,
+        type: item.type || 'VIDEO',
+        collectionId: colId,
+        location: item.location,
+        durationMs: item.durationMs,
+        fps: item.fps,
+        metadata: []
+      }));
+
+      // Call backend bulk import API
+      this.bulkImportMediaItems(colId, mediaItems);
+    });
+  }
+
+  /**
+   * Calls backend bulk import API
+   */
+  private bulkImportMediaItems(collectionId: string, mediaItems: any[]) {
+    this.isLoading = true;
+    
+    const bulkImportRequest = {
+      collectionId: collectionId,
+      videoItems: mediaItems
+    };
+
+    // Call the new bulk import API endpoint
+    fetch('/api/v2/mediaItem/bulkImport', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(bulkImportRequest)
+    })
+    .then(response => response.json())
+    .then(result => {
+      this.handleBulkImportResult(result);
+    })
+    .catch(error => {
+      this.isLoading = false;
+      this.snackBar.open(`Import failed: ${error.message}`, null, { duration: 8000 });
+      console.error('Bulk import error:', error);
+    });
+  }
+
+  /**
+   * Handles bulk import result
+   */
+  private handleBulkImportResult(result: any) {
+    this.isLoading = false;
+    this.refreshSubject.next();
+    
+    let message = `Import completed: ${result.importedItems} imported`;
+    if (result.skippedItems > 0) {
+      message += `, ${result.skippedItems} skipped (duplicates)`;
+    }
+    if (result.errorItems > 0) {
+      message += `, ${result.errorItems} errors`;
+    }
+    
+    const duration = result.errorItems > 0 ? 10000 : 6000;
+    this.snackBar.open(message, null, { duration });
+
+    // Reset file input
+    if (this.fileInput) {
+      this.fileInput.nativeElement.value = '';
+    }
+  }
+
+  /**
+   * Old method - kept for backward compatibility but not used
+   */
+  private importMediaItems(collectionId: string, mediaItems: ApiMediaItem[]) {
+    // This method is replaced by bulkImportMediaItems
+    console.warn('Deprecated method importMediaItems called');
+  }
+
+  /**
+   * Old method - kept for backward compatibility but not used
+   */
+  private completeImport(processed: number, errors: number) {
+    // This method is replaced by handleBulkImportResult
+    console.warn('Deprecated method completeImport called');
   }
 
   /**

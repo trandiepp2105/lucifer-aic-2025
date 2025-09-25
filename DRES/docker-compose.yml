@@ -7,7 +7,7 @@ services:
       - "8443:8443"
     volumes:
       - type: bind
-        source: ./dres_media
+        source: /media/trandiep/trandiepssd/workspace/aic-2025/dres_media
         target: /data/media 
       - dres-data:/dres-dist/lib/data  
     restart: unless-stopped

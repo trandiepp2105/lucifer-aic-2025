@@ -115,6 +115,7 @@ object RestApi {
             UpdateCollectionHandler(),
             DeleteCollectionHandler(),
             AddMediaItemHandler(),
+            BulkImportMediaItemHandler(),
             UpdateMediaItemHandler(),
             DeleteMediaItemHandler(),
             RandomMediaItemHandler(), // Must be before ListMediaItem

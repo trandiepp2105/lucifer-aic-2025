@@ -5,13 +5,29 @@ FROM openjdk:11-jdk AS build
 COPY . /dres-src
 WORKDIR /dres-src
 
-# Download FFmpeg dependencies trước khi build
-RUN ./gradlew setupFFMpeg
+# Set Gradle options để tăng timeout và retry
+ENV GRADLE_OPTS="-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs='-Xmx2g -XX:MaxMetaspaceSize=512m' -Dorg.gradle.internal.http.connectionTimeout=900000 -Dorg.gradle.internal.http.socketTimeout=900000"
 
-# Build với distZip (như chúng ta đã làm thành công) thay vì distTar
-RUN ./gradlew distZip && \
-    cd backend/build/distributions && \
-    unzip -q dres-dist.zip
+# Download dependencies với nhiều retry attempts và timeout lớn hơn
+RUN for attempt in 1 2 3 4 5; do \
+        echo "Attempt $attempt: Downloading Gradle and FFmpeg dependencies..." && \
+        timeout 1200 ./gradlew setupFFMpeg --no-daemon --stacktrace --refresh-dependencies && \
+        echo "setupFFMpeg completed successfully" && break || \
+        echo "Attempt $attempt failed, waiting 60s before retry..."; \
+        sleep 60; \
+    done
+
+# Build backend only, skip frontend để tránh git issues
+RUN for attempt in 1 2 3; do \
+        echo "Build attempt $attempt: Creating backend distribution..." && \
+        timeout 900 ./gradlew backend:distZip --no-daemon --stacktrace && \
+        cd backend/build/distributions && \
+        unzip -q dres-dist.zip && \
+        echo "Backend build completed successfully" && break || \
+        echo "Build attempt $attempt failed, waiting 30s before retry..."; \
+        sleep 30; \
+        cd /dres-src; \
+    done
 
 # Runtime stage với OpenJDK 11 JRE
 FROM openjdk:11-jre-slim

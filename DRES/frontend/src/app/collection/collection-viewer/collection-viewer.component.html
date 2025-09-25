@@ -16,6 +16,10 @@
     <button mat-icon-button aria-label="Create new media item." matTooltip="Create new media item." (click)="create()">
       <mat-icon>note_add</mat-icon>
     </button>
+    <button mat-icon-button aria-label="Import media items from JSON." matTooltip="Import media items from JSON." (click)="importFromJson()">
+      <mat-icon>upload_file</mat-icon>
+    </button>
+    <input type="file" #fileInput style="display: none;" accept=".json" (change)="onFileSelected($event)">
   </div>
 </div>
 <div class="flex">
