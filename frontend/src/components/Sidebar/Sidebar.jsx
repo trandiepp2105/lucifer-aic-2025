@@ -625,6 +625,20 @@ const Sidebar = ({
         return;
       }
 
+      // Alt + R: Translate to English
+      if (e.altKey && e.key === 'r') {
+        e.preventDefault();
+        handleTranslateFocusedInput('en');
+        return;
+      }
+      
+      // Alt + W: Translate to Vietnamese  
+      if (e.altKey && e.key === 'w') {
+        e.preventDefault();
+        handleTranslateFocusedInput('vi');
+        return;
+      }
+
 
 
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
@@ -635,6 +649,13 @@ const Sidebar = ({
         e.preventDefault();
         const direction = e.key === 'ArrowLeft' ? 'left' : 'right';
         handleStageNavigation(direction);
+        return;
+      }
+
+      // Alt + Right: Navigate right (same as Ctrl + Right)
+      if (e.altKey && e.key === 'ArrowRight') {
+        e.preventDefault();
+        handleStageNavigation('right');
         return;
       }
     };
