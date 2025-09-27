@@ -74,8 +74,10 @@ class SubmitKISAnswerView(APIView):
                 }, status=status.HTTP_400_BAD_REQUEST)
 
             # use dres session and evaluation id from request if provided
-            dres_session['session_id'] = request.data.get('dres_session', None)
-            dres_session['evaluation_id'] = request.data.get('evaluation_id', None)
+            dres_session = {
+                'session_id': request.data.get('dres_session', None),
+                'evaluation_id': request.data.get('evaluation_id', None)
+            }
             dres_session = SimpleNamespace(**dres_session)
 
 
@@ -238,8 +240,10 @@ class SubmitQAAnswerView(APIView):
                 }, status=status.HTTP_400_BAD_REQUEST)
 
             # use dres session and evaluation id from request if provided
-            dres_session['session_id'] = request.data.get('dres_session', None)
-            dres_session['evaluation_id'] = request.data.get('evaluation_id', None)
+            dres_session = {
+                'session_id': request.data.get('dres_session', None),
+                'evaluation_id': request.data.get('evaluation_id', None)
+            }
             dres_session = SimpleNamespace(**dres_session)
             # # Get latest DRES session
             # try:
