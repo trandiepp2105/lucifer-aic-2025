@@ -419,8 +419,8 @@ const QueryInput = ({
     }
   };
 
-  // Calculate progress for temporal time slider (min: 30, max: 300)
-  const temporalTimeProgress = ((temporalTime - 30) / (300 - 30)) * 100;
+  // Calculate progress for temporal time slider (min: 5, max: 300)
+  const temporalTimeProgress = ((temporalTime - 5) / (300 - 5)) * 100;
 
   return (
     <div 
@@ -444,13 +444,13 @@ const QueryInput = ({
             id="temporal-time-slider"
             type="range"
             className="sidebar__temporal-time-slider"
-            min="30"
+            min="5"
             max="300"
             value={temporalTime}
             onChange={(e) => handleTemporalTimeChange(parseInt(e.target.value, 10))}
           />
           <div className="sidebar__temporal-time-range">
-            <span>30s</span>
+            <span>5s</span>
             <span>5m</span>
           </div>
         </div>

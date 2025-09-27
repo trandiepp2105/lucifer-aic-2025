@@ -21,7 +21,9 @@ const VideoPlayer = ({
   allTeamAnswers = [], 
   setAllTeamAnswers,
   searchResults = [],
-  onRefresh
+  onRefresh,
+  forceSeekFrame, // New prop to force seek to specific frame
+  onForceSeekComplete // Callback when force seek is complete
 }) => {
   const { queryMode, tempTrakeItems, addTempTrakeItem, removeTempTrakeItem } = useApp();
   
@@ -397,6 +399,29 @@ const VideoPlayer = ({
     setCurrentTime(initialTime);
     setHasInitialSeeked(frameKey); // Store the frame key we've seeked to
   }, [isReady, videoInfo, currentFrame?.video_name, currentFrame?.frame_index, hasInitialSeeked]);
+
+  // Force seek effect - handles double click seek requests
+  useEffect(() => {
+    const video = videoRef.current;
+    
+    if (!video || !videoInfo || !forceSeekFrame || !isReady) return;
+    
+    // Calculate time for the force seek frame
+    const seekTime = calculateTimeFromFrame(parseInt(forceSeekFrame.frame_index), videoInfo.fps);
+    
+    // Always seek when forceSeekFrame is provided (override hasInitialSeeked)
+    video.currentTime = seekTime;
+    setCurrentTime(seekTime);
+    
+    // Update hasInitialSeeked to prevent future auto-seeks to this frame
+    const frameKey = `${forceSeekFrame.video_name}-${forceSeekFrame.frame_index}`;
+    setHasInitialSeeked(frameKey);
+    
+    // Notify parent that force seek is complete
+    if (onForceSeekComplete) {
+      onForceSeekComplete();
+    }
+  }, [forceSeekFrame, isReady, videoInfo]);
 
   useEffect(() => {
     if (!isOpen) {

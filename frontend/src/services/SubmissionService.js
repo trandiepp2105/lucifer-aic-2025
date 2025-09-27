@@ -19,10 +19,9 @@ class SubmissionService {
       // Fetch fps from video metadata
       let fps = 25; // default fps
       try {
-        // Create minimal frame object for metadata fetching
+        // Create minimal frame object for metadata fetching (only video_name needed now)
         const frameObject = { 
-          video_name: videoName,
-          url: `${process.env.REACT_APP_CFRAMES_PATH}/${videoName}/metadata.json`
+          video_name: videoName
         };
         const metadata = await fetchVideoMetadata(frameObject);
         fps = metadata.fps || 25;
@@ -78,10 +77,9 @@ class SubmissionService {
       // Fetch fps from video metadata
       let fps = 25; // default fps
       try {
-        // Create minimal frame object for metadata fetching
+        // Create minimal frame object for metadata fetching (only video_name needed now)
         const frameObject = { 
-          video_name: videoName,
-          url: `${process.env.REACT_APP_CFRAMES_PATH}/${videoName}/metadata.json`
+          video_name: videoName
         };
         const metadata = await fetchVideoMetadata(frameObject);
         fps = metadata.fps || 25;
@@ -137,10 +135,9 @@ class SubmissionService {
       let fps = 25; // default fps
       if (frameItems.length > 0) {
         try {
-          // Create minimal frame object for metadata fetching using first item
+          // Create minimal frame object for metadata fetching using first item (only video_name needed now)
           const frameObject = { 
-            video_name: frameItems[0].video_name,
-            url: `${process.env.REACT_APP_CFRAMES_PATH}/${frameItems[0].video_name}/metadata.json`
+            video_name: frameItems[0].video_name
           };
           const metadata = await fetchVideoMetadata(frameObject);
           fps = metadata.fps || 25;

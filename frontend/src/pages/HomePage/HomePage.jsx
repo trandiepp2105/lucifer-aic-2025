@@ -78,6 +78,7 @@ const HomePage = () => {
   // Local state for UI components (not managed by AppContext)
   const [selectedFrame, setSelectedFrame] = useState(null);
   const [isVideoPlayerOpen, setIsVideoPlayerOpen] = useState(false);
+  const [forceSeekFrame, setForceSeekFrame] = useState(null); // Track frame to force seek to
   
   // Ref to store the loadQueries function from Sidebar
   const loadQueriesRef = useRef(null);
@@ -152,6 +153,10 @@ const HomePage = () => {
     // Set the frame as selected and open VideoPlayer
     setSelectedFrame(frame);
     setIsVideoPlayerOpen(true);
+    
+    // Force the VideoPlayer to seek to the correct frame time
+    // We'll pass a special flag to indicate this is from double click
+    setForceSeekFrame(frame);
   };
 
   const handleStageChange = useCallback((stage) => {
@@ -340,6 +345,7 @@ const HomePage = () => {
 
   const closeVideoPlayer = () => {
     setIsVideoPlayerOpen(false);
+    setForceSeekFrame(null); // Clear force seek frame when closing
   };
 
   const renderSidePanel = () => {
@@ -513,6 +519,8 @@ const HomePage = () => {
         setAllTeamAnswers={setAllTeamAnswers}
         searchResults={frames} // Pass current search results
         onRefresh={fetchAllTeamAnswers}
+        forceSeekFrame={forceSeekFrame} // Pass frame to force seek to
+        onForceSeekComplete={() => setForceSeekFrame(null)} // Clear after seeking
       />
 
       <SubmissionModal

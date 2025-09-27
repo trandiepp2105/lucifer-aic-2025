@@ -2,20 +2,55 @@
  * Utility functions for handling video metadata
  */
 
-// Cache for storing metadata to avoid repeated requests
-const metadataCache = new Map();
+import axios from 'axios';
+
+// Cache for all metadata (loaded once)
+let allMetadataCache = null;
+let isLoading = false;
+let loadPromise = null;
 
 /**
- * Generate metadata URL from frame URL
- * @param {string} frameUrl - The frame URL
- * @returns {string} - The metadata URL
+ * Load all metadata from public/all_metadata.json
+ * @returns {Promise<Object>} - Promise resolving to metadata object with video_name as keys
  */
-export const generateMetadataUrl = (frameUrl) => {
-  if (!frameUrl) return '';
-  // Extract base path and add /metadata.json
-  // "http://127.0.0.1/media/frames/L09_V025/9590.jpg" -> "http://127.0.0.1/media/frames/L09_V025/metadata.json"
-  const basePath = frameUrl.substring(0, frameUrl.lastIndexOf('/'));
-  return `${basePath}/metadata.json`;
+const loadAllMetadata = async () => {
+  if (allMetadataCache) {
+    return allMetadataCache;
+  }
+  
+  if (isLoading && loadPromise) {
+    return loadPromise;
+  }
+  
+  isLoading = true;
+  loadPromise = (async () => {
+    try {
+      console.log('Loading all metadata from /all_metadata.json');
+      const response = await axios.get('/all_metadata.json', {
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json'
+        },
+        withCredentials: false,
+        timeout: 10000, // 10 second timeout for initial load
+        validateStatus: (status) => status >= 200 && status < 300
+      });
+      
+      allMetadataCache = response.data;
+      console.log(`Loaded metadata for ${Object.keys(allMetadataCache).length} videos`);
+      return allMetadataCache;
+    } catch (error) {
+      console.error('Failed to load all_metadata.json:', error);
+      // Return empty object as fallback
+      allMetadataCache = {};
+      return allMetadataCache;
+    } finally {
+      isLoading = false;
+      loadPromise = null;
+    }
+  })();
+  
+  return loadPromise;
 };
 
 /**
@@ -23,51 +58,41 @@ export const generateMetadataUrl = (frameUrl) => {
  * @param {Object} frame - Frame object with video_name and url
  * @returns {Promise<Object>} - Promise resolving to metadata object with fps and duration
  */
+/**
+ * Fetch video metadata from all_metadata.json
+ * @param {Object} frame - Frame object with video_name
+ * @returns {Promise<Object>} - Promise resolving to metadata object with fps and duration
+ */
 export const fetchVideoMetadata = async (frame) => {
   if (!frame || !frame.video_name) {
     return { fps: 25, duration: 21.06 }; // Default fallback
   }
 
-  const cacheKey = frame.video_name;
-  
-  // Check cache first
-  if (metadataCache.has(cacheKey)) {
-    return metadataCache.get(cacheKey);
-  }
-
   try {
-    const metadataUrl = generateMetadataUrl(frame.thumbnail || frame.url);
+    // Load all metadata (cached after first load)
+    const allMetadata = await loadAllMetadata();
     
-    const response = await fetch(metadataUrl, { 
-      method: 'GET',
-      mode: 'cors',
-      credentials: 'omit'
-    });
+    // Lookup metadata for this specific video
+    const videoMetadata = allMetadata[frame.video_name];
     
-    if (!response.ok) {
-      throw new Error(`Metadata not found: ${response.status}`);
+    if (!videoMetadata) {
+      console.warn(`No metadata found for video: ${frame.video_name}`);
+      return { fps: 25, duration: 21.06 }; // Default fallback
     }
-    
-    const metadata = await response.json();
     
     // Validate metadata structure
-    if (!metadata.fps || !metadata.duration) {
-      throw new Error('Invalid metadata structure');
+    if (!videoMetadata.fps || !videoMetadata.duration) {
+      console.warn(`Invalid metadata structure for video: ${frame.video_name}`, videoMetadata);
+      return { fps: 25, duration: 21.06 }; // Default fallback
     }
     
-    // Cache the metadata
-    metadataCache.set(cacheKey, metadata);
-    
-    return metadata;
+    return {
+      fps: videoMetadata.fps,
+      duration: videoMetadata.duration
+    };
   } catch (error) {
-    console.log(`Metadata not available for ${frame.video_name}, using defaults:`, error);
-    // Fallback to default values if metadata not found - use fps=25 as default
-    const fallbackMetadata = { fps: 25, duration: 21.06 };
-    
-    // Cache the fallback to avoid repeated requests
-    metadataCache.set(cacheKey, fallbackMetadata);
-    
-    return fallbackMetadata;
+    console.error(`Failed to fetch metadata for ${frame.video_name}:`, error);
+    return { fps: 25, duration: 21.06 }; // Default fallback
   }
 };
 
@@ -79,11 +104,4 @@ export const fetchVideoMetadata = async (frame) => {
 export const getFrameFPS = async (frame) => {
   const metadata = await fetchVideoMetadata(frame);
   return metadata.fps || 25;
-};
-
-/**
- * Clear metadata cache (useful for testing or when videos change)
- */
-export const clearMetadataCache = () => {
-  metadataCache.clear();
 };
