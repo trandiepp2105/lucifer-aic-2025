@@ -9,7 +9,12 @@ services:
       - type: bind
         source: /media/trandiep/trandiepssd/workspace/aic-2025/dres_media
         target: /data/media 
+      - type: bind
+        source: /media/trandiep/trandiepssd/workspace/aic-2025/data/videos_hls
+        target: /data/videos_hls
       - dres-data:/dres-dist/lib/data  
+    environment:
+      - BASE_VIDEO_PATH=${BASE_VIDEO_PATH:-/data/videos_hls}
     restart: unless-stopped
     stdin_open: true
     tty: true

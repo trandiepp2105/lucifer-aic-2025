@@ -374,13 +374,98 @@ class CacheManager(private val config: Config, private val store: TransientEntit
     }
 
     /**
-     * A [Callable] that generates a preview video from a video file.
+     * A [Callable] that generates a preview video from a video file using HLS optimization when available.
      */
     inner class PreviewVideoFromVideoRequest constructor(input: Path, output: Path, private val start: Long, private val end: Long): AbstractPreviewRequest(input, output){
+        
+        private val hlsManager = HLSManager(this@CacheManager.config.baseVideoPath)
+        
         override fun call(): Path = try {
+            val videoName = hlsManager.extractVideoName(this.input)
+            
+            // Try HLS optimization first
+            if (hlsManager.hasHLSFiles(videoName)) {
+                LOGGER.info(MARKER, "Using HLS optimization for video $videoName from ${start}ms to ${end}ms")
+                renderFromHLS(videoName)
+            } else {
+                LOGGER.info(MARKER, "Using traditional rendering for video $input from ${start}ms to ${end}ms")
+                renderTraditional()
+            }
+            
+            this.output
+        } catch (e: Exception) {
+            LOGGER.error("Error in video processing: ${e.message}")
+            // Fallback to traditional rendering if HLS fails
+            try {
+                LOGGER.info(MARKER, "Falling back to traditional rendering")
+                renderTraditional()
+                this.output
+            } catch (fallbackError: Exception) {
+                LOGGER.error("Error in fallback rendering: ${fallbackError.message}")
+                throw e
+            }
+        } finally {
+            this@CacheManager.inTransit.remove(this.output)
+        }
+        
+        private fun renderFromHLS(videoName: String): Path {
+            val segments = hlsManager.getHLSSegments(videoName)
+            val segmentsInRange = hlsManager.findSegmentsInRange(segments, this.start, this.end)
+            
+            if (segmentsInRange.isEmpty()) {
+                throw IllegalStateException("No HLS segments found for time range ${start}ms - ${end}ms")
+            }
+            
+            // Create temporary concat file
+            val concatFile = Files.createTempFile("hls_concat_", ".txt")
+            try {
+                val concatLines = segmentsInRange.map { segment ->
+                    "file '${segment.path.toAbsolutePath()}'"
+                }
+                Files.write(concatFile, concatLines)
+                
+                LOGGER.debug(MARKER, "Using ${segmentsInRange.size} HLS segments for concat")
+                
+                // Calculate precise timing offsets
+                val firstSegment = segmentsInRange.first()
+                val lastSegment = segmentsInRange.last()
+                val startOffset = (this.start / 1000.0) - firstSegment.startTime
+                val totalDuration = (this.end / 1000.0) - (this.start / 1000.0)
+                
+                // Use FFmpeg with concat and stream copy for maximum speed
+                val ffmpegCommand = FFmpeg.atPath(this@CacheManager.ffmpegBin)
+                    .addInput(
+                        UrlInput.fromPath(concatFile)
+                            .setFormat("concat")
+                            .addArgument("-safe").addArgument("0")
+                    )
+                    .addOutput(UrlOutput.toPath(this.output))
+                    .setOverwriteOutput(true)
+                
+                // Apply timing if needed
+                if (startOffset > 0.01) { // Only apply if offset is significant (> 10ms)
+                    ffmpegCommand.addArguments("-ss", String.format("%.3f", startOffset))
+                }
+                
+                ffmpegCommand
+                    .addArguments("-t", String.format("%.3f", totalDuration))
+                    .addArguments("-c", "copy") // Stream copy - no re-encoding!
+                    .addArguments("-avoid_negative_ts", "make_zero")
+                    .addArguments("-fflags", "+genpts") // Generate PTS for smooth playback
+                    .setOutputListener { l -> LOGGER.debug(MARKER, "HLS: $l") }
+                    .execute()
+                    
+            } finally {
+                Files.deleteIfExists(concatFile)
+            }
+            
+            return this.output
+        }
+        
+        private fun renderTraditional(): Path {
             val startTimecode = millisecondToTimestamp(this.start)
             val endTimecode = millisecondToTimestamp(this.end)
-            LOGGER.info(MARKER, "Start rendering segment for video $input from $startTimecode to $endTimecode")
+            
             FFmpeg.atPath(this@CacheManager.ffmpegBin)
                 .addInput(UrlInput.fromPath(this.input))
                 .addOutput(UrlOutput.toPath(this.output))
@@ -393,14 +478,10 @@ class CacheManager(private val config: Config, private val store: TransientEntit
                 .addArguments("-filter:v", "scale=${this@CacheManager.config.cache.previewVideoMaxSize}:-1")
                 .addArguments("-tune", "zerolatency")
                 .addArguments("-preset", "slow")
-                .setOutputListener { l -> LOGGER.debug(MARKER, l); }
+                .setOutputListener { l -> LOGGER.debug(MARKER, "Traditional: $l") }
                 .execute()
-            this.output
-        } catch (e: Exception) {
-            LOGGER.error("Error in FFMpeg: ${e.message}")
-            throw e
-        } finally {
-            this@CacheManager.inTransit.remove(this.output) /* Remove this PreviewImageFromVideoRequest. */
+                
+            return this.output
         }
     }
 }
