@@ -20,7 +20,7 @@ RUN for attempt in 1 2 3 4 5; do \
 # Build backend only, skip frontend để tránh git issues
 RUN for attempt in 1 2 3; do \
         echo "Build attempt $attempt: Creating backend distribution..." && \
-        timeout 900 ./gradlew backend:distZip --no-daemon --stacktrace -x yarn_install -x buildFrontend -x frontend:build && \
+        timeout 900 ./gradlew backend:distZip --no-daemon --stacktrace && \
         cd backend/build/distributions && \
         unzip -q dres-dist.zip && \
         echo "Backend build completed successfully" && break || \

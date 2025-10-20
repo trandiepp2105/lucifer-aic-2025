@@ -1,0 +1,114 @@
+version: '3.8'
+
+services:
+  meilisearch:
+    image: getmeili/meilisearch:v1.6
+    container_name: lucifer-meilisearch
+    restart: unless-stopped
+    ports:
+      - "7700:7700"
+    environment:
+      - MEILI_MASTER_KEY=${MEILISEARCH_API_KEY:-meilisearch-api-key}
+      - MEILI_ENV=production
+    volumes:
+      - meilisearch_data:/meili_data
+    networks:
+      - lucifer-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:7700/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lucifer-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # Meilisearch Configuration
+      - MEILISEARCH_HOST=meilisearch
+      - MEILISEARCH_PORT={MEILISEARCH_PORT:-7700}
+      - MEILISEARCH_API_KEY=${MEILISEARCH_API_KEY:-meilisearch-api-key}
+      - MEILISEARCH_LIMIT_SEARCH=${MEILISEARCH_LIMIT_SEARCH:-500}
+      
+      # Dataset Paths (mount your data volumes and update paths)
+      - OCR_DATASETS=${OCR_DATASETS:-/app/data/ocr:parseq_ocr_index}
+      - SUBTITLE_DATASETS=${SUBTITLE_DATASETS:-/app/data/subtitle:frame_transcript_index}
+      
+      # Device Configuration
+      - DEVICE_0=${DEVICE_0:-cuda:0}
+      - DEVICE_1=${DEVICE_1:-cuda:1}
+      - USE_GPU=${USE_GPU:-true}
+      
+      # Model 1 Configuration
+      - MODEL_1_NAME=${MODEL_1_NAME:-ViT-H-14-378-quickgelu}
+      - MODEL_1_WEIGHT=${MODEL_1_WEIGHT:-0.55}
+      - MODEL_1_PRETRAINED=${MODEL_1_PRETRAINED:-dfn5b}
+      - MODEL_1_EMBEDDING_PATH=${MODEL_1_EMBEDDING_PATH:-/app/data/embeddings/clip/embedding_info.pkl}
+      - MODEL_1_INDEX_TYPE=${MODEL_1_INDEX_TYPE:-Flat}
+      - MODEL_1_INPUT_INDEX_PATH=${MODEL_1_INPUT_INDEX_PATH:-/app/indexes/clip-index}
+      - MODEL_1_OUTPUT_INDEX_PATH=${MODEL_1_OUTPUT_INDEX_PATH:-/app/outputs/clip-index}
+      
+      # Model 2 Configuration
+      - MODEL_2_NAME=${MODEL_2_NAME:-ViT-gopt-16-SigLIP2-384}
+      - MODEL_2_WEIGHT=${MODEL_2_WEIGHT:-0.45}
+      - MODEL_2_PRETRAINED=${MODEL_2_PRETRAINED:-webli}
+      - MODEL_2_EMBEDDING_PATH=${MODEL_2_EMBEDDING_PATH:-/app/data/embeddings/siglip/embedding_info.pkl}
+      - MODEL_2_INDEX_TYPE=${MODEL_2_INDEX_TYPE:-Flat}
+      - MODEL_2_INPUT_INDEX_PATH=${MODEL_2_INPUT_INDEX_PATH:-/app/indexes/siglip-index}
+      - MODEL_2_OUTPUT_INDEX_PATH=${MODEL_2_OUTPUT_INDEX_PATH:-/app/outputs/siglip-index}
+      
+      # FAISS Configuration
+      - FAISS_USE_GPU=${FAISS_USE_GPU:-true}
+      - FAISS_NPROBE=${FAISS_NPROBE:-64}
+      - FAISS_NLIST=${FAISS_NLIST:-1024}
+      
+      # API Configuration
+      - API_HOST=${API_HOST:-0.0.0.0}
+      - API_PORT=${API_PORT:-8000}
+      - API_WORKERS=${API_WORKERS:-1}
+      
+      # Search Defaults
+      - DEFAULT_TOP_K=${DEFAULT_TOP_K:-10}
+      - DEFAULT_TEMPORAL_TIME=${DEFAULT_TEMPORAL_TIME:-30}
+      - DEFAULT_INITIAL_SEARCH_K=${DEFAULT_INITIAL_SEARCH_K:-2048}
+
+      # Fusion Weights
+      - WEIGHT_TEXT=${WEIGHT_TEXT:-0.3}
+      - WEIGHT_OCR=${WEIGHT_OCR:-0.3}
+      - WEIGHT_SUBTITLE=${WEIGHT_SUBTITLE:-0.3}
+      - WEIGHT_IMAGE=${WEIGHT_IMAGE:-0.1}
+      
+    volumes:
+      - ./data:/app/data:ro  # Read-only data
+    depends_on:
+      meilisearch:
+        condition: service_healthy
+    networks:
+      - lucifer-network
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all  # Use all available GPUs
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  meilisearch_data:
+    driver: local
+
+networks:
+  lucifer-network:
+    driver: bridge
