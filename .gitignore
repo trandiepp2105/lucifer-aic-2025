@@ -20,3 +20,6 @@ move_video.py
 *.webm
 *.png
 *.jpg
+
+video_caption
+video_shot_show

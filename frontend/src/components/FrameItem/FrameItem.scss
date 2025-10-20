@@ -43,6 +43,18 @@
     background: #f8fff9;
   }
 
+  // Peak frame highlighting with green border
+  &--peak {
+    border: 3px solid #28a745 !important;
+    box-shadow: 0 0 10px rgba(40, 167, 69, 0.6), 
+                0 4px 12px rgba(40, 167, 69, 0.3) !important;
+    
+    &:hover {
+      box-shadow: 0 0 15px rgba(40, 167, 69, 0.8), 
+                  0 6px 16px rgba(40, 167, 69, 0.4) !important;
+    }
+  }
+
   // Size variants
   &--small {
     // .frame-item__thumbnail img {
@@ -73,6 +85,7 @@
     align-items: center;
     justify-content: center;
     background: #f8f9fa;
+    position: relative;
 
     img {
       // width: 100%;
@@ -82,6 +95,21 @@
       object-fit: cover;
       transition: transform 0.2s ease;
     }
+  }
+
+  &__peak-badge {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: #28a745;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: bold;
+    z-index: 10;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    pointer-events: none;
   }
 
   &:hover &__thumbnail img {
