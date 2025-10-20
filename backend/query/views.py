@@ -649,7 +649,20 @@ class QueryListCreateAPIView(APIView):
                 return None
                 
             path = result_tuple[0]  # e.g., "L06_V005/14497.jpg"
-            score = result_tuple[1]
+            score_info = result_tuple[1]  # Can be just score or (scores_tuple, total_score, is_peak, peak_stage)
+            
+            # Extract score and peak frame info
+            if isinstance(score_info, (tuple, list)) and len(score_info) >= 2:
+                # New format with peak frame information
+                scores_tuple = score_info[0] if len(score_info) > 0 else ()
+                score = score_info[1] if len(score_info) > 1 else 0
+                is_peak_frame = score_info[2] if len(score_info) > 2 else False
+                peak_stage = score_info[3] if len(score_info) > 3 else -1
+            else:
+                # Old format: just a score value
+                score = score_info
+                is_peak_frame = False
+                peak_stage = -1
             
             # Parse video_name and frame_index from path
             if '/' in path:
@@ -663,7 +676,9 @@ class QueryListCreateAPIView(APIView):
                     'url': frame_url,
                     'video_name': video_name,
                     'frame_index': int(frame_index),
-                    'score': score
+                    'score': score,
+                    'is_peak_frame': is_peak_frame,
+                    'peak_stage': peak_stage
                 }
                 return frame_data
             return None

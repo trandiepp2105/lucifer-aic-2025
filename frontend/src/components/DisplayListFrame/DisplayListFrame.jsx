@@ -297,6 +297,20 @@ const DisplayListFrame = forwardRef(({
         {validFrames.map((frame, index) => {
           const isChecked = queryMode === 'tra' ? isFrameInTempTrake(frame) : false;
           
+          // Extract peak frame information from frame metadata if available
+          const isPeakFrame = frame.is_peak_frame || false;
+          const peakStage = frame.peak_stage !== undefined ? frame.peak_stage : -1;
+          
+          // Debug logging
+          if (isPeakFrame) {
+            console.log('🟢 Peak frame found:', {
+              video: frame.video_name,
+              frame: frame.frame_index,
+              stage: peakStage,
+              score: frame.score
+            });
+          }
+          
           return (
             <FrameItem
               key={`gallery-${frame.video_name}-${frame.frame_index}-${index}`}
@@ -318,6 +332,8 @@ const DisplayListFrame = forwardRef(({
               showCheckbox={queryMode === 'tra'}
               isChecked={isChecked}
               onCheckboxChange={handleCheckboxChange}
+              isPeakFrame={isPeakFrame}
+              peakStage={peakStage}
             />
           );
         })}
@@ -371,6 +387,10 @@ const DisplayListFrame = forwardRef(({
                 {videoFrames.map((frame, frameIndex) => {
                   const isChecked = queryMode === 'tra' ? isFrameInTempTrake(frame) : false;
                   
+                  // Extract peak frame information from frame metadata if available
+                  const isPeakFrame = frame.is_peak_frame || false;
+                  const peakStage = frame.peak_stage !== undefined ? frame.peak_stage : -1;
+                  
                   return (
                     <FrameItem
                       key={`samevideo-${videoIndex}-${frame.video_name}-${frame.frame_index}-${frameIndex}`}
@@ -392,6 +412,8 @@ const DisplayListFrame = forwardRef(({
                       showCheckbox={queryMode === 'tra'}
                       isChecked={isChecked}
                       onCheckboxChange={handleCheckboxChange}
+                      isPeakFrame={isPeakFrame}
+                      peakStage={peakStage}
                     />
                   );
                 })}
