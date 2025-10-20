@@ -125,6 +125,7 @@ class QueryServiceClass {
    * @param {number} params.page - Page number
    * @param {number} params.page_size - Items per page
    * @param {number} params.stage - Filter by stage (1, 2, or 3)
+   * @param {number} params.temporal_time - Temporal time parameter (30-500)
    * @returns {Promise<Object>} Response with queries data
    */
   async getQueries(params = {}) {

@@ -144,3 +144,37 @@ class TeamTRAKEAnswer(models.Model):
 
     def __str__(self):
         return f"TeamTRAKEAnswer {self.id} - {self.video_name} Frame {self.frame_index} Query {self.query_index} Group {self.group}"
+
+
+class DresSession(models.Model):
+    """Model for storing DRES session information"""
+    
+    id = models.AutoField(primary_key=True)
+    username = models.CharField(
+        max_length=255,
+        help_text="Username used for DRES login"
+    )
+    role = models.CharField(
+        max_length=50,
+        help_text="User role in DRES system"
+    )
+    session_id = models.CharField(
+        max_length=255,
+        help_text="DRES session ID from server"
+    )
+    evaluation_id = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        help_text="Current evaluation/competition ID in DRES"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'dres_session'
+        ordering = ['-created_at']
+        verbose_name = 'DRES Session'
+        verbose_name_plural = 'DRES Sessions'
+
+    def __str__(self):
+        return f"DRES Session {self.id} - {self.username} ({self.role})"

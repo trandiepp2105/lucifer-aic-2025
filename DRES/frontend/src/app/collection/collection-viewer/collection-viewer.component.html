@@ -1,0 +1,112 @@
+<div class="flex">
+  <app-back-button></app-back-button>
+  <div>
+    <h1>Media collection: "{{ (collection | async)?.collection.name }}" ({{ (collectionId | async).substr(0, 8) }})</h1>
+  </div>
+  <div class="spacer-flex"></div>
+  <div>
+    <button
+      mat-icon-button
+      aria-label="Refresh list of media items"
+      matTooltip="Refresh list of media items"
+      (click)="refreshSubject.next()"
+    >
+      <mat-icon>refresh</mat-icon>
+    </button>
+    <button mat-icon-button aria-label="Create new media item." matTooltip="Create new media item." (click)="create()">
+      <mat-icon>note_add</mat-icon>
+    </button>
+    <button mat-icon-button aria-label="Import media items from JSON." matTooltip="Import media items from JSON." (click)="importFromJson()">
+      <mat-icon>upload_file</mat-icon>
+    </button>
+    <input type="file" #fileInput style="display: none;" accept=".json" (change)="onFileSelected($event)">
+  </div>
+</div>
+<div class="flex">
+  <div>
+    <b>Description: </b>{{ (collection | async)?.collection?.description }}<br />
+    <b>Base Path: </b>{{ (collection | async)?.collection?.basePath }}
+  </div>
+</div>
+<div>
+  <mat-spinner *ngIf="isLoading"></mat-spinner>
+
+  <!-- Filter -->
+  <mat-form-field style="width: 100%;">
+    <mat-label>Filter</mat-label>
+    <input matInput (keyup)="applyFilter($event)" #filterInput style="width: 100%;">
+  </mat-form-field>
+
+  <!-- Pagination -->
+  <mat-paginator #paginator [pageSizeOptions]="[50, 100, 250]" showFirstLastButtons></mat-paginator>
+
+  <table
+    mat-table
+    [dataSource]="dataSource"
+    [trackBy]="resolveMediaItemById"
+    matSort
+    matSortActive="name"
+    matSortDirection="asc"
+    style="width: 100%"
+  >
+    <!-- Column Defs -->
+    <!-- Actions column -->
+    <ng-container matColumnDef="actions">
+      <th mat-header-cell *matHeaderCellDef>Actions</th>
+      <td mat-cell *matCellDef="let row">
+        <button mat-icon-button aria-label="Show media item." matTooltip="Show media item" (click)="show(row.mediaItemId)">
+          <mat-icon>visibility</mat-icon>
+        </button>
+        <button mat-icon-button aria-label="Edit media item." matTooltip="Edit media item." (click)="edit(row.mediaItemId)">
+          <mat-icon>edit</mat-icon>
+        </button>
+        <button mat-icon-button aria-label="Delete media item." matTooltip="Delete media item." (click)="delete(row.mediaItemId)">
+          <mat-icon>delete</mat-icon>
+        </button>
+      </td>
+    </ng-container>
+
+    <!-- Id column -->
+    <ng-container matColumnDef="id">
+      <th mat-header-cell *matHeaderCellDef>ID</th>
+      <td mat-cell *matCellDef="let row" matTooltip="Click to copy to clipboard id: {{ row.mediaItemId }}" [cdkCopyToClipboard]="row.mediaItemId">
+        {{ row.mediaItemId.substring(0, 8) }}
+      </td>
+    </ng-container>
+
+    <!-- Name column -->
+    <ng-container matColumnDef="name">
+      <th mat-header-cell *matHeaderCellDef mat-sort-header>Name</th>
+      <td mat-cell *matCellDef="let row">{{ row.name }}</td>
+    </ng-container>
+
+    <!-- Location column -->
+    <ng-container matColumnDef="location">
+      <th mat-header-cell *matHeaderCellDef mat-sort-header>Relative Location</th>
+      <td mat-cell *matCellDef="let row">{{ row.location }}</td>
+    </ng-container>
+
+    <!-- Type column -->
+    <ng-container matColumnDef="type">
+      <th mat-header-cell *matHeaderCellDef mat-sort-header>Type</th>
+      <td mat-cell *matCellDef="let row">{{ row.type }}</td>
+    </ng-container>
+
+    <!-- durationMs column -->
+    <ng-container matColumnDef="durationMs">
+      <th mat-header-cell *matHeaderCellDef mat-sort-header>Duration [ms]</th>
+      <td mat-cell *matCellDef="let row">{{ row?.durationMs }}</td>
+    </ng-container>
+
+    <!-- FPS column -->
+    <ng-container matColumnDef="fps">
+      <th mat-header-cell *matHeaderCellDef mat-sort-header>FPS</th>
+      <td mat-cell *matCellDef="let row">{{ row?.fps }}</td>
+    </ng-container>
+
+    <!-- Headers & Data -->
+    <tr mat-header-row *matHeaderRowDef="displayedColumns; sticky: true"></tr>
+    <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+  </table>
+
+</div>

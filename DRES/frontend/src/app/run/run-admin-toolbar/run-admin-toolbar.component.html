@@ -1,0 +1,83 @@
+<mat-toolbar class="flex flex-row content-between align-center" style="margin-bottom: 2rem">
+  <div class="flex-inline">
+    <app-back-button></app-back-button>
+    <span style="align-self: center">
+      {{ (run | async)?.runInfo?.type === 'ASYNCHRONOUS' ? 'Asynchronous' : 'Synchronous' }}
+      Run: {{ (run | async)?.runInfo?.name }}
+      <span>({{ (run | async)?.runInfo?.id?.substring(0, 8) }})</span>
+    </span>
+  </div>
+  <div class="flex-inline">
+    <button
+      *ngIf="(run | async)?.overview?.state === 'CREATED'"
+      mat-icon-button
+      aria-label="Start the evaluation run."
+      matTooltip="Start the evaluation run."
+      (click)="start()"
+    >
+      <mat-icon>play_arrow</mat-icon>
+    </button>
+    <button
+      *ngIf="(run | async)?.overview?.state === 'ACTIVE'"
+      mat-icon-button
+      aria-label="Terminate the evaluation run."
+      matTooltip="Terminate the evaluation run."
+      (click)="terminate()"
+    >
+      <mat-icon>stop</mat-icon>
+    </button>
+    <button
+      mat-icon-button
+      aria-label="Go to evaluation viewer."
+      matTooltip="Go to evaluation viewer."
+      (click)="navigateToViewer()"
+    >
+      <mat-icon>visibility</mat-icon>
+    </button>
+    <button
+      mat-icon-button
+      aria-label="Go to judgement viewer."
+      matTooltip="Go to judgement viewer."
+      (click)="navigateToJudgement()"
+    >
+      <mat-icon>gavel</mat-icon>
+    </button>
+    <button
+      mat-icon-button
+      aria-label="Go to audience voting viewer."
+      matTooltip="Go to audience voting viewer."
+      (click)="navigateToVoting()"
+    >
+      <mat-icon>flaky</mat-icon>
+    </button>
+    <button
+      mat-icon-button
+      aria-label="Go to score history."
+      matTooltip="Go to score history."
+      (click)="navigateToScoreHistory()"
+    >
+      <mat-icon>stacked_line_chart</mat-icon>
+    </button>
+  </div>
+  <div class="flex-inline">
+    <ng-content></ng-content>
+  </div>
+  <div class="flex-inline">
+    <app-download-button
+      [icon]="'file_download'"
+      [contentType]="'text/csv'"
+      [fileName]="scoreFileProvider((run | async)?.runInfo?.name)"
+      [downloadProvider]="scoreDownloadProvider(runId)"
+      [inline]="true"
+      matTooltip="Download the scores of this run as CSV"
+    >
+    </app-download-button>
+    <app-download-button
+      [fileName]="fileProvider((run | async)?.runInfo?.name)"
+      [downloadProvider]="downloadProvider(runId)"
+      [inline]="true"
+      matTooltip="Download the run as JSON"
+    >
+    </app-download-button>
+  </div>
+</mat-toolbar>

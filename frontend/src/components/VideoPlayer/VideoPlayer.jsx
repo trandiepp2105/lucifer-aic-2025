@@ -7,6 +7,7 @@ import ImageZoomModal from '../ImageZoomModal/ImageZoomModal';
 import TeamAnswer from '../TeamAnswer/TeamAnswer';
 import { useApp } from '../../contexts/AppContext';
 import { useFrameActions } from '../../hooks/useFrameActions';
+import { fetchVideoMetadata } from '../../utils/videoMetadata';
 import './VideoPlayer.scss';
 
 const VideoPlayer = ({ 
@@ -20,7 +21,9 @@ const VideoPlayer = ({
   allTeamAnswers = [], 
   setAllTeamAnswers,
   searchResults = [],
-  onRefresh
+  onRefresh,
+  forceSeekFrame, // New prop to force seek to specific frame
+  onForceSeekComplete // Callback when force seek is complete
 }) => {
   const { queryMode, tempTrakeItems, addTempTrakeItem, removeTempTrakeItem } = useApp();
   
@@ -87,15 +90,6 @@ const VideoPlayer = ({
     const hlsUrl = `${context}/media/videos_hls/${videoName}/playlist.m3u8`;
     
     return hlsUrl;
-  };
-
-  // Generate metadata URL from frame URL
-  const generateMetadataUrl = (frameUrl) => {
-    if (!frameUrl) return '';
-    // Extract base path and add /metadata.json
-    // "http://127.0.0.1/media/frames/L09_V025/9590.jpg" -> "http://127.0.0.1/media/frames/L09_V025/metadata.json"
-    const basePath = frameUrl.substring(0, frameUrl.lastIndexOf('/'));
-    return `${basePath}/metadata.json`;
   };
 
   // Generate neighboring frames based on centerFrame for gallery display
@@ -197,32 +191,18 @@ const VideoPlayer = ({
         } else {
           setVideoError(null);
         }
-        
-        const metadataUrl = generateMetadataUrl(currentFrame.thumbnail || currentFrame.url);
-        let metadata;
-        
-        try {
-          // Try to fetch video metadata
-          const response = await fetch(metadataUrl, { 
-            method: 'GET',
-            mode: 'cors',
-            credentials: 'omit'
-          });
-          if (!response.ok) throw new Error(`Metadata not found: ${response.status}`);
-          metadata = await response.json();
-          
-          // Validate metadata structure
-          if (!metadata.fps || !metadata.duration) {
-            throw new Error('Invalid metadata structure');
-          }
-        } catch (error) {
-          console.log('Metadata not available, using defaults:', error);
-          // Fallback to default values if metadata not found - use fps=25 as default
-          metadata = { fps: 25, duration: 21.06 };
-        }
-        
-        setVideoInfo(metadata);
         setVideoSrc(videoUrl);
+        
+        // Use shared utility to fetch video metadata
+        try {
+          const metadata = await fetchVideoMetadata(currentFrame);
+          setVideoInfo(metadata);
+        } catch (error) {
+          console.error('Failed to load video metadata:', error);
+          // Set hardcoded default values if all else fails
+          const hardcodedInfo = { fps: 25, duration: 21.06 };
+          setVideoInfo(hardcodedInfo);
+        }
         
         // Initialize both frames when video opens
         const isDifferentVideo = internalCurrentFrame?.video_name !== currentFrame.video_name;
@@ -419,6 +399,29 @@ const VideoPlayer = ({
     setCurrentTime(initialTime);
     setHasInitialSeeked(frameKey); // Store the frame key we've seeked to
   }, [isReady, videoInfo, currentFrame?.video_name, currentFrame?.frame_index, hasInitialSeeked]);
+
+  // Force seek effect - handles double click seek requests
+  useEffect(() => {
+    const video = videoRef.current;
+    
+    if (!video || !videoInfo || !forceSeekFrame || !isReady) return;
+    
+    // Calculate time for the force seek frame
+    const seekTime = calculateTimeFromFrame(parseInt(forceSeekFrame.frame_index), videoInfo.fps);
+    
+    // Always seek when forceSeekFrame is provided (override hasInitialSeeked)
+    video.currentTime = seekTime;
+    setCurrentTime(seekTime);
+    
+    // Update hasInitialSeeked to prevent future auto-seeks to this frame
+    const frameKey = `${forceSeekFrame.video_name}-${forceSeekFrame.frame_index}`;
+    setHasInitialSeeked(frameKey);
+    
+    // Notify parent that force seek is complete
+    if (onForceSeekComplete) {
+      onForceSeekComplete();
+    }
+  }, [forceSeekFrame, isReady, videoInfo]);
 
   useEffect(() => {
     if (!isOpen) {

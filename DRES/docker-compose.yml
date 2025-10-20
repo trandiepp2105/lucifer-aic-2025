@@ -1,0 +1,47 @@
+services:
+  dres:
+    build: .
+    container_name: dres
+    ports:
+      - "8080:8080"
+      - "8443:8443"
+    volumes:
+      - type: bind
+        source: /media/trandiep/trandiepssd/workspace/aic-2025/dres_media
+        target: /data/media 
+      - type: bind
+        source: /media/trandiep/trandiepssd/workspace/aic-2025/data/videos_hls
+        target: /data/videos_hls
+      - dres-data:/dres-dist/lib/data  
+    environment:
+      - BASE_VIDEO_PATH=${BASE_VIDEO_PATH:-/data/videos_hls}
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    networks:
+      - dres-network
+
+  proxy:
+    build: ./proxy
+    container_name: dres-proxy
+    volumes:
+      - ./proxy:/app
+    ports:
+      - "${PROXY_PORT:-8088}:${PROXY_PORT:-8088}"
+    environment:
+      - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
+      - DRES_HOST=${DRES_HOST:-dres}
+      - DRES_PORT=${DRES_PORT:-8080}
+      - PROXY_PORT=${PROXY_PORT:-8088}
+    depends_on:
+      - dres
+    restart: unless-stopped
+    networks:
+      - dres-network
+
+volumes:
+  dres-data:
+
+networks:
+  dres-network:
+    driver: bridge

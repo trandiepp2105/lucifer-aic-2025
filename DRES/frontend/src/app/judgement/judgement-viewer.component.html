@@ -1,0 +1,62 @@
+<div [@newDescBg]="isNewJudgementDesc ? 'fresh' : 'known'" class="grid">
+  <div class="header">
+    <app-back-button></app-back-button>
+    <h1>Judgment for Submission</h1>
+    <div class="header-container flex flex-row content-between align-start">
+      <div class="header-main flex-75">
+        <p *ngIf="isJudgmentAvailable"><strong>Description:</strong> <span class="mat-h1">{{ judgementRequest?.taskDescription }}</span></p>
+        <p *ngIf="debug && isJudgmentAvailable">{{ judgePlayer?.videoUrlDebug | async }}</p>
+        <div class="message" *ngIf="!isJudgmentAvailable">{{ noJudgementMessage }}</div>
+      </div>
+      <div class="header-right flex-25">
+        <span matTooltip="The amount of submissions for which a verdict is missing">
+          <strong>Awaiting Verdict:</strong> {{ pendingSubmissions ? (pendingSubmissions | async) : 0 }} </span
+        ><br />
+        <span matTooltip="The amount of submissions no judge has seen so far">
+          <strong>Unaudited: </strong> {{ openSubmissions ? (openSubmissions | async) : 0 }}
+        </span>
+      </div>
+    </div>
+  </div>
+  <div class="body">
+    <app-judgement-media-viewer *ngFor="let item of allAnswers(); let idx = index" id="judge-media-viewer" [req]="observableJudgementRequest" answerIndex="{{idx}}"></app-judgement-media-viewer>
+    <div
+      [@newDescBg]="isNewJudgementDesc ? 'fresh' : 'known'"
+      *ngIf="isJudgmentAvailable"
+      class="controls-container flex flex-row content-evenly align-center"
+    >
+      <div class="button-wrapper flex-33 flex flex-row align-center">
+        <button
+          mat-fab
+          style="background-color: limegreen; color: white;"
+          aria-label="Approve Submission"
+          matTooltip="Approve Submission, shortcuts: a, c"
+          (click)="judge('CORRECT')"
+        >
+          <mat-icon>thumb_up</mat-icon>
+        </button>
+      </div>
+      <div class="button-wrapper flex-33 flex flex-row align-center">
+        <button
+          mat-fab
+          style="background-color: blue; color: white"
+          aria-label="Submission Unclear"
+          matTooltip="Submission Unclear, shortcut: u"
+          (click)="judge('UNDECIDABLE')"
+        >
+          <mat-icon>live_help</mat-icon>
+        </button>
+      </div>
+      <div class="button-wrapper flex-33 flex flex-row align-center">
+        <button
+          mat-fab
+          style="background-color: red; color: white"
+          aria-label="Reject Submission"
+          matTooltip="Reject Submission, shortcut: r, w"
+          (click)="judge('WRONG')">
+          <mat-icon>thumb_down</mat-icon>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

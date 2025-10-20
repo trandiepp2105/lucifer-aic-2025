@@ -70,6 +70,7 @@ MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
+    'core.middleware.CSRFExemptMiddleware',  # Add our custom CSRF exemption middleware
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
@@ -227,6 +228,18 @@ def get_cors_allowed_origins():
 CORS_ALLOWED_ORIGINS = get_cors_allowed_origins()
 
 CORS_ALLOW_CREDENTIALS = True
+
+# CSRF Configuration - Allow API endpoints
+CSRF_TRUSTED_ORIGINS = get_cors_allowed_origins()
+
+# Disable CSRF for API endpoints (alternative approach)
+def get_csrf_exempt_urls():
+    return [
+        '/api/*',  # All API endpoints
+    ]
+
+# For production, you might want to be more specific:
+# CSRF_EXEMPT_URLS = ['/api/queries/', '/api/sessions/', '/api/answers/']
 
 # REST Framework Configuration
 REST_FRAMEWORK = {

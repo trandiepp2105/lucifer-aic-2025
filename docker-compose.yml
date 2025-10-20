@@ -126,10 +126,10 @@ services:
       - DB_NAME=${MYSQL_DATABASE}
       - DB_USER=${MYSQL_USER}
       - DB_PASSWORD=${MYSQL_PASSWORD}
-      - DB_HOST=mysql
-      - DB_PORT=3306
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
       - MEILISEARCH_HOST=meilisearch
       - MEILISEARCH_PORT=7700
@@ -138,6 +138,9 @@ services:
       - DEBUG=${DEBUG}
       - ALLOWED_HOSTS=${ALLOWED_HOSTS}
       - SERVER_TYPE=uvicorn
+      - DRES_LOGIN_ENDPOINT=${DRES_LOGIN_ENDPOINT}
+      - DRES_SUBMIT_ENDPOINT=${DRES_SUBMIT_ENDPOINT}
+      # - SERVER_TYPE=django
       - HOST=${HOST}
     depends_on:
       mysql:
@@ -148,7 +151,6 @@ services:
       #   condition: service_healthy
     networks:
       - aic_network
-
 volumes:
   mysql_data:
     driver: local

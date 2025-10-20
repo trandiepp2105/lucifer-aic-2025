@@ -175,7 +175,7 @@ export class ExportTeamAnswerUtils {
     const blob = await zip.generateAsync({ type: 'blob' });
     
     // Download with team name and round
-    const filename = `team_lucifer_round2.zip`;
+    const filename = `team_lucifer_round3.zip`;
     saveAs(blob, filename);
   }
 }

@@ -7,7 +7,7 @@
   flex-direction: column;
   justify-content: space-between;
   flex-shrink: 0;
-
+  // position: relative;
   &__sections {
     display: flex;
     flex-direction: column;
@@ -76,7 +76,7 @@
     border: 1px solid #3e3e3e;
     border-radius: 6px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    min-width: 250px;
+    min-width: 285px;
     padding: 0;
     z-index: 1000;
     animation: slideIn 0.15s ease-out;
@@ -93,18 +93,190 @@
     }
   }
 
-  &__settings-header {
-    padding: 12px 16px;
-    border-bottom: 1px solid #3e3e3e;
+  // &__settings-header {
+  //   padding: 12px 16px;
+  //   border-bottom: 1px solid #3e3e3e;
     
+  //   h3 {
+  //     margin: 0;
+  //     color: #ffffff;
+  //     font-size: 14px;
+  //     font-weight: 500;
+  //   }
+  // }
+
+  // DRES Login Styles
+  &__settings-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    height: 35px;
+    padding: 0 1rem;
+    border-bottom: 1px solid #484848;
+    background: #3c3c3c;
+
     h3 {
       margin: 0;
-      color: #ffffff;
-      font-size: 14px;
+      font-size: 0.9rem;
       font-weight: 500;
+      color: #ffffff;
     }
   }
 
+  &__dres-login-toggle {
+    border: none;
+    background: none;
+    background: #484848;
+    cursor: pointer;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    height: 25px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s ease;
+    color: #ffffff;
+    &:hover {
+      background: #5a5a5a;
+    }
+  }
+
+  &__dres-login-popup {
+    position: fixed;
+    top: 50%;
+    right: 50%;
+    transform: translate(50%, -50%);
+    // bottom: 45px;
+    // left: calc(100% + 300px);
+    width: 280px;
+    background: #252526;
+    border: 1px solid #484848;
+    border-radius: 6px;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+    z-index: 1001;
+    
+    // &::before {
+    //   content: '';
+    //   position: absolute;
+    //   bottom: -7px;
+    //   right: 12px;
+    //   width: 0;
+    //   height: 0;
+    //   border-left: 6px solid transparent;
+    //   border-right: 6px solid transparent;
+    //   border-top: 6px solid #484848;
+    // }
+    
+    // &::after {
+    //   content: '';
+    //   position: absolute;
+    //   bottom: -6px;
+    //   right: 13px;
+    //   width: 0;
+    //   height: 0;
+    //   border-left: 5px solid transparent;
+    //   border-right: 5px solid transparent;
+    //   border-top: 5px solid #252526;
+    // }
+  }
+
+  &__dres-login-header {
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid #484848;
+    background: #3c3c3c;
+
+    h3 {
+      margin: 0;
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: #ffffff;
+    }
+  }
+
+  &__dres-login-form {
+    padding: 1rem;
+  }
+
+  &__dres-login-field {
+    margin-bottom: 1rem;
+
+    &:last-of-type {
+      margin-bottom: 1.5rem;
+    }
+
+    label {
+      display: block;
+      font-size: 0.75rem;
+      color: #cccccc;
+      margin-bottom: 0.25rem;
+      font-weight: 500;
+    }
+
+    input {
+      width: 100%;
+      padding: 0.5rem;
+      background: #3c3c3c;
+      border: 1px solid #484848;
+      border-radius: 4px;
+      color: #ffffff;
+      font-size: 0.8rem;
+      transition: border-color 0.2s ease;
+
+      &:focus {
+        outline: none;
+        border-color: #007acc;
+      }
+
+      &::placeholder {
+        color: #888888;
+      }
+
+      &:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+    }
+  }
+
+  &__dres-login-actions {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: flex-end;
+  }
+
+  &__dres-login-btn {
+    padding: 0.5rem 1rem;
+    border: none;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+
+    &:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    &--cancel {
+      background: #484848;
+      color: #cccccc;
+
+      &:hover:not(:disabled) {
+        background: #5a5a5a;
+        color: #ffffff;
+      }
+    }
+
+    &--login {
+      background: #007acc;
+      color: #ffffff;
+
+      &:hover:not(:disabled) {
+        background: #005a9e;
+      }
+    }
+  }
   &__settings-section {
     padding: 5px 16px;
   }
@@ -358,6 +530,33 @@
     font-size: 10px;
     line-height: 1.3;
     margin-top: 4px;
+  }
+
+  &__apply-button {
+    margin-top: 8px;
+    padding: 6px 12px;
+    background: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+
+    &:hover:not(:disabled) {
+      background: #0056b3;
+      transform: translateY(-1px);
+    }
+
+    &:disabled {
+      background: #6c757d;
+      cursor: not-allowed;
+      opacity: 0.6;
+    }
+
+    &:active {
+      transform: translateY(0);
+    }
   }
 
   &__top-k {

@@ -2,6 +2,7 @@ import React, { useRef, useEffect, useCallback } from 'react';
 import { translatorService } from '../../services/TranslatorService';
 import { useToast } from '../Toast/ToastProvider';
 import { useSpeech } from '../../contexts/SpeechContext';
+import { useApp } from '../../contexts/AppContext';
 import './QueryInput.scss';
 
 const QueryInput = ({
@@ -18,6 +19,9 @@ const QueryInput = ({
 }) => {
   const toast = useToast();
   const fileInputRef = useRef(null);
+  
+  // Access AppContext for temporal time
+  const { temporalTime, setTemporalTime } = useApp();
   
   // Speech-to-text functionality using SpeechContext
   const {
@@ -399,6 +403,25 @@ const QueryInput = ({
     }
   };
 
+  // Handle temporal time change
+  const handleTemporalTimeChange = (value) => {
+    setTemporalTime(value);
+  };
+
+  // Format temporal time display
+  const formatTemporalTime = (seconds) => {
+    if (seconds < 60) {
+      return `${seconds}s`;
+    } else {
+      const minutes = Math.floor(seconds / 60);
+      const remainingSeconds = seconds % 60;
+      return `${minutes}m${remainingSeconds}s`;
+    }
+  };
+
+  // Calculate progress for temporal time slider (min: 5, max: 300)
+  const temporalTimeProgress = ((temporalTime - 5) / (300 - 5)) * 100;
+
   return (
     <div 
       className="sidebar__input sidebar__drop-zone"
@@ -408,6 +431,31 @@ const QueryInput = ({
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
+      {/* Temporal Time Slider */}
+      <div className="sidebar__temporal-time-section">
+        <label className="sidebar__temporal-time-label" htmlFor="temporal-time-slider" style={{ maxWidth: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          Temporal Time: {formatTemporalTime(temporalTime)}
+        </label>
+        <div className="sidebar__temporal-time">
+          <div className="sidebar__custom-slider-track">
+            <div className="sidebar__custom-slider-fill" style={{ width: `${temporalTimeProgress}%` }}></div>
+          </div>
+          <input
+            id="temporal-time-slider"
+            type="range"
+            className="sidebar__temporal-time-slider"
+            min="5"
+            max="300"
+            value={temporalTime}
+            onChange={(e) => handleTemporalTimeChange(parseInt(e.target.value, 10))}
+          />
+          <div className="sidebar__temporal-time-range">
+            <span>5s</span>
+            <span>5m</span>
+          </div>
+        </div>
+      </div>
+
       {/* Hidden file input for image paste */}
       <input
         ref={fileInputRef}
