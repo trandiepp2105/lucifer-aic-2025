@@ -86,6 +86,58 @@ class DresLoginView(APIView):
                             session_id=dres_data.get('sessionId', '')
                         )
                         
+                        # Get evaluation list and find active evaluation
+                        active_evaluation_id = None
+                        try:
+                            # Get DRES evaluation list endpoint (using client API)
+                            dres_base_url = os.getenv('DRES_BASE_URL', dres_login_endpoint.rsplit('/login', 1)[0])
+                            evaluation_list_endpoint = f"{dres_base_url}/api/v2/client/evaluation/list"
+                            
+
+                            # Make request with session as query parameter
+                            params = {'session': dres_session.session_id}
+                            eval_response = requests.get(
+                                evaluation_list_endpoint,
+                                params=params,
+                                headers={'Content-Type': 'application/json'},
+                                timeout=10
+                            )
+ 
+                            if eval_response.status_code == 200:
+                                # Log raw response for debugging
+                                response_text = eval_response.text
+    
+                                try:
+                                    evaluations = eval_response.json()
+                                    
+                                    # Find the first ACTIVE evaluation
+                                    for evaluation in evaluations:
+                                        if evaluation.get('status') == 'ACTIVE':
+                                            active_evaluation_id = evaluation.get('id')
+                                            print(f"Found ACTIVE evaluation: {active_evaluation_id}")
+                                            break
+                                    
+                                    if not active_evaluation_id:
+                                        print("WARNING: No ACTIVE evaluation found in the list")
+                                        
+                                except json.JSONDecodeError as json_error:
+                                    print(f"ERROR: Failed to parse evaluation list JSON: {str(json_error)}")
+                                    print(f"Response content: {response_text}")
+                            else:
+                                print(f"WARNING: Failed to fetch evaluation list: {eval_response.status_code}")
+                                print(f"Response body: {eval_response.text}")
+                                
+                        except requests.exceptions.RequestException as req_error:
+                            print(f"ERROR: Request error fetching evaluation list: {str(req_error)}")
+                        except Exception as eval_error:
+                            print(f"ERROR: Unexpected error fetching evaluation list: {str(eval_error)}")
+                            # Continue without evaluation_id if this fails
+                        
+                        # Update session with active evaluation_id if found
+                        if active_evaluation_id:
+                            dres_session.evaluation_id = active_evaluation_id
+                            dres_session.save()
+                        
                         # Return our DresSession data instead of DRES server data
                         return Response({
                             'id': dres_session.id,
