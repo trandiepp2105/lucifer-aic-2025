@@ -224,7 +224,7 @@ class QueryListCreateAPIView(APIView):
         queries_structure_str = json.dumps(queries_structure)
         
         # Default weights - có thể được override bởi request params
-        default_weights = {'text': 0.3, 'ocr': 0.3, 'subtitle': 0.3, 'image': 0.2}
+        default_weights = {'text': 0.3, 'ocr': 0.3, 'subtitle': 0.3, 'image': 0.1}
         
         # Cho phép client gửi custom weights qua query params
         weights = {}
