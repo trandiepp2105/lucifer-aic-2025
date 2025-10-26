@@ -17,7 +17,7 @@ const getInitialStateFromURL = () => {
     stage: 1,             // số
     section: 'chat',      // 'chat' hoặc 'history'
     k: 50,                // top k results (1-200)
-    temporalTime: 5,     // temporal time parameter (5-300)
+    temporalTime: 5,     // temporal time parameter (5-180)
     searchUrl: '',        // search server endpoint
     dresSession: '',      // DRES session ID
     evaluationId: '',     // DRES evaluation ID
@@ -84,7 +84,7 @@ const getInitialStateFromURL = () => {
   const temporalTimeParam = urlParams.get('temporaltime');
   if (temporalTimeParam) {
     const temporalTime = parseInt(temporalTimeParam, 10);
-    if (temporalTime >= 5 && temporalTime <= 300) {
+    if (temporalTime >= 5 && temporalTime <= 180) {
       urlState.temporalTime = temporalTime;
     }
   }

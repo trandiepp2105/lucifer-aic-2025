@@ -178,7 +178,7 @@ const Sidebar = ({
     } finally {
       setLoading(false);
     }
-  }, [session, viewMode, k, searchUrl, onFramesUpdate, toast, mode]);
+  }, [session, viewMode, k, temporalTime, searchUrl, onFramesUpdate, toast, mode]);
 
   // Helper functions needed by keyboard navigation
   const handleInternalStageChange = (newStage) => {
@@ -490,19 +490,19 @@ const Sidebar = ({
       }
     }, 0);
   };
-  const handleSendQueryIfReady = () => {
-    // Get the most up-to-date query from localQueries instead of currentLocalQuery
-    const currentQuery = localQueries.find(q => q.stage === stage) || currentLocalQuery;
-    if (!currentQuery) return;
+  // const handleSendQueryIfReady = () => {
+  //   // Get the most up-to-date query from localQueries instead of currentLocalQuery
+  //   const currentQuery = localQueries.find(q => q.stage === stage) || currentLocalQuery;
+  //   if (!currentQuery) return;
     
-    const hasText = currentQuery.text?.trim();
-    const hasOcr = currentQuery.ocr?.trim();
-    const hasImage = currentQuery.image || currentQuery.imageFile;
-    const hasSpeech = currentQuery.speech?.trim();
-    if (!hasText && !hasOcr && !hasImage && !hasSpeech) return;
+  //   const hasText = currentQuery.text?.trim();
+  //   const hasOcr = currentQuery.ocr?.trim();
+  //   const hasImage = currentQuery.image || currentQuery.imageFile;
+  //   const hasSpeech = currentQuery.speech?.trim();
+  //   if (!hasText && !hasOcr && !hasImage && !hasSpeech) return;
 
-    handleSendMessage();
-  };
+  //   handleSendMessage();
+  // };
   // Initialize session when component mounts
   useEffect(() => {
     const initializeApp = async () => {
