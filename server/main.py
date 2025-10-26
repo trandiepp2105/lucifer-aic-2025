@@ -127,7 +127,8 @@ async def startup_event():
     print("\n⚡ Initializing main search engine...")
     search_engine = SearchEngine(
         vector_engine=faiss_search_engine,
-        ocr_engine=meilisearch_service
+        ocr_engine=meilisearch_service,
+        segments_dir=settings.segment_path
     )
     print("✅ All engines initialized successfully!\n")
 
@@ -157,30 +158,38 @@ async def health_check():
 
 @app.post("/search")
 async def handle_search(
-    k: int = Form(default=10, description="Số lượng chuỗi video kết quả cuối cùng cần trả về."),
-    temporal_time: int = Form(default=30, description="Thời gian tối đa giữa hai frame"),
+    request: Request,
+
+    k: int = Form(10, description="Số lượng chuỗi video kết quả cuối cùng cần trả về."),
+
+    temporal_time: int = Form(10, description="Thời gian tối đa giữa hai frame"),
+
     queries_structure: str = Form(
         ..., 
         description='Một chuỗi JSON mô tả các stage. Ví dụ: \'[{"text": "a plane"}, {"ocr": "spirit"}]\' '
     ),
-    image_files: Optional[List[UploadFile]] = File(
-        default=[],
+
+    image_files: Optional[List[UploadFile]] = Form(
+        [],
         description="Một danh sách chứa tất cả các file ảnh được tham chiếu trong 'queries_structure'."
     ),
+
     weights: Optional[str] = Form(
         None, 
         description='(Optional) Một chuỗi JSON chứa trọng số giữa các loại truy vấn. Ví dụ: \'{"text": 0.5, "ocr": 0.3, "image": 0.2}\''
     ),
+    
     vector_models_config: Optional[str] = Form(
         None,
-        description='(Optional) Một chuỗi JSON cấu hình các model vector và trọng số. Ví dụ: \'[{"model_name": "clip-vit-h", "weight": 0.7}]\' '
+        description='(Optional) Một chuỗi JSON cấu hình các model vector và trọng số. Ví dụ: \'[{"model_name": "clip-vit-h", "weight": 0.7}, {"model_name": "clip-vit-l", "weight": 0.3}]\' '
     )
 ):
     """
     Thực hiện Temporal Search với cấu hình đa mô hình và trọng số tùy chỉnh.
     """
+
     try:
-        # Parse queries_structure
+        # --- 1. Phân tích các tham số đầu vào (dưới dạng chuỗi JSON) ---
         try:
             parsed_structure = json.loads(queries_structure)
             if not isinstance(parsed_structure, list):
@@ -188,7 +197,6 @@ async def handle_search(
         except (json.JSONDecodeError, ValueError) as e:
             raise HTTPException(status_code=400, detail=f"Lỗi phân tích 'queries_structure': {e}")
 
-        # Parse weights
         parsed_weights = None
         if weights:
             try:
@@ -197,24 +205,24 @@ async def handle_search(
                     raise ValueError("weights phải là một JSON object.")
             except (json.JSONDecodeError, ValueError) as e:
                 raise HTTPException(status_code=400, detail=f"Lỗi phân tích 'weights': {e}")
-        else:
-            parsed_weights = settings.get_fusion_weights()
         
-        # Parse vector_models_config
+        # --- THÊM LOGIC PHÂN TÍCH CHO vector_models_config ---
         parsed_vector_models = None
         if vector_models_config:
             try:
                 parsed_vector_models = json.loads(vector_models_config)
                 if not isinstance(parsed_vector_models, list):
                     raise ValueError("vector_models_config phải là một mảng JSON.")
+                # (Tùy chọn) Thêm kiểm tra sâu hơn cho từng phần tử trong mảng nếu cần
             except (json.JSONDecodeError, ValueError) as e:
-                raise HTTPException(status_code=400, detail=f"Lỗi phân tích 'vector_models_config': {e}")
+                 raise HTTPException(status_code=400, detail=f"Lỗi phân tích 'vector_models_config': {e}")
 
-        # Reconstruct queries with image data
+
+        # --- 2. Xây dựng lại truy vấn với dữ liệu ảnh ---
         uploaded_images = {file.filename: file for file in image_files}
-        reconstructed_queries = []
+        reconstructed_queries: List[Dict[str, Any]] = []
 
-        def is_valid(value):
+        def is_valid(value: Any) -> bool:
             return value not in [None, "", "null"]
 
         for i, stage_data in enumerate(parsed_structure):
@@ -231,10 +239,7 @@ async def handle_search(
             if 'image_ref' in stage_data and is_valid(stage_data['image_ref']):
                 image_filename = stage_data['image_ref']
                 if image_filename not in uploaded_images:
-                    raise HTTPException(
-                        status_code=400, 
-                        detail=f"Ảnh '{image_filename}' được tham chiếu nhưng không có trong 'image_files'."
-                    )
+                    raise HTTPException(status_code=400, detail=f"Ảnh '{image_filename}' được tham chiếu nhưng không có trong 'image_files'.")
                 
                 image_file = uploaded_images[image_filename]
                 image_data = await image_file.read()
@@ -242,54 +247,41 @@ async def handle_search(
                 current_stage['image'] = pil_image
 
             if not current_stage:
-                raise HTTPException(
-                    status_code=400, 
-                    detail=f"Stage {i} không chứa truy vấn hợp lệ (text, ocr, subtitle hoặc image_ref)."
-                )
+                raise HTTPException(status_code=400, detail=f"Stage {i} không chứa truy vấn hợp lệ (text, ocr, hoặc image_ref).")
 
             reconstructed_queries.append(current_stage)
-
-        # Perform search
-        start_time = time.time()
+        # --- 3. Gọi hàm tìm kiếm với đầy đủ các tham số đã được phân tích ---
         results = search_engine.temporal_search(
             queries=reconstructed_queries, 
             k=k,
             time_distance=temporal_time,
-            initial_search_k=settings.default_initial_search_k,
             weights=parsed_weights,
+            # Truyền cấu hình đa mô hình vào đây
             vector_models_config=parsed_vector_models,
-            agent_format=True
+            format = 'shot'
         )
-        processing_time = time.time() - start_time
+
         
+        # --- 4. Trả kết quả ---
         return {
             "status": "success",
-            "processing_time_seconds": round(processing_time, 3),
             "k_requested": k,
             "results_found": len(results),
             "query_details": {
-                "stages_processed": len(reconstructed_queries),
-                "fusion_weights_used": parsed_weights,
-                "vector_models_used": parsed_vector_models
+                 "stages_processed": len(reconstructed_queries),
+                 "fusion_weights_used": parsed_weights,
+                 "vector_models_used": parsed_vector_models
             },
             "results": results,
         }
 
     except HTTPException as http_exc:
+        # Ghi log lỗi và re-raise để FastAPI xử lý
         print(f"❌ API Error: {http_exc.status_code}, Detail: {http_exc.detail}")
         raise http_exc
 
     except Exception as e:
+        # Ghi log lỗi hệ thống để debug
         print(f"❌ Unhandled System Error: {e}")
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Lỗi hệ thống không mong muốn: {str(e)}")
-
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(
-        app, 
-        host=settings.api_host, 
-        port=settings.api_port,
-        workers=settings.api_workers
-    )
