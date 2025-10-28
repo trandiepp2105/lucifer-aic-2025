@@ -487,6 +487,21 @@ const DisplayListFrame = forwardRef(({
               <img src="/assets/team.svg" alt="Team" />
               <span>TEAM ({tempTrakeItems.length})</span>
             </button>
+
+            {/* Clear selected TRAKE items button */}
+            <button
+              className="display-frame__clear-trake-btn"
+              onClick={() => {
+                // Clear the temporary TRAKE selections and notify the user
+                clearTempTrakeItems();
+                toast.info('Cleared TRAKE selection');
+              }}
+              title="Clear selected TRAKE items"
+            >
+              <img src="/assets/clear.svg" alt="Clear" />
+              <span>CLEAR</span>
+            </button>
+
             <button
               className="display-frame__submit-trake-btn"
               onClick={handleSubmitTrake}
