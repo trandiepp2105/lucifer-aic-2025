@@ -29,6 +29,26 @@
       pointer-events: auto;
     }
   }
+  &--peak {
+    border: 3px solid #28a745 !important;
+    box-shadow: 0 0 10px rgba(40, 167, 69, 0.6), 
+                0 4px 12px rgba(40, 167, 69, 0.3) !important;
+    
+    &:hover {
+      box-shadow: 0 0 15px rgba(40, 167, 69, 0.8), 
+                  0 6px 16px rgba(40, 167, 69, 0.4) !important;
+    }
+  }
+  // Checked state - blue highlight
+  &--checked {
+    border: 4px solid #007bff !important;
+    box-shadow: 0 0 20px rgba(0, 123, 255, 0.8), 0 6px 20px rgba(0, 123, 255, 0.5) !important;
+    
+    &:hover {
+      box-shadow: 0 0 25px rgba(0, 123, 255, 1), 
+                  0 8px 24px rgba(0, 123, 255, 0.6) !important;
+    }
+  }
 
   &--selected {
     border-color: #007bff;
@@ -44,16 +64,7 @@
   }
 
   // Peak frame highlighting with green border
-  &--peak {
-    border: 3px solid #28a745 !important;
-    box-shadow: 0 0 10px rgba(40, 167, 69, 0.6), 
-                0 4px 12px rgba(40, 167, 69, 0.3) !important;
-    
-    &:hover {
-      box-shadow: 0 0 15px rgba(40, 167, 69, 0.8), 
-                  0 6px 16px rgba(40, 167, 69, 0.4) !important;
-    }
-  }
+
 
   // Size variants
   &--small {

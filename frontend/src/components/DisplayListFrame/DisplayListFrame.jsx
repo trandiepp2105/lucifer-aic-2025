@@ -226,15 +226,9 @@ const DisplayListFrame = forwardRef(({
       return;
     }
 
-    // Convert tempTrakeItems to the format expected by submission service
-    const frameList = tempTrakeItems.map(item => ({
-      video_name: item.video_name,
-      frame_index: item.frame_index,
-      group: item.group || activeGroup
-    }));
-
-    // Use submission modal for confirmation
-    submitTRAKEAnswer(frameList);
+    // Pass tempTrakeItems directly to submission modal (they already have all frame data including url)
+    // The modal will display the frames, and on confirm, the service will extract what it needs
+    submitTRAKEAnswer(tempTrakeItems);
   };
 
   // Keyboard navigation
