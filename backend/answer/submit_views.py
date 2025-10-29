@@ -433,8 +433,8 @@ class SubmitTRAKEAnswerView(APIView):
                 timestamp_ms = int((frame_index / fps) * 1000)
                 timestamps.append(str(timestamp_ms))
             
-            # Format: TR-{video_name},stage1,stage2,stage3,stage4
-            target = f"TR-{video_name}," + ",".join(timestamps)
+            # Format: TR-{video_name}-stage1,stage2,stage3,stage4
+            target = f"TR-{video_name}-" + ",".join(timestamps)
             
             logger.info(f"Formatted TRAKE target: {target}")
             logger.info(f"DRES Session: {dres_session}")

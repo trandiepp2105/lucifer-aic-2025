@@ -558,6 +558,7 @@ const DisplayListFrame = forwardRef(({
         frameData={submissionModal.frameData}
         qaText={submissionModal.qaText}
         isSubmitting={submissionModal.isSubmitting}
+        onRemoveTrakeItem={removeTempTrakeItem}
       />
 
       <TeamAnswerModal

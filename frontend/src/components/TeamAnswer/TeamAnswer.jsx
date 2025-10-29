@@ -109,7 +109,7 @@ const TeamAnswer = ({
   const trakeEventSourceRef = useRef(null); // Add TRAKE SSE ref
   
   // Get app context for queryIndex, round and queryMode
-  const { queryIndex, round, queryMode } = useApp();
+  const { queryIndex, round, queryMode, removeTempTrakeItem } = useApp();
   const toast = useToast();
 
   // Initialize SSE connection
@@ -877,6 +877,7 @@ const TeamAnswer = ({
         frameData={submissionModal.frameData}
         qaText={submissionModal.qaText}
         isSubmitting={submissionModal.isSubmitting}
+        onRemoveTrakeItem={removeTempTrakeItem}
       />
     </div>
   );

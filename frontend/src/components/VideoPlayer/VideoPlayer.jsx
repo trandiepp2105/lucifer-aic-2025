@@ -1239,6 +1239,7 @@ const VideoPlayer = ({
           frameData={submissionModal.frameData}
           qaText={submissionModal.qaText}
           isSubmitting={submissionModal.isSubmitting}
+          onRemoveTrakeItem={removeTempTrakeItem}
         />
       )}
 

@@ -33,6 +33,7 @@ const HomePage = () => {
     setStage,
     setSection,
     setK,
+    removeTempTrakeItem, // Add removeTempTrakeItem for TRAKE deletion in modal
   } = useApp();
 
   // Use TRAKE context for TRAKE-related state
@@ -531,6 +532,7 @@ const HomePage = () => {
         frameData={submissionModal.frameData}
         qaText={submissionModal.qaText}
         isSubmitting={submissionModal.isSubmitting}
+        onRemoveTrakeItem={removeTempTrakeItem}
       />
     </div>
   );

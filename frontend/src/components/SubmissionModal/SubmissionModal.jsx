@@ -9,15 +9,21 @@ const SubmissionModal = ({
   submissionType, // 'kis', 'qa', 'trake'
   frameData, // For KIS/QA: single frame object, For TRAKE: array of frames
   qaText = '', // For QA submission
-  isSubmitting = false 
+  isSubmitting = false,
+  onRemoveTrakeItem // Callback to remove a TRAKE item
 }) => {
   const [localQAText, setLocalQAText] = useState(qaText || '');
+  const [localFrameData, setLocalFrameData] = useState(frameData);
 
   useEffect(() => {
     if (isOpen && submissionType === 'qa') {
       setLocalQAText(qaText || '');
     }
   }, [isOpen, submissionType, qaText]);
+
+  useEffect(() => {
+    setLocalFrameData(frameData);
+  }, [frameData]);
 
   if (!isOpen) return null;
 
@@ -63,23 +69,48 @@ const SubmissionModal = ({
       case 'qa':
         return 'Are you sure you want to submit this frame with QA text?';
       case 'trake':
-        return `Are you sure you want to submit ${Array.isArray(frameData) ? frameData.length : 1} frame(s) for TRAKE answer?`;
+        return `Are you sure you want to submit ${Array.isArray(localFrameData) ? localFrameData.length : 1} frame(s) for TRAKE answer?`;
       default:
         return 'Are you sure you want to submit this answer?';
     }
   };
 
+  const handleRemoveTrakeItem = (frameToRemove) => {
+    if (onRemoveTrakeItem) {
+      onRemoveTrakeItem(frameToRemove);
+    }
+    // Update local state
+    setLocalFrameData(prevData => {
+      if (Array.isArray(prevData)) {
+        return prevData.filter(frame => 
+          !(frame.video_name === frameToRemove.video_name && 
+            frame.frame_index === frameToRemove.frame_index)
+        );
+      }
+      return prevData;
+    });
+  };
+
   const renderFramePreview = () => {
-    if (submissionType === 'trake' && Array.isArray(frameData)) {
+    if (submissionType === 'trake' && Array.isArray(localFrameData)) {
       // For TRAKE, show horizontal scrollable list of all frames
       return (
         <div className="submission-modal__trake-frames">
           <div className="submission-modal__trake-frames-label">
-            Frames to submit ({frameData.length} total):
+            Frames to submit ({localFrameData.length} total):
           </div>
           <div className="submission-modal__trake-frames-list">
-            {frameData.map((frame, index) => (
+            {localFrameData.map((frame, index) => (
               <div key={`${frame.video_name}-${frame.frame_index}`} className="submission-modal__trake-frame-item">
+                <button
+                  className="submission-modal__trake-frame-delete"
+                  onClick={() => handleRemoveTrakeItem(frame)}
+                  disabled={isSubmitting}
+                  title="Remove this frame"
+                  type="button"
+                >
+                  ×
+                </button>
                 <FrameItem
                   frame={frame}
                   size="small"
@@ -92,12 +123,12 @@ const SubmissionModal = ({
           </div>
         </div>
       );
-    } else if (frameData && !Array.isArray(frameData)) {
+    } else if (localFrameData && !Array.isArray(localFrameData)) {
       // For KIS/QA, show the single frame
       return (
         <div className="submission-modal__single-frame">
           <FrameItem
-            frame={frameData}
+            frame={localFrameData}
             size="medium"
             showFilename={true}
             className="submission-modal__frame"
