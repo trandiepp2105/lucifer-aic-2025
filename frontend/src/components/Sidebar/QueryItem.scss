@@ -59,6 +59,26 @@
       transform: rotate(3deg);
     }
   }
+
+  &--hidden {
+    .sidebar__message-content {
+      position: relative;
+      opacity: 0.6;
+    }
+  }
+}
+
+// Hidden overlay
+.sidebar__message-hidden-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 8px;
+  pointer-events: none;
+  z-index: 1;
 }
 
 // Drag handle - visual indicator only
@@ -207,6 +227,29 @@
       background: #f8d7da;
       border-color: #dc3545;
     //   color: #721c24;
+    }
+  }
+
+  &--hidden {
+    color: #6c757d;
+    
+    &:hover {
+      background: #e9ecef;
+      border-color: #6c757d;
+    }
+
+    &.active {
+      background: #495057;
+      border-color: #495057;
+      
+      img {
+        filter: brightness(0) invert(1);
+      }
+      
+      &:hover {
+        background: #343a40;
+        border-color: #343a40;
+      }
     }
   }
 }

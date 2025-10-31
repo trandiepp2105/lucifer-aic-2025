@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import ReactDOM from 'react-dom';
 import {
   DndContext,
   closestCenter,
@@ -835,26 +836,44 @@ const TeamAnswer = ({
         )}
       </div>
 
-      {/* Edit Modal for team answers */}
-      <TeamAnswerModal
-        isOpen={!!editingItem}
-        onClose={handleEditModalClose}
-        onSubmit={handleEditModalSubmit}
-        frame={editingItem}
-        allTeamAnswers={allTeamAnswers}
-        isEditMode={true}
-      />
+      {/* Render modals via Portal to escape parent container constraints */}
+      {ReactDOM.createPortal(
+        <>
+          {/* Edit Modal for team answers */}
+          <TeamAnswerModal
+            isOpen={!!editingItem}
+            onClose={handleEditModalClose}
+            onSubmit={handleEditModalSubmit}
+            frame={editingItem}
+            allTeamAnswers={allTeamAnswers}
+            isEditMode={true}
+          />
 
-      {/* Image Zoom Modal */}
-      <ImageZoomModal
-        isOpen={isImageZoomOpen}
-        onClose={handleCloseImageZoom}
-        imageUrl={zoomImageUrl}
-        imageAlt={zoomImageAlt}
-        frame={zoomFrame}
-      />
+          {/* Image Zoom Modal */}
+          <ImageZoomModal
+            isOpen={isImageZoomOpen}
+            onClose={handleCloseImageZoom}
+            imageUrl={zoomImageUrl}
+            imageAlt={zoomImageAlt}
+            frame={zoomFrame}
+          />
 
-      {/* Video Player Modal */}
+          {/* Submission Modal */}
+          <SubmissionModal
+            isOpen={submissionModal.isOpen}
+            onClose={closeSubmissionModal}
+            onConfirm={handleSubmissionConfirm}
+            submissionType={submissionModal.type}
+            frameData={submissionModal.frameData}
+            qaText={submissionModal.qaText}
+            isSubmitting={submissionModal.isSubmitting}
+            onRemoveTrakeItem={removeTempTrakeItem}
+          />
+        </>,
+        document.body
+      )}
+
+      {/* Video Player Modal - keep outside portal as it needs to be full overlay */}
       {isVideoPlayerOpen && (
         <VideoPlayer
           isOpen={isVideoPlayerOpen}
@@ -867,18 +886,6 @@ const TeamAnswer = ({
           allTeamAnswers={allTeamAnswers}
         />
       )}
-
-      {/* Submission Modal */}
-      <SubmissionModal
-        isOpen={submissionModal.isOpen}
-        onClose={closeSubmissionModal}
-        onConfirm={handleSubmissionConfirm}
-        submissionType={submissionModal.type}
-        frameData={submissionModal.frameData}
-        qaText={submissionModal.qaText}
-        isSubmitting={submissionModal.isSubmitting}
-        onRemoveTrakeItem={removeTempTrakeItem}
-      />
     </div>
   );
 };

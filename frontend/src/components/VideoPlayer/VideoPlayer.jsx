@@ -462,15 +462,20 @@ const VideoPlayer = ({
 
   // Auto-focus VideoPlayer when it opens to enable keyboard shortcuts
   useEffect(() => {
-    if (isOpen && containerRef.current) {
+    if (isOpen && containerRef.current && 
+        !isTeamAnswerModalOpen && 
+        !isImageZoomOpen &&
+        !submissionModal.isOpen) {
       // Small delay to ensure the component is fully rendered
       const timeoutId = setTimeout(() => {
-        containerRef.current.focus();
+        if (containerRef.current) {
+          containerRef.current.focus();
+        }
       }, 100);
       
       return () => clearTimeout(timeoutId);
     }
-  }, [isOpen]);
+  }, [isOpen, isTeamAnswerModalOpen, isImageZoomOpen, submissionModal.isOpen]);
 
   // Video event handlers
   const handleVideoTimeUpdate = () => {
@@ -707,13 +712,47 @@ const VideoPlayer = ({
 
   const handleVideoClick = () => {
     togglePlayPause();
+    
+    // Check if user is typing in an input/textarea (e.g. modal QA input)
+    const isTyping = document.activeElement && 
+                     (document.activeElement.tagName === 'INPUT' || 
+                      document.activeElement.tagName === 'TEXTAREA');
+    
     // Ensure focus is on the container for keyboard shortcuts
-    if (containerRef.current) {
+    // BUT don't steal focus if any modal is open OR user is typing
+    if (containerRef.current &&
+        !isTyping &&
+        !isTeamAnswerModalOpen && 
+        !isImageZoomOpen &&
+        !submissionModal.isOpen) {
       containerRef.current.focus();
     }
   };
 
-  const handleMouseMove = () => {
+  const handleMouseMove = (e) => {
+    // Don't do anything if mouse is over a modal - check this FIRST
+    if (e.target.closest('.team-answer-modal, .submission-modal, .image-zoom-modal')) {
+      return;
+    }
+    
+    // Check if user is currently typing in an input/textarea or any editable element
+    const activeElement = document.activeElement;
+    const isTyping = activeElement && 
+                     (activeElement.tagName === 'INPUT' || 
+                      activeElement.tagName === 'TEXTAREA' ||
+                      activeElement.isContentEditable);
+    
+    // Don't do anything if user is typing
+    if (isTyping) {
+      return;
+    }
+    
+    // Check if any modal is actually open
+    const hasOpenModal = isTeamAnswerModalOpen || isImageZoomOpen || submissionModal.isOpen;
+    if (hasOpenModal) {
+      return;
+    }
+    
     setShowControls(true);
     
     // Ensure focus when user interacts with the player
@@ -1213,7 +1252,7 @@ const VideoPlayer = ({
           </div>
 
           {/* Team Answer Section - replaces PreviewTRAKEAnswer */}
-          <TeamAnswer
+          {/* <TeamAnswer
             selectedFrame={currentFrame}
             isVisible={true}
             onToggle={null} // Remove empty function - allow component to handle
@@ -1225,45 +1264,39 @@ const VideoPlayer = ({
             onRefresh={onRefresh}
             isCompact={true}
             className="video-player__team-answer-section"
-          />
+          /> */}
         </div>
       </div>
 
       {/* SubmissionModal overlay within VideoPlayer - render in component tree */}
-      {submissionModal.isOpen && (
-        <SubmissionModal
-          isOpen={submissionModal.isOpen}
-          onClose={closeSubmissionModal}
-          onConfirm={handleSubmissionConfirm}
-          submissionType={submissionModal.type}
-          frameData={submissionModal.frameData}
-          qaText={submissionModal.qaText}
-          isSubmitting={submissionModal.isSubmitting}
-          onRemoveTrakeItem={removeTempTrakeItem}
-        />
-      )}
+      <SubmissionModal
+        isOpen={submissionModal.isOpen}
+        onClose={closeSubmissionModal}
+        onConfirm={handleSubmissionConfirm}
+        submissionType={submissionModal.type}
+        frameData={submissionModal.frameData}
+        qaText={submissionModal.qaText}
+        isSubmitting={submissionModal.isSubmitting}
+        onRemoveTrakeItem={removeTempTrakeItem}
+      />
 
       {/* TeamAnswerModal overlay within VideoPlayer - render in component tree */}
-      {isTeamAnswerModalOpen && frameToSubmit && (
-        <TeamAnswerModal
-          isOpen={isTeamAnswerModalOpen}
-          onClose={handleTeamAnswerModalClose}
-          onSubmit={handleTeamAnswerComplete}
-          frame={frameToSubmit}
-          allTeamAnswers={allTeamAnswers}
-        />
-      )}
+      <TeamAnswerModal
+        isOpen={isTeamAnswerModalOpen && !!frameToSubmit}
+        onClose={handleTeamAnswerModalClose}
+        onSubmit={handleTeamAnswerComplete}
+        frame={frameToSubmit}
+        allTeamAnswers={allTeamAnswers}
+      />
 
       {/* ImageZoomModal overlay within VideoPlayer - render in component tree */}
-      {isImageZoomOpen && frameToZoom && (
-        <ImageZoomModal
-          isOpen={isImageZoomOpen}
-          onClose={handleCloseImageZoom}
-          imageUrl={frameToZoom?.url}
-          imageAlt={frameToZoom ? `Frame ${frameToZoom.video_name}-${frameToZoom.frame_index}` : ''}
-          frame={frameToZoom}
-        />
-      )}
+      <ImageZoomModal
+        isOpen={isImageZoomOpen && !!frameToZoom}
+        onClose={handleCloseImageZoom}
+        imageUrl={frameToZoom?.url}
+        imageAlt={frameToZoom ? `Frame ${frameToZoom.video_name}-${frameToZoom.frame_index}` : ''}
+        frame={frameToZoom}
+      />
     </div>
   );
 };

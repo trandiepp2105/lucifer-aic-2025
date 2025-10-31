@@ -15,7 +15,6 @@ const TeamAnswerModal = ({
 }) => {
   const { round, queryIndex } = useApp();
   const toast = useToast();
-  const modalRef = useRef(null);
   const textareaRef = useRef(null);
   const [qaText, setQaText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -45,27 +44,20 @@ const TeamAnswerModal = ({
     }
   }, [isOpen, allTeamAnswers, queryIndex, round, isEditMode, frame]);
 
-  // Focus modal when it opens to ensure it receives keyboard events
+  // Focus textarea and move cursor to end when modal opens (only once)
   useEffect(() => {
-    if (isOpen && modalRef.current) {
-      modalRef.current.focus();
-    }
-  }, [isOpen]);
-
-  // Focus textarea and move cursor to end when modal opens or text changes
-  useEffect(() => {
-    if (isOpen && textareaRef.current && qaText !== undefined) {
+    if (isOpen && textareaRef.current) {
       // Small delay to ensure modal is fully rendered and text is set
       setTimeout(() => {
         if (textareaRef.current) { // Check again in timeout
           textareaRef.current.focus();
           // Move cursor to end of text
-          const length = qaText.length;
+          const length = textareaRef.current.value.length;
           textareaRef.current.setSelectionRange(length, length);
         }
       }, 100);
     }
-  }, [isOpen, qaText]); // Trigger when modal opens OR when text changes
+  }, [isOpen]); // Only trigger when modal opens, not when text changes
 
   const handleSubmit = useCallback(async () => {
     if (!frame) {
@@ -96,13 +88,11 @@ const TeamAnswerModal = ({
   // Handle Enter key to submit and block all other Enter behaviors
   useEffect(() => {
     const handleKeyDown = (e) => {
-      // Only handle if modal is open and event is within modal
-      if (!isOpen || !modalRef.current) return;
+      // Only handle if modal is open
+      if (!isOpen) return;
       
-      // Check if the event target is within our modal
-      if (!modalRef.current.contains(e.target)) return;
-      
-      if (e.key === 'Enter' && !e.shiftKey) {
+      // Check if the event target is the textarea
+      if (e.target === textareaRef.current && e.key === 'Enter' && !e.shiftKey) {
         // IMMEDIATELY stop all propagation to prevent other handlers
         e.preventDefault();
         e.stopPropagation();
@@ -159,12 +149,10 @@ const TeamAnswerModal = ({
 
   return (
     <div 
-      ref={modalRef}
       className="team-answer-modal" 
-      onClick={handleBackdropClick} 
-      tabIndex={-1}
+      onClick={handleBackdropClick}
     >
-      <div className="team-answer-modal__content" tabIndex={-1}>
+      <div className="team-answer-modal__content">
         <div className="team-answer-modal__header">
           <h3 className="team-answer-modal__title">
             {isEditMode ? 'Edit Team Answer' : 'Send Team Answer'}
