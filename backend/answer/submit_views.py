@@ -431,10 +431,13 @@ class SubmitTRAKEAnswerView(APIView):
                 frame_index = item['frame_index']
                 # Convert frame to milliseconds: (frame_index / fps) * 1000
                 timestamp_ms = int((frame_index / fps) * 1000)
-                timestamps.append(str(timestamp_ms))
+                timestamps.append(timestamp_ms)
+            
+            # Sort timestamps in ascending order
+            timestamps.sort()
             
             # Format: TR-{video_name}-stage1,stage2,stage3,stage4
-            target = f"TR-{video_name}-" + ",".join(timestamps)
+            target = f"TR-{video_name}-" + ",".join(str(ts) for ts in timestamps)
             
             logger.info(f"Formatted TRAKE target: {target}")
             logger.info(f"DRES Session: {dres_session}")
