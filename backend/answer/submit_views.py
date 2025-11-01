@@ -271,7 +271,8 @@ class SubmitQAAnswerView(APIView):
             time_in_milliseconds = int(time_in_seconds * 1000)
 
             # Build DRES payload for QA (text-based with metadata)
-            text_answer = f"{qa}-{video_name}-{time_in_milliseconds}"
+            # Format: QA-{answer}-{video_name}-{timestamp}
+            text_answer = f"QA-{qa}-{video_name}-{time_in_milliseconds}"
             dres_payload = {
                 "answerSets": [
                     {
