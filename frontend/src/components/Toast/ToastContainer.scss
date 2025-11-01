@@ -1,12 +1,22 @@
 .toast-container {
   position: fixed;
-  bottom: 20px;
-  right: 20px;
-  z-index: 10000;
+  bottom: 0;
+  right: 0;
+  z-index: 999999; // Very high z-index to ensure toasts are always on top
   pointer-events: none;
+  width: 100%;
+  height: 100vh;
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: flex-end;
+  justify-content: flex-start;
+  padding: 20px;
 
   .toast {
     pointer-events: auto;
+    position: relative !important; // Override inline styles
+    bottom: auto !important;
+    right: auto !important;
     margin-bottom: 10px;
   }
 }

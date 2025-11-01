@@ -42,23 +42,15 @@ export const ToastProvider = ({ children }) => {
     <ToastContext.Provider value={value}>
       {children}
       <div className="toast-container">
-        {toasts.map((toast, index) => {
-          // Calculate position from bottom
-          // Newest toast (highest index) should be at bottom
-          const fromBottom = toasts.length - 1 - index;
-          const bottomOffset = 20 + fromBottom * 70; // 70px spacing between toasts
-          
-          return (
-            <Toast
-              key={toast.id}
-              message={toast.message}
-              type={toast.type}
-              duration={toast.duration}
-              onClose={() => removeToast(toast.id)}
-              style={{ bottom: `${bottomOffset}px` }}
-            />
-          );
-        })}
+        {toasts.map((toast) => (
+          <Toast
+            key={toast.id}
+            message={toast.message}
+            type={toast.type}
+            duration={toast.duration}
+            onClose={() => removeToast(toast.id)}
+          />
+        ))}
       </div>
     </ToastContext.Provider>
   );
