@@ -8,7 +8,7 @@
   display: flex;
   align-items: center;
   justify-content: start;
-  z-index: 999999;
+  z-index: 99999;
   backdrop-filter: blur(5px);
 
   &:focus {
@@ -55,9 +55,13 @@
       
       // Make video section take full space
       .video-player__video-section {
-        flex: 1;
-        width: 100%;
-        height: 100%;
+        // flex: 1;
+        // width: 100%;
+        // height: 100%;
+        width: calc(100vw - 250px);
+        height: 100vh;
+        margin-right: 230px;
+        margin-left: 20px;
       }
     }
 
@@ -276,6 +280,17 @@
   }
   100% {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes fadeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
@@ -629,6 +644,14 @@
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 0.5rem;
   align-content: start;
+  
+  // Smooth scroll behavior
+  scroll-behavior: smooth;
+  
+  // Use GPU acceleration for smoother rendering
+  will-change: scroll-position;
+  transform: translateZ(0);
+  -webkit-overflow-scrolling: touch;
 
   // Custom scrollbar
   &::-webkit-scrollbar {
@@ -651,25 +674,37 @@
 }
 
 .video-player__gallery-item {
+  // Enable GPU acceleration for smooth rendering
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  
+  // Smooth opacity transition when items appear/disappear
+  opacity: 1;
+  animation: fadeIn 0.2s ease-in;
+  
   .video-player__frame {
     width: 100%;
     transition: all 0.2s ease;
     border: 2px solid transparent;
     border-radius: 4px;
     overflow: hidden;
+    
+    // GPU acceleration
+    transform: translateZ(0);
+    will-change: transform, border-color, box-shadow;
 
     &:hover {
-      transform: translateY(-2px);
+      transform: translateY(-2px) translateZ(0);
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
       border-color: #0066cc;
     }
 
     // Center frame gets orange border
     &.center {
-    border: 4px solid #2bff00;
-    box-shadow: 0 0 20px rgba(56, 238, 50, 0.8), 0 6px 20px rgba(134, 255, 104, 0.5);
-      // border-color: #ff8800;
-      // box-shadow: 0 0 6px rgba(255, 136, 0, 0.4);
+      border: 4px solid #2bff00;
+      box-shadow: 0 0 20px rgba(56, 238, 50, 0.8), 0 6px 20px rgba(134, 255, 104, 0.5);
+      // Smooth transition for center frame
+      transition: all 0.3s ease-in-out;
     }
 
     // Current frame gets red border

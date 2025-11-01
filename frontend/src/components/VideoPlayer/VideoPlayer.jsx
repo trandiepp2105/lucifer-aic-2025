@@ -93,11 +93,12 @@ const VideoPlayer = ({
   };
 
   // Generate neighboring frames based on centerFrame for gallery display
-  const generateNeighboringFrames = (baseCenterFrame) => {
-    if (!baseCenterFrame) return [];
+  // Memoized to avoid unnecessary re-renders
+  const videoFrames = React.useMemo(() => {
+    if (!centerFrame) return [];
     
     const frames = [];
-    const centerFrameIndex = parseInt(baseCenterFrame.frame_index);
+    const centerFrameIndex = parseInt(centerFrame.frame_index);
     
     // Generate 30 frames before and after (only frame_index divisible by 7)
     for (let i = -30; i <= 30; i++) {
@@ -111,29 +112,29 @@ const VideoPlayer = ({
       if (i === 0) {
         // This is the center frame - ensure all fields are present
         frameData = {
-          id: baseCenterFrame.id || `${baseCenterFrame.video_name}-${baseCenterFrame.frame_index}`,
-          filename: baseCenterFrame.filename || `${baseCenterFrame.video_name}/${baseCenterFrame.frame_index}`,
-          thumbnail: baseCenterFrame.thumbnail || baseCenterFrame.url,
-          url: baseCenterFrame.url || baseCenterFrame.thumbnail,
-          video_name: baseCenterFrame.video_name,
-          frame_index: baseCenterFrame.frame_index,
+          id: centerFrame.id || `${centerFrame.video_name}-${centerFrame.frame_index}`,
+          filename: centerFrame.filename || `${centerFrame.video_name}/${centerFrame.frame_index}`,
+          thumbnail: centerFrame.thumbnail || centerFrame.url,
+          url: centerFrame.url || centerFrame.thumbnail,
+          video_name: centerFrame.video_name,
+          frame_index: centerFrame.frame_index,
           isCenter: true,
           offset: 0
         };
       } else {
         // Create new frame URL by replacing frame_index in the original URL
-        const baseUrl = baseCenterFrame.thumbnail || baseCenterFrame.url;
+        const baseUrl = centerFrame.thumbnail || centerFrame.url;
         const newUrl = baseUrl.replace(
           `/${centerFrameIndex}.webp`, 
           `/${targetFrameIndex}.webp`
         );
         
         frameData = {
-          id: `${baseCenterFrame.video_name}-${targetFrameIndex}`,
-          filename: `${baseCenterFrame.video_name}/${targetFrameIndex}`,
+          id: `${centerFrame.video_name}-${targetFrameIndex}`,
+          filename: `${centerFrame.video_name}/${targetFrameIndex}`,
           thumbnail: newUrl,
           url: newUrl,
-          video_name: baseCenterFrame.video_name,
+          video_name: centerFrame.video_name,
           frame_index: targetFrameIndex,
           isCenter: false,
           offset: i
@@ -144,10 +145,7 @@ const VideoPlayer = ({
     }
     
     return frames;
-  };
-
-  // Get current video frames based on centerFrame
-  const videoFrames = generateNeighboringFrames(centerFrame);
+  }, [centerFrame?.video_name, centerFrame?.frame_index]);
 
   // Calculate frame index from current time and FPS
   const calculateFrameFromTime = (time, fps) => {
@@ -250,6 +248,9 @@ const VideoPlayer = ({
   }, [currentFrame?.video_name, isOpen]);
 
   // Update centerFrame based on video current time (for gallery display)
+  // Use throttled update to avoid too frequent re-renders
+  const updateCenterFrameRef = useRef(null);
+  
   useEffect(() => {
     if (!videoInfo || !internalCurrentFrame || isUserSeeking) return;
 
@@ -257,27 +258,42 @@ const VideoPlayer = ({
     const currentCenterFrameIndex = parseInt(centerFrame?.frame_index || 0);
     
     // Only update centerFrame if frame index changed significantly (for gallery)
+    // Throttle updates to max once per 200ms for smoother rendering
     if (Math.abs(newFrameIndex - currentCenterFrameIndex) >= 7) {
-      const baseUrl = (internalCurrentFrame.thumbnail || internalCurrentFrame.url);
-      const baseFrameIndex = parseInt(internalCurrentFrame.frame_index);
+      // Clear previous timeout
+      if (updateCenterFrameRef.current) {
+        clearTimeout(updateCenterFrameRef.current);
+      }
       
-      const newUrl = baseUrl.replace(
-        `/${baseFrameIndex}.webp`, 
-        `/${newFrameIndex}.webp`
-      );
-      
-      const newCenterFrame = {
-        id: `${internalCurrentFrame.video_name}-${newFrameIndex}`,
-        filename: `${internalCurrentFrame.video_name}/${newFrameIndex}`,
-        thumbnail: newUrl,
-        url: newUrl,
-        video_name: internalCurrentFrame.video_name,
-        frame_index: newFrameIndex
-      };
-      
-      setCenterFrame(newCenterFrame);
+      // Throttle update
+      updateCenterFrameRef.current = setTimeout(() => {
+        const baseUrl = (internalCurrentFrame.thumbnail || internalCurrentFrame.url);
+        const baseFrameIndex = parseInt(internalCurrentFrame.frame_index);
+        
+        const newUrl = baseUrl.replace(
+          `/${baseFrameIndex}.webp`, 
+          `/${newFrameIndex}.webp`
+        );
+        
+        const newCenterFrame = {
+          id: `${internalCurrentFrame.video_name}-${newFrameIndex}`,
+          filename: `${internalCurrentFrame.video_name}/${newFrameIndex}`,
+          thumbnail: newUrl,
+          url: newUrl,
+          video_name: internalCurrentFrame.video_name,
+          frame_index: newFrameIndex
+        };
+        
+        setCenterFrame(newCenterFrame);
+      }, 200); // 200ms throttle
     }
-  }, [currentTime, videoInfo, isUserSeeking]);
+    
+    return () => {
+      if (updateCenterFrameRef.current) {
+        clearTimeout(updateCenterFrameRef.current);
+      }
+    };
+  }, [currentTime, videoInfo, isUserSeeking, internalCurrentFrame, centerFrame?.frame_index]);
 
   // HLS initialization effect
   useEffect(() => {
@@ -838,7 +854,12 @@ const VideoPlayer = ({
     if (centerFrame && galleryRef.current && videoFrames.length > 0) {
       const frameElement = galleryRef.current.querySelector(`[data-frame-id="${centerFrame.id}"]`);
       if (frameElement) {
-        frameElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // Use smooth scroll with center alignment and inline center for better UX
+        frameElement.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'center',
+          inline: 'center'
+        });
       }
     }
   }, [centerFrame?.id, videoFrames.length]);
