@@ -131,7 +131,6 @@ const FrameItem = ({
     // Add class for peak frame highlighting
     if (isPeakFrame) {
       classes.push('frame-item--peak');
-      console.log('🎯 Applying peak class to:', frame.video_name, frame.frame_index, 'stage:', peakStage);
     }
     
     return classes.join(' ');

@@ -666,8 +666,10 @@
 
     // Center frame gets orange border
     &.center {
-      border-color: #ff8800;
-      box-shadow: 0 0 6px rgba(255, 136, 0, 0.4);
+    border: 4px solid #2bff00;
+    box-shadow: 0 0 20px rgba(56, 238, 50, 0.8), 0 6px 20px rgba(134, 255, 104, 0.5);
+      // border-color: #ff8800;
+      // box-shadow: 0 0 6px rgba(255, 136, 0, 0.4);
     }
 
     // Current frame gets red border

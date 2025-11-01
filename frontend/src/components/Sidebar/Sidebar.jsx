@@ -843,16 +843,16 @@ const Sidebar = ({
       toast.info('Query unhidden', 1000);
     } else {
       // Hide: move from localQueries to hiddenQueries
-      const originalIndex = localQueries.findIndex(q => q.stage === queryStage);
+      const queryExists = localQueries.some(q => q.stage === queryStage);
       
-      if (originalIndex !== -1) {
+      if (queryExists) {
         // Remove from localQueries
         setLocalQueries(prev => prev.filter(q => q.stage !== queryStage));
         
-        // Add to hiddenQueries with original index
+        // Add to hiddenQueries with original stage as the index
         setHiddenQueries(prev => [...prev, { 
           query: queryToToggle, 
-          originalIndex 
+          originalIndex: queryStage // Use stage number as originalIndex
         }]);
         
         toast.info('Query hidden', 1000);
@@ -927,34 +927,25 @@ const Sidebar = ({
   };
 
   // Merge localQueries with hiddenQueries for display
-  // Hidden queries are shown in their original positions with visual overlay
+  // Hidden queries are shown in their original stage positions with visual overlay
   const sortedLocalQueries = useMemo(() => {
     const sorted = [...localQueries].sort((a, b) => a.stage - b.stage);
     
-    // If no hidden queries, return sorted local queries
+    // If no hidden queries, return sorted local queries with displayStage = stage
     if (hiddenQueries.length === 0) {
-      return sorted.map(q => ({ ...q, isHidden: false }));
+      return sorted.map(q => ({ ...q, isHidden: false, displayStage: q.stage }));
     }
     
-    // Insert hidden queries at their original indices
-    const result = [...sorted.map(q => ({ ...q, isHidden: false }))];
+    // Combine all queries (visible + hidden) and sort by stage
+    const allQueries = [
+      ...sorted.map(q => ({ ...q, isHidden: false })),
+      ...hiddenQueries.map(({ query }) => ({ ...query, isHidden: true }))
+    ].sort((a, b) => a.stage - b.stage);
     
-    // Sort hidden queries by original index (descending) to insert from end
-    const sortedHidden = [...hiddenQueries].sort((a, b) => b.originalIndex - a.originalIndex);
-    
-    sortedHidden.forEach(({ query, originalIndex }) => {
-      // Mark query as hidden
-      const hiddenQuery = { ...query, isHidden: true };
-      
-      // Insert at original index (or at end if out of bounds)
-      const insertIndex = Math.min(originalIndex, result.length);
-      result.splice(insertIndex, 0, hiddenQuery);
-    });
-    
-    // Recalculate stage numbers based on display order (1-based)
-    return result.map((q, index) => ({
+    // displayStage should match the original stage number
+    return allQueries.map(q => ({
       ...q,
-      displayStage: index + 1 // Add displayStage for rendering
+      displayStage: q.stage
     }));
   }, [localQueries, hiddenQueries]);
 
