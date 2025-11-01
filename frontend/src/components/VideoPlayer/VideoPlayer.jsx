@@ -1045,6 +1045,17 @@ const VideoPlayer = ({
           <div className="video-player__layout">
             {/* Left side - Video Player */}
             <div className="video-player__video-section">
+              {/* Exit fullscreen button - only visible in fullscreen mode */}
+              {isFullscreen && (
+                <button 
+                  className="video-player__exit-fullscreen" 
+                  onClick={() => setIsFullscreen(false)}
+                  title="Exit Fullscreen (Esc)"
+                >
+                  ×
+                </button>
+              )}
+              
               <div className={`video-player__wrapper ${cursorHidden ? 'cursor-hidden' : ''}`}>
               {isLoading && (
                 <div className="video-player__loading">

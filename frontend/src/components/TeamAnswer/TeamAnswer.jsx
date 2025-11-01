@@ -874,7 +874,7 @@ const TeamAnswer = ({
       )}
 
       {/* Video Player Modal - keep outside portal as it needs to be full overlay */}
-      {isVideoPlayerOpen && (
+      {/* {isVideoPlayerOpen && (
         <VideoPlayer
           isOpen={isVideoPlayerOpen}
           onClose={handleCloseVideoPlayer}
@@ -885,7 +885,7 @@ const TeamAnswer = ({
           sendingFrames={new Set()} // TeamAnswer doesn't track sending frames
           allTeamAnswers={allTeamAnswers}
         />
-      )}
+      )} */}
     </div>
   );
 };
