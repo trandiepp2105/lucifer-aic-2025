@@ -19,8 +19,12 @@ echo -e "${GREEN}Starting download from Google Drive folder...${NC}"
 
 # Check if gdown is installed
 if ! command -v gdown &> /dev/null && ! command -v ~/.local/bin/gdown &> /dev/null; then
-    echo -e "${YELLOW}gdown is not installed. Installing with pip3 and --break-system-packages...${NC}"
-    pip3 install gdown --break-system-packages
+    echo -e "${YELLOW}gdown is not installed. Installing with pip3...${NC}"
+    # Try with --break-system-packages first (Python 3.11+), fallback to regular install
+    if ! pip3 install gdown --break-system-packages 2>/dev/null; then
+        echo -e "${YELLOW}Trying installation without --break-system-packages...${NC}"
+        pip3 install --user gdown || pip3 install gdown
+    fi
 fi
 
 # Use gdown from local bin if not in PATH

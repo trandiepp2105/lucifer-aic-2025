@@ -1,29 +1,29 @@
 # Core dependencies
-fastapi==0.109.0
-uvicorn[standard]==0.27.0
-python-multipart==0.0.6
-pydantic==2.5.3
-pydantic-settings==2.1.0
+fastapi
+uvicorn[standard]
+python-multipart
+pydantic
+pydantic-settings
 
 # Search engines
-meilisearch==0.31.0
-faiss-gpu==1.7.2
+meilisearch
+faiss-gpu-cu-12
 # faiss-cpu==1.7.4  # Uncomment if using CPU only
 
 # ML/AI
-open-clip-torch==2.24.0
-transformers==4.36.2
-torch==2.1.2
-torchvision==0.16.2
+open-clip-torch
+transformers
+torch
+torchvision
 
 # Image processing
-Pillow==10.2.0
+Pillow
 
 # Text processing
-rapidfuzz==3.6.1
+rapidfuzz
 
 # Utilities
-numpy==1.26.3
-tqdm==4.66.1
-python-dotenv==1.0.0
-ijson==3.2.3
+numpy
+tqdm
+python-dotenv
+ijson

@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     
     # Device Configuration
     device_0: str = Field(default="cuda:0", env="DEVICE_0")
-    device_1: str = Field(default="cuda:1", env="DEVICE_1")
+    device_1: str = Field(default="cuda:0", env="DEVICE_1")
     use_gpu: bool = Field(default=True, env="USE_GPU")
     
     # Model 1 Configuration (CLIP)

@@ -17,20 +17,22 @@ echo -e "${BLUE}Docker & Docker Compose Setup Script${NC}"
 echo -e "${BLUE}========================================${NC}"
 echo ""
 
-# Check if running as root
+# Check if running as root and set sudo prefix accordingly
 if [ "$EUID" -eq 0 ]; then 
-    echo -e "${RED}Please do not run this script as root (without sudo)${NC}"
-    echo -e "${YELLOW}The script will ask for sudo password when needed${NC}"
-    exit 1
+    SUDO=""
+    echo -e "${YELLOW}Running as root user${NC}"
+else
+    SUDO="sudo"
+    echo -e "${YELLOW}Running with sudo privileges${NC}"
 fi
 
 # Update package index
 echo -e "${GREEN}[1/6] Updating package index...${NC}"
-sudo apt-get update
+$SUDO apt-get update
 
 # Install prerequisites
 echo -e "${GREEN}[2/6] Installing prerequisites...${NC}"
-sudo apt-get install -y \
+$SUDO apt-get install -y \
     ca-certificates \
     curl \
     gnupg \
