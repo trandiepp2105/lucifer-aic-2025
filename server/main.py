@@ -2,9 +2,9 @@ import io
 import json
 import time
 import traceback
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from PIL import Image
-from fastapi import FastAPI, File, Form, UploadFile, HTTPException
+from fastapi import FastAPI, File, Form, UploadFile, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 import torch
 

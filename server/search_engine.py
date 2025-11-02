@@ -46,6 +46,38 @@ class SearchEngine:
         
         print("✅ Main SearchEngine (Optimized Multi-Model Version) initialized.")
     
+    def preload_all_segments(self):
+        """
+        Preload tất cả các segment files trước khi khởi động server.
+        Điều này giúp tránh việc load on-demand trong quá trình search.
+        """
+        segments_path = Path(self.segments_dir)
+        if not segments_path.exists():
+            print(f"⚠️ Segments directory not found: {self.segments_dir}")
+            return
+        
+        segment_files = list(segments_path.glob("segments_*.json"))
+        
+        if not segment_files:
+            print(f"⚠️ No segment files found in {self.segments_dir}")
+            return
+        
+        print(f"🔄 Preloading {len(segment_files)} segment files...")
+        start_time = time.time()
+        
+        for segment_file in segment_files:
+            # Extract video name from filename (e.g., segments_K01_V001.json -> K01_V001)
+            video_name = segment_file.stem.replace("segments_", "")
+            self._load_video_segments(video_name)
+        
+        elapsed = time.time() - start_time
+        stats = self.get_cache_stats()
+        print(f"✅ Preloaded segments in {elapsed:.2f}s:")
+        print(f"   - Videos: {stats['videos_cached']}")
+        print(f"   - Total segments: {stats['total_segments']}")
+        print(f"   - Frame lookups ready: {stats['frame_lookups_ready']}")
+        print(f"   - Precomputed shots: {stats['precomputed_shots']}")
+    
     def _load_video_segments(self, video_name: str) -> List[Dict[str, int]]:
         """
         Load video segments từ file JSON cho một video cụ thể.
@@ -639,7 +671,7 @@ class SearchEngine:
                 merged_frames = []
                 seen = set()
 
-                # a) Thêm toàn bộ agent frames theo thứ tự xuất hiện
+                # a) Thêm toàn bộ agent frames theo thứ tự xuất hiệnimages
                 for f in agent_frames:
                     if f not in seen:
                         merged_frames.append(('agent', f))
