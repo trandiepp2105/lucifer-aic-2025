@@ -173,9 +173,16 @@ const ActivityBar = ({ onSectionChange, activeSection, onRoundChange, onQueryMod
       });
 
       if (response.success && response.data) {
-        const { session_id } = response.data;
+        const { session_id, evaluation_id } = response.data;
         if (session_id) {
           setDresSession(session_id);
+          // Update evaluation_id if available
+          if (evaluation_id) {
+            setEvaluationId(evaluation_id);
+            console.log('DRES login successful with evaluation_id:', evaluation_id);
+          } else {
+            console.log('DRES login successful but no active evaluation found');
+          }
           toast.success('DRES login successful');
           setIsDresLoginOpen(false);
           setDresLoginData({ username: '', password: '' });
@@ -190,6 +197,14 @@ const ActivityBar = ({ onSectionChange, activeSection, onRoundChange, onQueryMod
       toast.error('Login failed: ' + error.message);
     } finally {
       setDresLoginLoading(false);
+    }
+  };
+
+  const handleDresLoginKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      e.stopPropagation();
+      handleDresLogin();
     }
   };
 
@@ -436,8 +451,10 @@ const ActivityBar = ({ onSectionChange, activeSection, onRoundChange, onQueryMod
                   type="text"
                   value={dresLoginData.username}
                   onChange={(e) => handleDresLoginInputChange('username', e.target.value)}
+                  onKeyDown={handleDresLoginKeyDown}
                   placeholder="Enter username"
                   disabled={dresLoginLoading}
+                  autoFocus
                 />
               </div>
               <div className="activity-bar__dres-login-field">
@@ -447,6 +464,7 @@ const ActivityBar = ({ onSectionChange, activeSection, onRoundChange, onQueryMod
                   type="password"
                   value={dresLoginData.password}
                   onChange={(e) => handleDresLoginInputChange('password', e.target.value)}
+                  onKeyDown={handleDresLoginKeyDown}
                   placeholder="Enter password"
                   disabled={dresLoginLoading}
                 />

@@ -21,6 +21,8 @@ const FrameItem = ({
   onCheckboxChange, // Checkbox change handler
   showDelete = false, // Add delete button support
   onDeleteClick, // Delete button click handler
+  isPeakFrame = false, // Add isPeakFrame prop to highlight peak frames
+  peakStage = -1, // Add peakStage prop to show which stage this is the peak for
 }) => {
   const handleClick = (e) => {
     // Check for Ctrl+Click to trigger zoom
@@ -126,6 +128,11 @@ const FrameItem = ({
       }
     }
     
+    // Add class for peak frame highlighting
+    if (isPeakFrame) {
+      classes.push('frame-item--peak');
+    }
+    
     return classes.join(' ');
   };
 
@@ -137,6 +144,9 @@ const FrameItem = ({
   // Generate title with instructions
   const getTitle = () => {
     let title = filename;
+    if (isPeakFrame && peakStage >= 0) {
+      title = `[Peak Stage ${peakStage + 1}] ${title}`;
+    }
     if (onDoubleClick) {
       title += " | Double-click to play video";
     }
@@ -162,6 +172,12 @@ const FrameItem = ({
           alt={`Frame ${frame.video_name}-${frame.frame_index}`}
           loading="lazy"
         />
+        {/* Peak stage badge */}
+        {isPeakFrame && peakStage >= 0 && (
+          <div className="frame-item__peak-badge" title={`Highest scoring frame for Stage ${peakStage + 1}`}>
+            S{peakStage + 1}
+          </div>
+        )}
       </div>
       
       {/* Action buttons - only show if handlers are provided */}

@@ -13,6 +13,7 @@ const QueryItem = ({
   onStageChange, 
   onDelete,
   onCreateQuery,
+  onToggleHidden,
   isDraggable = false,
   isBeingDragged = false
 }) => {
@@ -93,13 +94,17 @@ const QueryItem = ({
       style={style}
       className={`sidebar__message sidebar__message--query ${
         isCurrentStage ? 'sidebar__message--current-stage' : ''
-      } ${isDragging || isBeingDragged ? 'sidebar__message--dragging' : ''}`}
+      } ${isDragging || isBeingDragged ? 'sidebar__message--dragging' : ''} ${
+        query.isHidden ? 'sidebar__message--hidden' : ''
+      }`}
       onClick={handleClick}
       data-draggable={isDraggable}
       {...(isDraggable ? attributes : {})}
       {...(isDraggable ? listeners : {})}
       data-sanitized-query={JSON.stringify(getSanitizedQuery())}
     >
+      {/* Hidden overlay */}
+      {query.isHidden && <div className="sidebar__message-hidden-overlay" />}
       {/* Drag handle - visual indicator only */}
       {isDraggable && (
         <div className="sidebar__drag-handle">
@@ -141,7 +146,7 @@ const QueryItem = ({
       <div className="sidebar__message-content">
         {/* Stage indicator */}
         <div className="sidebar__stage-indicator">
-          Stage {query.stage}
+          Stage {query.displayStage || query.stage}
         </div>
         
         {/* Check if query has any content */}
@@ -189,6 +194,23 @@ const QueryItem = ({
 
         {/* Action buttons - shown on hover */}
         <div className="sidebar__message-actions">
+          <button 
+            onClick={(e) => {
+              e.stopPropagation();
+              if (onToggleHidden) {
+                onToggleHidden(query);
+              }
+            }}
+            className={`sidebar__action-btn sidebar__action-btn--hidden ${query.isHidden ? 'active' : ''}`}
+            title={query.isHidden ? "Unhide this query" : "Hide this query"}
+          >
+            <img 
+              src="/assets/eye-hidden.svg" 
+              alt={query.isHidden ? "Unhide" : "Hide"}
+              width="12"
+              height="12"
+            />
+          </button>
           <button 
             onClick={(e) => {
               e.stopPropagation();

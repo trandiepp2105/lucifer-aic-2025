@@ -226,15 +226,9 @@ const DisplayListFrame = forwardRef(({
       return;
     }
 
-    // Convert tempTrakeItems to the format expected by submission service
-    const frameList = tempTrakeItems.map(item => ({
-      video_name: item.video_name,
-      frame_index: item.frame_index,
-      group: item.group || activeGroup
-    }));
-
-    // Use submission modal for confirmation
-    submitTRAKEAnswer(frameList);
+    // Pass tempTrakeItems directly to submission modal (they already have all frame data including url)
+    // The modal will display the frames, and on confirm, the service will extract what it needs
+    submitTRAKEAnswer(tempTrakeItems);
   };
 
   // Keyboard navigation
@@ -297,6 +291,20 @@ const DisplayListFrame = forwardRef(({
         {validFrames.map((frame, index) => {
           const isChecked = queryMode === 'tra' ? isFrameInTempTrake(frame) : false;
           
+          // Extract peak frame information from frame metadata if available
+          const isPeakFrame = frame.is_peak_frame || false;
+          const peakStage = frame.peak_stage !== undefined ? frame.peak_stage : -1;
+          
+          // Debug logging
+          if (isPeakFrame) {
+            console.log('🟢 Peak frame found:', {
+              video: frame.video_name,
+              frame: frame.frame_index,
+              stage: peakStage,
+              score: frame.score
+            });
+          }
+          
           return (
             <FrameItem
               key={`gallery-${frame.video_name}-${frame.frame_index}-${index}`}
@@ -318,6 +326,8 @@ const DisplayListFrame = forwardRef(({
               showCheckbox={queryMode === 'tra'}
               isChecked={isChecked}
               onCheckboxChange={handleCheckboxChange}
+              isPeakFrame={isPeakFrame}
+              peakStage={peakStage}
             />
           );
         })}
@@ -371,6 +381,10 @@ const DisplayListFrame = forwardRef(({
                 {videoFrames.map((frame, frameIndex) => {
                   const isChecked = queryMode === 'tra' ? isFrameInTempTrake(frame) : false;
                   
+                  // Extract peak frame information from frame metadata if available
+                  const isPeakFrame = frame.is_peak_frame || false;
+                  const peakStage = frame.peak_stage !== undefined ? frame.peak_stage : -1;
+                  
                   return (
                     <FrameItem
                       key={`samevideo-${videoIndex}-${frame.video_name}-${frame.frame_index}-${frameIndex}`}
@@ -392,6 +406,8 @@ const DisplayListFrame = forwardRef(({
                       showCheckbox={queryMode === 'tra'}
                       isChecked={isChecked}
                       onCheckboxChange={handleCheckboxChange}
+                      isPeakFrame={isPeakFrame}
+                      peakStage={peakStage}
                     />
                   );
                 })}
@@ -471,6 +487,21 @@ const DisplayListFrame = forwardRef(({
               <img src="/assets/team.svg" alt="Team" />
               <span>TEAM ({tempTrakeItems.length})</span>
             </button>
+
+            {/* Clear selected TRAKE items button */}
+            <button
+              className="display-frame__clear-trake-btn"
+              onClick={() => {
+                // Clear the temporary TRAKE selections and notify the user
+                clearTempTrakeItems();
+                toast.info('Cleared TRAKE selection');
+              }}
+              title="Clear selected TRAKE items"
+            >
+              <img src="/assets/clear.svg" alt="Clear" />
+              <span>CLEAR</span>
+            </button>
+
             <button
               className="display-frame__submit-trake-btn"
               onClick={handleSubmitTrake}
@@ -527,6 +558,7 @@ const DisplayListFrame = forwardRef(({
         frameData={submissionModal.frameData}
         qaText={submissionModal.qaText}
         isSubmitting={submissionModal.isSubmitting}
+        onRemoveTrakeItem={removeTempTrakeItem}
       />
 
       <TeamAnswerModal

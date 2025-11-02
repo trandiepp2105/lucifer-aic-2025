@@ -360,9 +360,36 @@
     height: 4px;
     background: #dee2e6;
     border-radius: 2px;
-    overflow: hidden;
+    overflow: visible; // Cho phép vạch mốc hiển thị ra ngoài
     margin-bottom: -18px; // Để input range overlay lên track
     z-index: 0;
+  }
+
+  &__slider-ticks {
+    position: absolute;
+    top: -4px;
+    left: 6px; // Offset bằng thumb radius (12px / 2)
+    right: 6px; // Offset bằng thumb radius (12px / 2)
+    width: calc(100% - 12px); // Trừ đi thumb size
+    height: 12px;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  &__slider-tick {
+    position: absolute;
+    width: 1px;
+    height: 8px;
+    background: #6c757d;
+    transform: translateX(-50%); // Căn giữa vạch tại vị trí left
+    
+    // Làm nổi bật các mốc lớn (30s, 60s, 90s, ...)
+    &:nth-child(6n) {
+      height: 12px;
+      width: 2px;
+      background: #495057;
+      top: -2px;
+    }
   }
 
   &__custom-slider-fill {
@@ -388,11 +415,12 @@
     margin: 0;
     cursor: pointer;
 
+
     &::-webkit-slider-thumb {
       -webkit-appearance: none;
       appearance: none;
-      width: 14px;
-      height: 14px;
+      width: 12px;
+      height: 12px;
       border-radius: 50%;
       background: #fff;
       border: 2px solid #007bff;
@@ -404,14 +432,14 @@
       &:hover {
         background: #007bff;
         border-color: #0056b3;
-        transform: scale(1);
+        transform: scale(1.2);
         box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
       }
     }
 
     &::-moz-range-thumb {
-      width: 14px;
-      height: 14px;
+      width: 12px;
+      height: 12px;
       border-radius: 50%;
       background: #fff;
       border: 2px solid #007bff;
@@ -423,7 +451,7 @@
       &:hover {
         background: #007bff;
         border-color: #0056b3;
-        transform: scale(1.1);
+        transform: scale(1.2);
         box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
       }
     }

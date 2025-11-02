@@ -26,10 +26,17 @@ const Toast = ({ message, type = 'info', duration = 3000, onClose, style }) => {
         <span className="toast__message">{message}</span>
         <button 
           className="toast__close"
-          onClick={() => {
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
             setIsVisible(false);
-            setTimeout(() => onClose && onClose(), 300);
+            setTimeout(() => {
+              if (onClose) {
+                onClose();
+              }
+            }, 300);
           }}
+          type="button"
         >
           ×
         </button>

@@ -80,9 +80,17 @@ export const useFrameActions = (queryMode = 'kis', allTeamAnswers = []) => {
     if (queryMode === 'kis') {
       submitKISAnswer(frame);
     } else if (queryMode === 'qa') {
-      // For QA, we might need to get QA text from TeamAnswerModal first
-      // Or directly prompt for QA text in submission modal
-      submitQAAnswer(frame, ''); // TODO: Get QA text from user input
+      // For QA mode, use the FIRST team answer for current query as default (like send button behavior)
+      // Filter team answers for current query and round, sorted by created_at descending (newest first)
+      const currentQueryAnswers = allTeamAnswers.filter(answer => 
+        answer.query_index === queryIndex && 
+        answer.round === round
+      ).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      
+      // Get the first (most recent) team answer's QA text as default
+      const defaultQAText = currentQueryAnswers.length > 0 ? (currentQueryAnswers[0].qa || '') : '';
+      
+      submitQAAnswer(frame, defaultQAText);
     } else if (queryMode === 'tra') {
       // This shouldn't happen for single frame, but handle gracefully
       submitKISAnswer(frame);

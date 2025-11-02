@@ -32,6 +32,7 @@ const Sidebar = ({
   const [queries, setQueries] = useState([]); // Server queries
   const [localQueries, setLocalQueries] = useState([]); // Client-side query objects
   const [currentLocalQuery, setCurrentLocalQuery] = useState(null); // Current query being edited
+  const [hiddenQueries, setHiddenQueries] = useState([]); // Hidden queries with original index: [{ query, originalIndex }]
   const [loading, setLoading] = useState(false);
   const [currentStageQuery, setCurrentStageQuery] = useState(null);
   const [isRecording, setIsRecording] = useState(false);
@@ -178,7 +179,7 @@ const Sidebar = ({
     } finally {
       setLoading(false);
     }
-  }, [session, viewMode, k, searchUrl, onFramesUpdate, toast, mode]);
+  }, [session, viewMode, k, temporalTime, searchUrl, onFramesUpdate, toast, mode]);
 
   // Helper functions needed by keyboard navigation
   const handleInternalStageChange = (newStage) => {
@@ -490,19 +491,19 @@ const Sidebar = ({
       }
     }, 0);
   };
-  const handleSendQueryIfReady = () => {
-    // Get the most up-to-date query from localQueries instead of currentLocalQuery
-    const currentQuery = localQueries.find(q => q.stage === stage) || currentLocalQuery;
-    if (!currentQuery) return;
+  // const handleSendQueryIfReady = () => {
+  //   // Get the most up-to-date query from localQueries instead of currentLocalQuery
+  //   const currentQuery = localQueries.find(q => q.stage === stage) || currentLocalQuery;
+  //   if (!currentQuery) return;
     
-    const hasText = currentQuery.text?.trim();
-    const hasOcr = currentQuery.ocr?.trim();
-    const hasImage = currentQuery.image || currentQuery.imageFile;
-    const hasSpeech = currentQuery.speech?.trim();
-    if (!hasText && !hasOcr && !hasImage && !hasSpeech) return;
+  //   const hasText = currentQuery.text?.trim();
+  //   const hasOcr = currentQuery.ocr?.trim();
+  //   const hasImage = currentQuery.image || currentQuery.imageFile;
+  //   const hasSpeech = currentQuery.speech?.trim();
+  //   if (!hasText && !hasOcr && !hasImage && !hasSpeech) return;
 
-    handleSendMessage();
-  };
+  //   handleSendMessage();
+  // };
   // Initialize session when component mounts
   useEffect(() => {
     const initializeApp = async () => {
@@ -733,14 +734,51 @@ const Sidebar = ({
 
   // Handle reordering queries via drag & drop
   const handleReorderQueries = useCallback(async (reorderedQueries) => {
-    // Update stages based on new order
-    const updatedQueries = reorderedQueries.map((query, index) => ({
+    // Separate hidden and non-hidden queries
+    const nonHiddenQueries = [];
+    const updatedHiddenQueries = [];
+    
+    reorderedQueries.forEach((query, index) => {
+      if (query.isHidden) {
+        // For hidden queries, calculate their originalIndex based on number of non-hidden queries before them
+        const nonHiddenCountBefore = reorderedQueries.slice(0, index).filter(q => !q.isHidden).length;
+        
+        const existingHidden = hiddenQueries.find(hq => hq.query.stage === query.stage);
+        if (existingHidden) {
+          updatedHiddenQueries.push({
+            ...existingHidden,
+            originalIndex: nonHiddenCountBefore
+          });
+        }
+      } else {
+        // For non-hidden queries, keep them for reordering
+        nonHiddenQueries.push(query);
+      }
+    });
+    
+    // Update stages for non-hidden queries based on their new order (excluding hidden slots)
+    const updatedQueries = nonHiddenQueries.map((query, index) => ({
       ...query,
       stage: index + 1 // Reassign stages based on new order (1-based)
     }));
     
     // Update local state
     setLocalQueries(updatedQueries);
+    
+    // Update hidden queries with new original indices
+    if (updatedHiddenQueries.length > 0) {
+      setHiddenQueries(prev => {
+        // Merge updated hidden queries with existing ones
+        const result = [...prev];
+        updatedHiddenQueries.forEach(updated => {
+          const idx = result.findIndex(hq => hq.query.stage === updated.query.stage);
+          if (idx !== -1) {
+            result[idx] = updated;
+          }
+        });
+        return result;
+      });
+    }
     
     // Update current local query if it was reordered
     if (currentLocalQuery) {
@@ -756,12 +794,71 @@ const Sidebar = ({
       }
     }
     
-    // Sync to backend immediately after reorder
-    setTimeout(async () => {
-      await syncSpecificQueries(updatedQueries);
-      toast.success('Queries reordered', 2000);
-    }, 100);
-  }, [currentLocalQuery, stage, handleInternalStageChange, syncSpecificQueries, toast]);
+    // Only sync to backend if local queries actually changed (not just hidden query reorder)
+    if (nonHiddenQueries.length > 0 && updatedQueries.length > 0) {
+      setTimeout(async () => {
+        await syncSpecificQueries(updatedQueries);
+        toast.success('Queries reordered', 2000);
+      }, 100);
+    } else if (updatedHiddenQueries.length > 0) {
+      // Just hidden query reorder - no server sync needed
+      toast.info('Hidden query position updated', 1000);
+    }
+  }, [currentLocalQuery, stage, handleInternalStageChange, syncSpecificQueries, toast, hiddenQueries]);
+
+  // Handle toggle hidden query
+  const handleToggleHidden = useCallback((queryToToggle) => {
+    const queryStage = queryToToggle.stage;
+    
+    // Check if query is already hidden
+    const hiddenIndex = hiddenQueries.findIndex(hq => hq.query.stage === queryStage);
+    
+    if (hiddenIndex !== -1) {
+      // Unhide: remove from hiddenQueries and restore to localQueries at original position
+      const hiddenItem = hiddenQueries[hiddenIndex];
+      
+      setHiddenQueries(prev => prev.filter((_, idx) => idx !== hiddenIndex));
+      
+      // Restore query to localQueries at its original index and shift subsequent queries
+      setLocalQueries(prev => {
+        const sortedQueries = [...prev].sort((a, b) => a.stage - b.stage);
+        const insertIndex = hiddenItem.originalIndex;
+        
+        // Shift all queries at or after the insert position by incrementing their stage
+        const updatedQueries = sortedQueries.map(q => {
+          // Find the actual position in sorted array
+          const currentIndex = sortedQueries.findIndex(sq => sq.stage === q.stage);
+          if (currentIndex >= insertIndex) {
+            return { ...q, stage: q.stage + 1 };
+          }
+          return q;
+        });
+        
+        // Insert the unhidden query at its original position (keeping original stage)
+        updatedQueries.splice(insertIndex, 0, hiddenItem.query);
+        
+        return updatedQueries;
+      });
+      
+      toast.info('Query unhidden', 1000);
+    } else {
+      // Hide: move from localQueries to hiddenQueries
+      const queryExists = localQueries.some(q => q.stage === queryStage);
+      
+      if (queryExists) {
+        // Remove from localQueries
+        setLocalQueries(prev => prev.filter(q => q.stage !== queryStage));
+        
+        // Add to hiddenQueries with original stage as the index
+        setHiddenQueries(prev => [...prev, { 
+          query: queryToToggle, 
+          originalIndex: queryStage // Use stage number as originalIndex
+        }]);
+        
+        toast.info('Query hidden', 1000);
+      }
+    }
+  }, [hiddenQueries, localQueries, toast]);
 
   // Handle add session button
   const handleAddSession = async () => {
@@ -829,10 +926,28 @@ const Sidebar = ({
     }
   };
 
-  // Sort localQueries by stage for display
+  // Merge localQueries with hiddenQueries for display
+  // Hidden queries are shown in their original stage positions with visual overlay
   const sortedLocalQueries = useMemo(() => {
-    return [...localQueries].sort((a, b) => a.stage - b.stage);
-  }, [localQueries]);
+    const sorted = [...localQueries].sort((a, b) => a.stage - b.stage);
+    
+    // If no hidden queries, return sorted local queries with displayStage = stage
+    if (hiddenQueries.length === 0) {
+      return sorted.map(q => ({ ...q, isHidden: false, displayStage: q.stage }));
+    }
+    
+    // Combine all queries (visible + hidden) and sort by stage
+    const allQueries = [
+      ...sorted.map(q => ({ ...q, isHidden: false })),
+      ...hiddenQueries.map(({ query }) => ({ ...query, isHidden: true }))
+    ].sort((a, b) => a.stage - b.stage);
+    
+    // displayStage should match the original stage number
+    return allQueries.map(q => ({
+      ...q,
+      displayStage: q.stage
+    }));
+  }, [localQueries, hiddenQueries]);
 
   // Render query index list for team-answer and answer modes
   const renderQueryIndexList = () => {
@@ -1047,6 +1162,7 @@ const Sidebar = ({
               onDeleteQuery={handleDeleteQuery}
               onCreateQuery={handleCreateQuery}
               onReorderQueries={handleReorderQueries}
+              onToggleHidden={handleToggleHidden}
               messagesEndRef={messagesEndRef}
             />
             

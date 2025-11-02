@@ -2,7 +2,7 @@
   position: fixed;
   bottom: 20px;
   right: 20px;
-  z-index: 10000;
+  z-index: 999999;
   min-width: 300px;
   max-width: 400px;
   padding: 0;
@@ -56,18 +56,26 @@
     cursor: pointer;
     font-size: 1.2rem;
     margin-left: 12px;
-    padding: 0;
-    width: 20px;
-    height: 20px;
+    padding: 4px;
+    width: 24px;
+    height: 24px;
     display: flex;
     align-items: center;
     justify-content: center;
     border-radius: 50%;
     transition: all 0.2s ease;
+    flex-shrink: 0; // Prevent button from shrinking
+    z-index: 1; // Ensure button is above other content
+    pointer-events: auto; // Ensure button is clickable
 
     &:hover {
       background: #f8f9fa;
       color: #333;
+      transform: scale(1.1);
+    }
+    
+    &:active {
+      transform: scale(0.95);
     }
   }
 }

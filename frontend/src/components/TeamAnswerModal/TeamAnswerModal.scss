@@ -9,7 +9,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 10001;
+  z-index: 9999999;
   padding: 0 20px;
   backdrop-filter: blur(4px);
   outline: none; // Remove focus outline for modal container

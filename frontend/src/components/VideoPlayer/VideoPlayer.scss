@@ -7,8 +7,8 @@
   background: rgba(0, 0, 0, 0.9);
   display: flex;
   align-items: center;
-  justify-content: center;
-  z-index: 9999;
+  justify-content: start;
+  z-index: 99999;
   backdrop-filter: blur(5px);
 
   &:focus {
@@ -23,18 +23,18 @@
 
 .video-player-container {
   position: relative;
-  width: 95vw;
-  max-width: 1400px;
+  width: calc(100% - 250px);
+  // max-width: 1500px;
   max-height: 98vh;
   display: flex;
   flex-direction: column;
   align-items: center;
-
+    left: 10px;
   // Video fullscreen mode (overlay, not document fullscreen)
   &.video-fullscreen {
     position: fixed;
     top: 0;
-    left: 0;
+    left: -30px;
     width: 100vw;
     height: 100vh;
     max-width: none;
@@ -55,9 +55,14 @@
       
       // Make video section take full space
       .video-player__video-section {
-        flex: 1;
-        width: 100%;
-        height: 100%;
+        // flex: 1;
+        // width: 100%;
+        // height: 100%;
+        width: calc(100vw - 250px);
+        height: 95vh;
+        align-items: center;
+        margin-right: 230px;
+        margin-left: 20px;
       }
     }
 
@@ -131,6 +136,43 @@
   }
 }
 
+.video-player__exit-fullscreen {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background: rgba(0, 0, 0, 0.7);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  color: white;
+  font-size: 2.5rem;
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  z-index: 10002; // Higher than other controls
+  opacity: 0.8;
+  
+  // Show on hover in fullscreen
+  .video-player-container.video-fullscreen & {
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+  
+  .video-player-container.video-fullscreen:hover & {
+    opacity: 1;
+  }
+
+  &:hover {
+    background: rgba(255, 0, 0, 0.8);
+    border-color: rgba(255, 255, 255, 0.6);
+    transform: scale(1.1) rotate(90deg);
+    opacity: 1 !important;
+  }
+}
+
 .video-player__layout {
   display: flex;
   width: 100%;
@@ -143,6 +185,7 @@
 }
 
 .video-player__video-section {
+  position: relative; // For exit fullscreen button positioning
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -276,6 +319,17 @@
   }
   100% {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes fadeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
@@ -629,6 +683,14 @@
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 0.5rem;
   align-content: start;
+  
+  // Smooth scroll behavior
+  scroll-behavior: smooth;
+  
+  // Use GPU acceleration for smoother rendering
+  will-change: scroll-position;
+  transform: translateZ(0);
+  -webkit-overflow-scrolling: touch;
 
   // Custom scrollbar
   &::-webkit-scrollbar {
@@ -651,23 +713,37 @@
 }
 
 .video-player__gallery-item {
+  // Enable GPU acceleration for smooth rendering
+  transform: translateZ(0);
+  backface-visibility: hidden;
+  
+  // Smooth opacity transition when items appear/disappear
+  opacity: 1;
+  animation: fadeIn 0.2s ease-in;
+  
   .video-player__frame {
     width: 100%;
     transition: all 0.2s ease;
     border: 2px solid transparent;
     border-radius: 4px;
     overflow: hidden;
+    
+    // GPU acceleration
+    transform: translateZ(0);
+    will-change: transform, border-color, box-shadow;
 
     &:hover {
-      transform: translateY(-2px);
+      transform: translateY(-2px) translateZ(0);
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
       border-color: #0066cc;
     }
 
     // Center frame gets orange border
     &.center {
-      border-color: #ff8800;
-      box-shadow: 0 0 6px rgba(255, 136, 0, 0.4);
+      border: 4px solid #2bff00;
+      box-shadow: 0 0 20px rgba(56, 238, 50, 0.8), 0 6px 20px rgba(134, 255, 104, 0.5);
+      // Smooth transition for center frame
+      transition: all 0.3s ease-in-out;
     }
 
     // Current frame gets red border

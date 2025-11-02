@@ -405,7 +405,9 @@ const QueryInput = ({
 
   // Handle temporal time change
   const handleTemporalTimeChange = (value) => {
-    setTemporalTime(value);
+    // Round to nearest 5
+    const roundedValue = Math.round(value / 5) * 5;
+    setTemporalTime(roundedValue);
   };
 
   // Format temporal time display
@@ -419,8 +421,8 @@ const QueryInput = ({
     }
   };
 
-  // Calculate progress for temporal time slider (min: 5, max: 300)
-  const temporalTimeProgress = ((temporalTime - 5) / (300 - 5)) * 100;
+  // Calculate progress for temporal time slider (min: 5, max: 180)
+  const temporalTimeProgress = ((temporalTime - 5) / (180 - 5)) * 100;
 
   return (
     <div 
@@ -439,19 +441,36 @@ const QueryInput = ({
         <div className="sidebar__temporal-time">
           <div className="sidebar__custom-slider-track">
             <div className="sidebar__custom-slider-fill" style={{ width: `${temporalTimeProgress}%` }}></div>
+            {/* Ticks/marks cho mỗi bước 5 giây */}
+            <div className="sidebar__slider-ticks">
+              {Array.from({ length: 36 }, (_, i) => {
+                const value = i * 5 + 5;
+                const min = 5;
+                const max = 180;
+                const percent = ((value - min) / (max - min)) * 100;
+                return (
+                  <div 
+                    key={value} 
+                    className="sidebar__slider-tick"
+                    style={{ left: `${percent}%` }}
+                  />
+                );
+              })}
+            </div>
           </div>
           <input
             id="temporal-time-slider"
             type="range"
             className="sidebar__temporal-time-slider"
             min="5"
-            max="300"
+            max="180"
+            step="5"
             value={temporalTime}
             onChange={(e) => handleTemporalTimeChange(parseInt(e.target.value, 10))}
           />
           <div className="sidebar__temporal-time-range">
             <span>5s</span>
-            <span>5m</span>
+            <span>3m</span>
           </div>
         </div>
       </div>

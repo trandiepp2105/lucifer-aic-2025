@@ -189,6 +189,7 @@
   &__trake-frame-item {
     flex-shrink: 0;
     text-align: center;
+    position: relative;
 
     .submission-modal__frame {
       width: 140px;
@@ -196,6 +197,44 @@
       border-radius: 8px;
       overflow: hidden;
       margin-bottom: 4px;
+    }
+  }
+
+  &__trake-frame-delete {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 2px solid white;
+    background: #ef4444;
+    color: white;
+    font-size: 1.2rem;
+    font-weight: bold;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    padding: 0;
+    z-index: 10;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+
+    &:hover:not(:disabled) {
+      background: #dc2626;
+      transform: scale(1.1);
+      box-shadow: 0 3px 8px rgba(0, 0, 0, 0.3);
+    }
+
+    &:active:not(:disabled) {
+      transform: scale(0.95);
+    }
+
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
     }
   }
 

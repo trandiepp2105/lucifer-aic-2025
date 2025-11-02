@@ -279,7 +279,7 @@ const TeamTRAKEAnswerList = ({
   isCompact = false // Add compact mode prop
 }) => {
   const toast = useToast();
-  const { queryIndex } = useApp();
+  const { queryIndex, removeTempTrakeItem } = useApp();
   const [dragging, setDragging] = useState(false);
   
   // Use submission hook for modal management
@@ -473,6 +473,7 @@ const TeamTRAKEAnswerList = ({
         frameData={submissionModal.frameData}
         qaText={submissionModal.qaText}
         isSubmitting={submissionModal.isSubmitting}
+        onRemoveTrakeItem={removeTempTrakeItem}
       />
     </div>
   );

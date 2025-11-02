@@ -29,6 +29,7 @@ const SidebarQueries = ({
   onDeleteQuery,
   onCreateQuery,
   onReorderQueries,
+  onToggleHidden,
   messagesEndRef
 }) => {
   const [activeId, setActiveId] = React.useState(null);
@@ -94,6 +95,7 @@ const SidebarQueries = ({
                 onStageChange={onStageChange}
                 onDelete={onDeleteQuery}
                 onCreateQuery={onCreateQuery}
+                onToggleHidden={onToggleHidden}
                 isDraggable={true}
                 isBeingDragged={activeId === (query.id || `stage-${query.stage}`)}
               />

@@ -5,7 +5,6 @@ from rest_framework.parsers import JSONParser
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 import logging
-import random
 import requests
 import os
 from .models import DresSession
@@ -272,7 +271,8 @@ class SubmitQAAnswerView(APIView):
             time_in_milliseconds = int(time_in_seconds * 1000)
 
             # Build DRES payload for QA (text-based with metadata)
-            text_answer = f"{qa}-{video_name}-{time_in_milliseconds}"
+            # Format: QA-{answer}-{video_name}-{timestamp}
+            text_answer = f"QA-{qa}-{video_name}-{time_in_milliseconds}"
             dres_payload = {
                 "answerSets": [
                     {
@@ -372,19 +372,31 @@ class SubmitTRAKEAnswerView(APIView):
     def post(self, request):
         """Submit TRAKE answer"""
         try:
-            items = request.data
-
+            data = request.data
+            print("Received TRAKE data:", data)
+            
+            # Handle both old format (array) and new format (object with frame_items)
+            if isinstance(data, dict):
+                items = data.get('frame_items', [])
+                dres_session = data.get('dres_session')
+                evaluation_id = data.get('evaluation_id')
+            else:
+                items = data
+                dres_session = None
+                evaluation_id = None
+            
             # Validate required fields
             if not items or not isinstance(items, list):
                 return Response({
                     'status': 'error',
-                    'message': 'Request body must be a list of frame items'
+                    'message': 'Frame items must be a list'
                 }, status=status.HTTP_400_BAD_REQUEST)
 
-            if len(items) == 0:
+            # Check minimum 4 items required for TRAKE
+            if len(items) < 4:
                 return Response({
                     'status': 'error',
-                    'message': 'Frame items list cannot be empty'
+                    'message': f'TRAKE requires at least 4 items, but only {len(items)} provided'
                 }, status=status.HTTP_400_BAD_REQUEST)
 
             # Validate each item
@@ -407,16 +419,84 @@ class SubmitTRAKEAnswerView(APIView):
                         'message': f'Item {i} is missing frame_index'
                     }, status=status.HTTP_400_BAD_REQUEST)
 
-            logger.info(f"Submitting TRAKE answer - Items: {len(items)}")
-
-            # Mock evaluation logic - randomly return correct/incorrect
-            is_correct = random.choice([True, False])
-            submission_status = "correct" if is_correct else "incorrect"
+            # Format target for TRAKE submission: TR-{video_name},stage1,stage2,stage3,stage4
+            # Extract video_name from first item (all should be same video)
+            video_name = items[0]['video_name']
             
-            return Response({
-                'status': submission_status,
-                'message': f'TRAKE answer {submission_status}'
-            }, status=status.HTTP_200_OK)
+            # Get FPS from first item or use default
+            fps = items[0].get('fps', 25.0)
+            
+            # Convert frame indices to timestamps (milliseconds)
+            timestamps = []
+            for item in items:
+                frame_index = item['frame_index']
+                # Convert frame to milliseconds: (frame_index / fps) * 1000
+                timestamp_ms = int((frame_index / fps) * 1000)
+                timestamps.append(timestamp_ms)
+            
+            # Sort timestamps in ascending order
+            timestamps.sort()
+            
+            # Format: TR-{video_name}-stage1,stage2,stage3,stage4
+            target = f"TR-{video_name}-" + ",".join(str(ts) for ts in timestamps)
+            
+            logger.info(f"Formatted TRAKE target: {target}")
+            logger.info(f"DRES Session: {dres_session}")
+            logger.info(f"Evaluation ID: {evaluation_id}")
+            
+            # Build DRES payload for TRAKE text submission
+            dres_payload = {
+                "answerSets": [
+                    {
+                        "answers": [
+                            {
+                                "text": target
+                            }
+                        ]
+                    }
+                ]
+            }
+            
+            # Get DRES submit endpoint from environment
+            dres_submit_base_url = os.getenv('DRES_SUBMIT_ENDPOINT', "http://127.0.0.1:8080/api/v2/submit")
+            dres_submit_url = f"{dres_submit_base_url}/{evaluation_id}"
+            
+            logger.info(f"Submitting TRAKE answer to DRES: {dres_submit_url}")
+            
+            # Submit to DRES server
+            try:
+                response = requests.post(
+                    dres_submit_url,
+                    json=dres_payload,
+                    params={'session': dres_session},
+                    headers={'Content-Type': 'application/json'},
+                    timeout=30
+                )
+                
+                if response.status_code in [200, 202]:
+                    response_data = response.json()
+                    logger.info(f"DRES TRAKE submission successful: {response_data}")
+                    # Forward DRES response directly to client with DRES status code
+                    return Response(response_data, status=response.status_code)
+                else:
+                    logger.error(f"DRES TRAKE submission failed: {response.status_code} - {response.text}")
+                    return Response({
+                        'status': 'error',
+                        'message': f'DRES server error: {response.text}'
+                    }, status=status.HTTP_502_BAD_GATEWAY)
+                    
+            except requests.exceptions.ConnectionError:
+                logger.error("Failed to connect to DRES server for TRAKE submission")
+                return Response({
+                    'status': 'error',
+                    'message': 'Unable to connect to DRES server'
+                }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+            except requests.exceptions.Timeout:
+                logger.error("DRES server TRAKE request timed out")
+                return Response({
+                    'status': 'error',
+                    'message': 'DRES server request timed out'
+                }, status=status.HTTP_504_GATEWAY_TIMEOUT)
 
         except Exception as error:
             logger.error(f"Error submitting TRAKE answer: {error}")

@@ -136,6 +136,45 @@
     }
   }
 
+  /* Clear TRAKE Button - keep icon fixed and aligned */
+  &__clear-trake-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border: none;
+    padding: 6px 10px; /* slightly smaller padding to keep button compact */
+    border-radius: 4px;
+    color: #212529;
+    background: #f8f9fa;
+    font-size: 0.75rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+
+    z-index: 99999999;
+
+    img {
+      width: 14px; /* fixed icon size */
+      height: 14px;
+      object-fit: contain;
+      filter: none; /* keep original icon coloring or allow theme to recolor */
+      display: block;
+    }
+
+    span {
+      white-space: nowrap;
+    }
+
+    &:hover {
+      background: #e9ecef;
+      transform: translateY(-1px);
+    }
+
+    &:active {
+      transform: translateY(0);
+    }
+  }
+
   &__push-trake-btn {
     background: #28a745;
     box-shadow: 0 2px 4px rgba(40, 167, 69, 0.2);
@@ -240,10 +279,10 @@
   }
 
   &__video-separator {
-    height: 1px;
-    background: #dee2e6;
+    height: 3px;
+    background: #495057;
     margin: 1rem 0;
-    opacity: 0.6;
+    opacity: 1;
   }
 
   &__video-grid {

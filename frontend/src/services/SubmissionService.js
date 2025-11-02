@@ -178,12 +178,18 @@ class SubmissionService {
         body: JSON.stringify(finalRequestBody)
       });
       
+      const data = await response.json();
+      
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+        // Create error object with response structure expected by frontend
+        const error = new Error(data.message || `HTTP error! status: ${response.status}`);
+        error.response = {
+          data: data
+        };
+        throw error;
       }
       
-      return await response.json();
+      return data;
     } catch (error) {
       console.error('Error submitting TRAKE answer:', error);
       throw error;

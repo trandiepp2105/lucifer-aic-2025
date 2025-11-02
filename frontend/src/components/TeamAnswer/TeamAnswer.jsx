@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
+import ReactDOM from 'react-dom';
 import {
   DndContext,
   closestCenter,
@@ -109,7 +110,7 @@ const TeamAnswer = ({
   const trakeEventSourceRef = useRef(null); // Add TRAKE SSE ref
   
   // Get app context for queryIndex, round and queryMode
-  const { queryIndex, round, queryMode } = useApp();
+  const { queryIndex, round, queryMode, removeTempTrakeItem } = useApp();
   const toast = useToast();
 
   // Initialize SSE connection
@@ -835,27 +836,45 @@ const TeamAnswer = ({
         )}
       </div>
 
-      {/* Edit Modal for team answers */}
-      <TeamAnswerModal
-        isOpen={!!editingItem}
-        onClose={handleEditModalClose}
-        onSubmit={handleEditModalSubmit}
-        frame={editingItem}
-        allTeamAnswers={allTeamAnswers}
-        isEditMode={true}
-      />
+      {/* Render modals via Portal to escape parent container constraints */}
+      {ReactDOM.createPortal(
+        <>
+          {/* Edit Modal for team answers */}
+          <TeamAnswerModal
+            isOpen={!!editingItem}
+            onClose={handleEditModalClose}
+            onSubmit={handleEditModalSubmit}
+            frame={editingItem}
+            allTeamAnswers={allTeamAnswers}
+            isEditMode={true}
+          />
 
-      {/* Image Zoom Modal */}
-      <ImageZoomModal
-        isOpen={isImageZoomOpen}
-        onClose={handleCloseImageZoom}
-        imageUrl={zoomImageUrl}
-        imageAlt={zoomImageAlt}
-        frame={zoomFrame}
-      />
+          {/* Image Zoom Modal */}
+          <ImageZoomModal
+            isOpen={isImageZoomOpen}
+            onClose={handleCloseImageZoom}
+            imageUrl={zoomImageUrl}
+            imageAlt={zoomImageAlt}
+            frame={zoomFrame}
+          />
 
-      {/* Video Player Modal */}
-      {isVideoPlayerOpen && (
+          {/* Submission Modal */}
+          <SubmissionModal
+            isOpen={submissionModal.isOpen}
+            onClose={closeSubmissionModal}
+            onConfirm={handleSubmissionConfirm}
+            submissionType={submissionModal.type}
+            frameData={submissionModal.frameData}
+            qaText={submissionModal.qaText}
+            isSubmitting={submissionModal.isSubmitting}
+            onRemoveTrakeItem={removeTempTrakeItem}
+          />
+        </>,
+        document.body
+      )}
+
+      {/* Video Player Modal - keep outside portal as it needs to be full overlay */}
+      {/* {isVideoPlayerOpen && (
         <VideoPlayer
           isOpen={isVideoPlayerOpen}
           onClose={handleCloseVideoPlayer}
@@ -866,18 +885,7 @@ const TeamAnswer = ({
           sendingFrames={new Set()} // TeamAnswer doesn't track sending frames
           allTeamAnswers={allTeamAnswers}
         />
-      )}
-
-      {/* Submission Modal */}
-      <SubmissionModal
-        isOpen={submissionModal.isOpen}
-        onClose={closeSubmissionModal}
-        onConfirm={handleSubmissionConfirm}
-        submissionType={submissionModal.type}
-        frameData={submissionModal.frameData}
-        qaText={submissionModal.qaText}
-        isSubmitting={submissionModal.isSubmitting}
-      />
+      )} */}
     </div>
   );
 };

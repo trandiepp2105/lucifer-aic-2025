@@ -8,7 +8,7 @@ services:
     ports:
       - "7700:7700"
     environment:
-      - MEILI_MASTER_KEY=${MEILISEARCH_API_KEY:-meilisearch-api-key}
+      - MEILI_MASTER_KEY=${MEILISEARCH_API_KEY}
       - MEILI_ENV=production
     volumes:
       - meilisearch_data:/meili_data
@@ -32,60 +32,60 @@ services:
     environment:
       # Meilisearch Configuration
       - MEILISEARCH_HOST=meilisearch
-      - MEILISEARCH_PORT={MEILISEARCH_PORT:-7700}
-      - MEILISEARCH_API_KEY=${MEILISEARCH_API_KEY:-meilisearch-api-key}
-      - MEILISEARCH_LIMIT_SEARCH=${MEILISEARCH_LIMIT_SEARCH:-500}
+      - MEILISEARCH_PORT=${MEILISEARCH_PORT}
+      - MEILISEARCH_API_KEY=${MEILISEARCH_API_KEY}
+      - MEILISEARCH_LIMIT_SEARCH=${MEILISEARCH_LIMIT_SEARCH}
       
       # Dataset Paths (mount your data volumes and update paths)
-      - OCR_DATASETS=${OCR_DATASETS:-/app/data/ocr:parseq_ocr_index}
-      - SUBTITLE_DATASETS=${SUBTITLE_DATASETS:-/app/data/subtitle:frame_transcript_index}
+      - OCR_DATASETS=${OCR_DATASETS}
+      - SUBTITLE_DATASETS=${SUBTITLE_DATASETS}
       
       # Device Configuration
-      - DEVICE_0=${DEVICE_0:-cuda:0}
-      - DEVICE_1=${DEVICE_1:-cuda:1}
-      - USE_GPU=${USE_GPU:-true}
+      - DEVICE_0=${DEVICE_0}
+      - DEVICE_1=${DEVICE_1}
+      - USE_GPU=${USE_GPU}
       
       # Model 1 Configuration
-      - MODEL_1_NAME=${MODEL_1_NAME:-ViT-H-14-378-quickgelu}
-      - MODEL_1_WEIGHT=${MODEL_1_WEIGHT:-0.55}
-      - MODEL_1_PRETRAINED=${MODEL_1_PRETRAINED:-dfn5b}
-      - MODEL_1_EMBEDDING_PATH=${MODEL_1_EMBEDDING_PATH:-/app/data/embeddings/clip/embedding_info.pkl}
-      - MODEL_1_INDEX_TYPE=${MODEL_1_INDEX_TYPE:-Flat}
-      - MODEL_1_INPUT_INDEX_PATH=${MODEL_1_INPUT_INDEX_PATH:-/app/indexes/clip-index}
-      - MODEL_1_OUTPUT_INDEX_PATH=${MODEL_1_OUTPUT_INDEX_PATH:-/app/outputs/clip-index}
+      - MODEL_1_NAME=${MODEL_1_NAME}
+      - MODEL_1_WEIGHT=${MODEL_1_WEIGHT}
+      - MODEL_1_PRETRAINED=${MODEL_1_PRETRAINED}
+      - MODEL_1_EMBEDDING_PATH=${MODEL_1_EMBEDDING_PATH}
+      - MODEL_1_INDEX_TYPE=${MODEL_1_INDEX_TYPE}
+      - MODEL_1_INPUT_INDEX_PATH=${MODEL_1_INPUT_INDEX_PATH}
+      - MODEL_1_OUTPUT_INDEX_PATH=${MODEL_1_OUTPUT_INDEX_PATH}
       
       # Model 2 Configuration
-      - MODEL_2_NAME=${MODEL_2_NAME:-ViT-gopt-16-SigLIP2-384}
-      - MODEL_2_WEIGHT=${MODEL_2_WEIGHT:-0.45}
-      - MODEL_2_PRETRAINED=${MODEL_2_PRETRAINED:-webli}
-      - MODEL_2_EMBEDDING_PATH=${MODEL_2_EMBEDDING_PATH:-/app/data/embeddings/siglip/embedding_info.pkl}
-      - MODEL_2_INDEX_TYPE=${MODEL_2_INDEX_TYPE:-Flat}
-      - MODEL_2_INPUT_INDEX_PATH=${MODEL_2_INPUT_INDEX_PATH:-/app/indexes/siglip-index}
-      - MODEL_2_OUTPUT_INDEX_PATH=${MODEL_2_OUTPUT_INDEX_PATH:-/app/outputs/siglip-index}
+      - MODEL_2_NAME=${MODEL_2_NAME}
+      - MODEL_2_WEIGHT=${MODEL_2_WEIGHT}
+      - MODEL_2_PRETRAINED=${MODEL_2_PRETRAINED}
+      - MODEL_2_EMBEDDING_PATH=${MODEL_2_EMBEDDING_PATH}
+      - MODEL_2_INDEX_TYPE=${MODEL_2_INDEX_TYPE}
+      - MODEL_2_INPUT_INDEX_PATH=${MODEL_2_INPUT_INDEX_PATH}
+      - MODEL_2_OUTPUT_INDEX_PATH=${MODEL_2_OUTPUT_INDEX_PATH}
       
       # FAISS Configuration
-      - FAISS_USE_GPU=${FAISS_USE_GPU:-true}
-      - FAISS_NPROBE=${FAISS_NPROBE:-64}
-      - FAISS_NLIST=${FAISS_NLIST:-1024}
+      - FAISS_USE_GPU=${FAISS_USE_GPU}
+      - FAISS_NPROBE=${FAISS_NPROBE}
+      - FAISS_NLIST=${FAISS_NLIST}
       
       # API Configuration
-      - API_HOST=${API_HOST:-0.0.0.0}
-      - API_PORT=${API_PORT:-8000}
-      - API_WORKERS=${API_WORKERS:-1}
+      - API_HOST=${API_HOST}
+      - API_PORT=${API_PORT}
+      - API_WORKERS=${API_WORKERS}
       
       # Search Defaults
-      - DEFAULT_TOP_K=${DEFAULT_TOP_K:-10}
-      - DEFAULT_TEMPORAL_TIME=${DEFAULT_TEMPORAL_TIME:-30}
-      - DEFAULT_INITIAL_SEARCH_K=${DEFAULT_INITIAL_SEARCH_K:-2048}
+      - DEFAULT_TOP_K=${DEFAULT_TOP_K}
+      - DEFAULT_TEMPORAL_TIME=${DEFAULT_TEMPORAL_TIME}
+      - DEFAULT_INITIAL_SEARCH_K=${DEFAULT_INITIAL_SEARCH_K}
 
       # Fusion Weights
-      - WEIGHT_TEXT=${WEIGHT_TEXT:-0.3}
-      - WEIGHT_OCR=${WEIGHT_OCR:-0.3}
-      - WEIGHT_SUBTITLE=${WEIGHT_SUBTITLE:-0.3}
-      - WEIGHT_IMAGE=${WEIGHT_IMAGE:-0.1}
+      - WEIGHT_TEXT=${WEIGHT_TEXT}
+      - WEIGHT_OCR=${WEIGHT_OCR}
+      - WEIGHT_SUBTITLE=${WEIGHT_SUBTITLE}
+      - WEIGHT_IMAGE=${WEIGHT_IMAGE}
       
     volumes:
-      - ./data:/app/data:ro  # Read-only data
+      - /lucifer_data:/lucifer_data:ro  # Read-only data
     depends_on:
       meilisearch:
         condition: service_healthy

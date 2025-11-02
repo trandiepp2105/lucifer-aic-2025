@@ -61,6 +61,8 @@ class Settings(BaseSettings):
     weight_subtitle: float = Field(default=0.3, env="WEIGHT_SUBTITLE")
     weight_image: float = Field(default=0.1, env="WEIGHT_IMAGE")
     
+    # segment path
+    segment_path: str = Field(default="/app/segments", env="SEGMENT_PATH")
     class Config:
         env_file = ".env"
         case_sensitive = False
