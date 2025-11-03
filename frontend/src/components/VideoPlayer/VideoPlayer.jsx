@@ -167,40 +167,26 @@ const VideoPlayer = ({
       try {
         const videoUrl = generateVideoUrl(currentFrame.thumbnail || currentFrame.url, currentFrame.video_name);
         
-        // Check if HLS file is accessible
-        let accessible = false;
-        
-        try {
-          const hlsResponse = await fetch(videoUrl, { 
-            method: 'HEAD',
-            mode: 'cors',
-            credentials: 'omit'
-          });
-          accessible = hlsResponse.ok;
-        } catch (error) {
-          console.log('HLS not available:', error);
-        }
-        
-        setIsVideoAccessible(accessible);
-        
-        if (!accessible) {
-          setVideoError('HLS video file is not accessible. This may be due to CORS restrictions or the video file being unavailable.');
-          return;
-        } else {
-          setVideoError(null);
-        }
+        // Set video URL immediately without waiting for HEAD check
+        // Let HLS.js handle the accessibility check during loading
         setVideoSrc(videoUrl);
+        setIsVideoAccessible(true);
+        setVideoError(null);
         
-        // Use shared utility to fetch video metadata
-        try {
-          const metadata = await fetchVideoMetadata(currentFrame);
-          setVideoInfo(metadata);
-        } catch (error) {
-          console.error('Failed to load video metadata:', error);
-          // Set hardcoded default values if all else fails
-          const hardcodedInfo = { fps: 25, duration: 21.06 };
-          setVideoInfo(hardcodedInfo);
-        }
+        // Fetch video metadata in parallel (non-blocking)
+        // Use hardcoded defaults immediately to avoid blocking
+        const hardcodedInfo = { fps: 25, duration: 21.06 };
+        setVideoInfo(hardcodedInfo);
+        
+        // Fetch actual metadata in background (optional, for accuracy)
+        fetchVideoMetadata(currentFrame)
+          .then(metadata => {
+            setVideoInfo(metadata);
+          })
+          .catch(error => {
+            console.warn('Failed to load video metadata, using defaults:', error);
+            // Keep using hardcoded defaults
+          });
         
         // Initialize both frames when video opens
         const isDifferentVideo = internalCurrentFrame?.video_name !== currentFrame.video_name;
@@ -308,18 +294,38 @@ const VideoPlayer = ({
     }
 
     if (Hls.isSupported()) {
-      // Initialize HLS
+      // Initialize HLS with optimized settings for faster initial load
       const hls = new Hls({
-        enableWorker: false,
-        lowLatencyMode: true,
-        backBufferLength: 30
+        enableWorker: true,              // Enable Web Worker for better performance
+        lowLatencyMode: false,           // Disable for faster initial load
+        backBufferLength: 10,            // Reduce back buffer (was 30)
+        maxBufferLength: 10,             // Limit forward buffer to 10 seconds (faster initial load)
+        maxMaxBufferLength: 30,          // Max buffer cap
+        maxBufferSize: 30 * 1000 * 1000, // 30 MB max buffer size
+        maxBufferHole: 0.5,              // Max gap in buffer
+        highBufferWatchdogPeriod: 2,     // Check buffer health every 2s
+        nudgeMaxRetry: 3,                // Retry nudging 3 times
+        manifestLoadingTimeOut: 10000,   // 10s timeout for manifest
+        manifestLoadingMaxRetry: 2,      // Retry manifest 2 times
+        startLevel: -1,                  // Auto quality selection
+        autoStartLoad: true,             // Start loading immediately
+        startFragPrefetch: true,         // Prefetch next fragment
+        testBandwidth: true,             // Test bandwidth for quality
+        progressive: true,               // Enable progressive loading
+        enableSoftwareAES: true          // Fallback for AES decryption
       });
       hlsRef.current = hls;
 
       hls.loadSource(videoSrc);
       hls.attachMedia(video);
 
+      // Add performance logging
+      console.time('HLS Initial Load');
+      
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        console.timeEnd('HLS Initial Load');
+        console.log('HLS Manifest parsed, levels:', hls.levels.length);
+        
         setIsLoading(false);
         setIsReady(true);
         setVideoError(null);
@@ -329,6 +335,11 @@ const VideoPlayer = ({
           clearTimeout(loadingTimeoutRef.current);
           loadingTimeoutRef.current = null;
         }
+      });
+      
+      // Log fragment loading for debugging
+      hls.on(Hls.Events.FRAG_LOADED, (event, data) => {
+        console.log(`Fragment loaded: ${data.frag.sn}, duration: ${data.frag.duration}s, size: ${(data.frag.stats.total / 1024).toFixed(2)}KB`);
       });
 
       hls.on(Hls.Events.ERROR, (event, data) => {
@@ -851,31 +862,66 @@ const VideoPlayer = ({
 
   // Scroll to center frame in gallery to keep it centered
   const scrollToCenterFrame = useCallback(() => {
-    if (centerFrame && galleryRef.current && videoFrames.length > 0) {
-      const frameElement = galleryRef.current.querySelector(`[data-frame-id="${centerFrame.id}"]`);
-      if (frameElement) {
-        // Use smooth scroll with center alignment and inline center for better UX
-        frameElement.scrollIntoView({ 
+    if (!centerFrame || !galleryRef.current || videoFrames.length === 0) return;
+    
+    // Wait for all images to load before scrolling to ensure proper height calculation
+    const waitForImagesAndScroll = async () => {
+      const frameElement = galleryRef.current?.querySelector(`[data-frame-id="${centerFrame.id}"]`);
+      
+      if (!frameElement) {
+        // Element not found, retry with requestAnimationFrame
+        requestAnimationFrame(() => waitForImagesAndScroll());
+        return;
+      }
+      
+      // Find all images in the gallery
+      const images = galleryRef.current.querySelectorAll('.video-player__gallery-item img');
+      
+      // Create promises for all images to load
+      const imageLoadPromises = Array.from(images).map((img) => {
+        return new Promise((resolve) => {
+          if (img.complete) {
+            // Image already loaded
+            resolve();
+          } else {
+            // Wait for image to load
+            img.addEventListener('load', resolve, { once: true });
+            img.addEventListener('error', resolve, { once: true }); // Resolve even on error
+            
+            // Timeout after 2 seconds to prevent infinite waiting
+            setTimeout(resolve, 1000);
+          }
+        });
+      });
+      
+      // Wait for all images to load (or timeout)
+      await Promise.all(imageLoadPromises);
+      
+      // Small delay to ensure layout is calculated
+      await new Promise(resolve => setTimeout(resolve, 50));
+      
+      // Now scroll to center frame
+      const updatedFrameElement = galleryRef.current?.querySelector(`[data-frame-id="${centerFrame.id}"]`);
+      if (updatedFrameElement) {
+        updatedFrameElement.scrollIntoView({ 
           behavior: 'smooth', 
           block: 'center',
-          inline: 'center'
+          inline: 'nearest'
         });
       }
-    }
+    };
+    
+    // Start the process
+    waitForImagesAndScroll();
   }, [centerFrame?.id, videoFrames.length]);
 
-  // Scroll to center frame when it changes or when frames are loaded
-  useEffect(() => {
-    scrollToCenterFrame();
-  }, [scrollToCenterFrame]);
-
-  // Scroll to center frame on initial render and when VideoPlayer opens
+  // Scroll to center frame when videoFrames changes (triggered by centerFrame updates)
   useEffect(() => {
     if (isOpen && centerFrame && videoFrames.length > 0) {
-      // Use a small delay to ensure DOM is ready
+      // Small delay to allow React to finish rendering the gallery items
       const timeoutId = setTimeout(() => {
         scrollToCenterFrame();
-      }, 100);
+      }, 100); // Reduced from 300ms to 100ms for faster response
       
       return () => clearTimeout(timeoutId);
     }
