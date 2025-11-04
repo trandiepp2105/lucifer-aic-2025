@@ -1,4 +1,4 @@
-FROM nvidia/cuda:12.1.0-runtime-ubuntu22.04
+FROM nvidia/cuda:12.0.0-runtime-ubuntu22.04
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
@@ -25,24 +25,18 @@ COPY requirements.txt .
 RUN pip3 install --no-cache-dir --upgrade pip && \
     pip3 install --no-cache-dir -r requirements.txt
 
-# Download Meilisearch binary
-RUN wget https://github.com/meilisearch/meilisearch/releases/latest/download/meilisearch-linux-amd64 -O /usr/local/bin/meilisearch && \
-    chmod +x /usr/local/bin/meilisearch
-
 # Copy application code
 COPY . .
 
 # Create directories for data and outputs
 RUN mkdir -p /app/data /app/outputs /app/indexes
 
-# Expose ports
-# 8000 for FastAPI
-# 7700 for Meilisearch
-EXPOSE 8000 7700
+# Expose port for FastAPI
+EXPOSE 8000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-# Default command to start both Meilisearch and FastAPI
-CMD ["sh", "-c", "meilisearch --http-addr 0.0.0.0:7700 & python3 main.py"]
+# Start FastAPI with uvicorn
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

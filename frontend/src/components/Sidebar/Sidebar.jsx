@@ -873,7 +873,11 @@ const Sidebar = ({
           stage: 1,
           viewmode: viewMode 
         });
+        // Clear local and hidden queries when creating a new session
         setLocalQueries([]);
+        setHiddenQueries([]);
+        // Also clear server-side queries loaded in this component
+        setQueries([]);
         setCurrentLocalQuery(createLocalQuery());
         toast.success('New session created!');
       } else {

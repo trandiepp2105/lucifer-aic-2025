@@ -149,7 +149,10 @@ class QueryListCreateAPIView(APIView):
                 'data': serializer.data,
             }, status=status.HTTP_200_OK)
 
-        search_url = request.query_params.get('search_url')
+        # Parse search_url as comma-separated list
+        search_url_param = request.query_params.get('search_url', '')
+        search_urls = [url.strip() for url in search_url_param.split(',') if url.strip()]
+        
         k_param = request.query_params.get('k', '10')
         viewmode = request.query_params.get('viewmode', 'gallery')
         temporal_time = request.query_params.get('temporal_time', '30')  # in seconds, default 30s
@@ -260,7 +263,7 @@ class QueryListCreateAPIView(APIView):
             'vector_models_config': json.dumps(vector_models_config),
         }
 
-        # --- Phần 3: Gửi Request và Xử lý Lỗi ---
+        # --- Phần 3: Gửi Request và Xử lý Lỗi với Multiple Search URLs ---
         files_to_send = []
         opened_files = []
         
@@ -272,45 +275,76 @@ class QueryListCreateAPIView(APIView):
                 # Sử dụng filename thực tế để server có thể match với image_ref
                 files_to_send.append(('image_files', (filename, f, 'image/jpeg')))
 
-            # Gửi request POST tới search_url/search
-            if not search_url:
+            # Kiểm tra có search URLs không
+            if not search_urls:
                 return Response({
                     'message': 'No search URL provided',
                     'frames': [],
                     'data': sorted_queries_serializer.data,
                 }, status=status.HTTP_200_OK)
-                
-            search_endpoint = f"{search_url.rstrip('/')}/search"
             
-            # Use helper method to create configured session
-            session = self._create_request_session(search_url)
+            # Try each search URL in order until one succeeds
+            last_error = None
+            search_timeout = 10  # seconds
             
-            response = session.post(search_endpoint, data=payload, files=files_to_send, timeout=60)
-            response.raise_for_status()
-            
-            search_data = response.json()
-            print(f"Search server response: {search_data.get('query_details')}")
-            temporal_results = search_data.get('results', [])
-            # Xử lý kết quả tương tự như trước
-            results = self.adjust_faiss_response(request, temporal_results)
-            # flattened_results = self._flatten_temporal_results(temporal_results)
-            frames = self._process_frames_by_viewmode(results, viewmode)
-            
-            return Response({
-                'message': 'Temporal search executed successfully',
-                'frames': frames,
-                'data': serializer.data,
-                'search_server_response': search_data
-            }, status=status.HTTP_200_OK)
+            for idx, search_url in enumerate(search_urls):
+                try:
+                    search_endpoint = f"{search_url.rstrip('/')}/search"
+                    
+                    # Use helper method to create configured session
+                    session = self._create_request_session(search_url)
+ 
+                    # Reset file pointers before each request attempt
+                    for f in opened_files:
+                        f.seek(0)
+                    
+                    response = session.post(search_endpoint, data=payload, files=files_to_send, timeout=search_timeout)
+                    response.raise_for_status()
+                    
+                    search_data = response.json()
 
-        except requests.exceptions.RequestException as e:
-            print(f"ERROR: Request to search server failed - {e}")
-            # Trả về data queries dù có lỗi search
+                    temporal_results = search_data.get('results', [])
+                    # Xử lý kết quả tương tự như trước
+                    results = self.adjust_faiss_response(request, temporal_results)
+                    frames = self._process_frames_by_viewmode(results, viewmode)
+                    
+                    return Response({
+                        'message': f'Temporal search executed successfully using server {idx + 1}',
+                        'frames': frames,
+                        'data': serializer.data,
+                        'search_server_response': search_data,
+                        'search_url_used': search_url
+                    }, status=status.HTTP_200_OK)
+                    
+                except requests.exceptions.Timeout as e:
+                    last_error = f"Timeout after {search_timeout}s"
+                    print(f"⚠️ Timeout on search server [{idx + 1}/{len(search_urls)}]: {search_url} - {last_error}")
+                    if idx < len(search_urls) - 1:
+                        print(f"Trying next search server...")
+                        continue
+                    
+                except requests.exceptions.RequestException as e:
+                    last_error = str(e)
+                    print(f"⚠️ Request failed on search server [{idx + 1}/{len(search_urls)}]: {search_url} - {last_error}")
+                    if idx < len(search_urls) - 1:
+                        print(f"Trying next search server...")
+                        continue
+                    
+                except Exception as e:
+                    last_error = str(e)
+                    print(f"⚠️ Error on search server [{idx + 1}/{len(search_urls)}]: {search_url} - {last_error}")
+                    if idx < len(search_urls) - 1:
+                        print(f"Trying next search server...")
+                        continue
+            
+            # All search URLs failed
+            # print(f"❌ All {len(search_urls)} search servers failed. Last error: {last_error}")
             return Response({
-                'message': 'Queries retrieved successfully, but search server failed',
+                'message': 'Queries retrieved successfully, but all search servers failed',
                 'data': serializer.data,
                 'frames': [],
-                'error': 'Failed to communicate with the search server'
+                'error': f'Failed to communicate with any search server. Last error: {last_error}',
+                'servers_tried': len(search_urls)
             }, status=status.HTTP_200_OK)
 
         except FileNotFoundError as e:
