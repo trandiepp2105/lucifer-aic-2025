@@ -35,7 +35,12 @@ meilisearch_service: MeiliSearchService = None
 faiss_search_engine: FAISSSearchEngine = None
 search_engine: SearchEngine = None
 
-
+LIST_DATASET_OCR = [
+    ('/lucifer_data/ocr-dataset', 'parseq_ocr_index'),
+]
+LIST_DATASET_SUBTITLE = [
+    ('/lucifer_data/transcript-dataset', 'frame_transcript_index')
+]
 @app.on_event("startup")
 async def startup_event():
     """Initialize all search engines on startup"""
@@ -49,13 +54,14 @@ async def startup_event():
         host=settings.meilisearch_host,
         port=int(settings.meilisearch_port),
         api_key=settings.meilisearch_api_key,
-        ocr_datasets=settings.get_ocr_datasets(),
-        subscript_datasets=settings.get_subtitle_datasets(),
+        ocr_datasets=LIST_DATASET_OCR,
+        subscript_datasets=LIST_DATASET_SUBTITLE,
         limit_search=settings.meilisearch_limit_search
     )
     
     # Create indices (they will be created if not exists)
     meilisearch_service.create_indices()
+    meilisearch_service.index_all_dataset()
     print("✅ Meilisearch initialized")
     
     # 2. Determine devices
@@ -128,7 +134,7 @@ async def startup_event():
     search_engine = SearchEngine(
         vector_engine=faiss_search_engine,
         ocr_engine=meilisearch_service,
-        segments_dir=settings.segment_path
+        segments_dir=settings.segment_path + "/video_segments_json"
     )
     print("✅ All engines initialized successfully!\n")
 

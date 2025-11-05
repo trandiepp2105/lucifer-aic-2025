@@ -7,7 +7,7 @@ pydantic-settings
 
 # Search engines
 meilisearch
-faiss-gpu-cu-12
+faiss-gpu-cu12
 # faiss-cpu==1.7.4  # Uncomment if using CPU only
 
 # ML/AI

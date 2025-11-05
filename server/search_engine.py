@@ -5,9 +5,10 @@ from collections import defaultdict
 import os
 from PIL import Image
 import concurrent.futures
-
+import time
 from faiss_engine import FAISSSearchEngine
 from meilisearch_service import MeiliSearchService
+import json
 
 class SearchEngine:
     """

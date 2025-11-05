@@ -27,6 +27,8 @@ if ! command -v gdown &> /dev/null && ! command -v ~/.local/bin/gdown &> /dev/nu
     fi
 fi
 
+apt update && apt install -y unzip
+
 # Use gdown from local bin if not in PATH
 if command -v gdown &> /dev/null; then
     GDOWN_CMD="gdown"

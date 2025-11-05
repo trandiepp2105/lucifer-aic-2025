@@ -63,11 +63,15 @@ class Score2Text:
         token = self.custom_token_ratio(q, d)
         return (self.w_partial*partial + self.w_ngrams*ngrams + self.w_token*token)/(self.w_partial + self.w_ngrams + self.w_token)
 
+scoring = Score2Text()
 
 def remove_vietnamese_accents(text: str) -> str:
     """
     Remove Vietnamese diacritics/accents to match processed dataset format
     """
+    import unicodedata
+    
+    # Vietnamese accent mapping
     vietnamese_map = {
         'à': 'a', 'á': 'a', 'ả': 'a', 'ã': 'a', 'ạ': 'a',
         'ă': 'a', 'ằ': 'a', 'ắ': 'a', 'ẳ': 'a', 'ẵ': 'a', 'ặ': 'a',
@@ -98,6 +102,7 @@ def remove_vietnamese_accents(text: str) -> str:
         'Đ': 'D'
     }
     
+    # Apply mapping
     result = ""
     for char in text:
         if char in vietnamese_map:
@@ -106,7 +111,6 @@ def remove_vietnamese_accents(text: str) -> str:
             result += char
     
     return result
-
 
 class SingletonMeta(type):
     """
@@ -143,19 +147,21 @@ class MeiliSearchService(metaclass=SingletonMeta):
     Tự động typo tolerance và ranking algorithm tốt.
     """
     
-    def __init__(
-        self, 
-        host: str = "127.0.0.1", 
-        port: int = 7700, 
-        api_key: str = "meilisearch-api-key", 
-        ocr_datasets: List[Tuple[str, str]] = None, 
-        subscript_datasets: List[Tuple[str, str]] = None, 
-        limit_search: int = 500
-    ):
+    def __init__(self, host: str = None, port: int = None, api_key: str = None, ocr_datasets = None, subscript_datasets = None, limit_search: int = 500):
         # Chỉ khởi tạo nếu chưa được khởi tạo (singleton check)
         if hasattr(self, '_initialized'):
             return
         
+        if meilisearch is None:
+            raise ImportError("Meilisearch not installed. Run: pip install meilisearch")
+        
+        if host is None:
+            host = MEILISEARCH_HOST
+        if port is None:
+            port = MEILISEARCH_PORT
+        if api_key is None:
+            api_key = MEILISEARCH_API_KEY
+            
         self.host = host
         self.port = port
         self.api_key = api_key
@@ -169,28 +175,17 @@ class MeiliSearchService(metaclass=SingletonMeta):
         self.subscript_datasets = subscript_datasets if subscript_datasets is not None else []
         self.ocr_index_names = [index_name for _, index_name in self.ocr_datasets]
         self.subscript_index_names = [index_name for _, index_name in self.subscript_datasets]
-        self.limit_search = limit_search
-        
-        # Initialize scoring
-        self.scoring = Score2Text()
-        
+        self.limit_search = limit_search 
         self._initialized = True
     
     @classmethod
-    def get_instance(
-        cls, 
-        host: str = "127.0.0.1", 
-        port: int = 7700, 
-        api_key: str = "meilisearch-api-key", 
-        ocr_datasets: List[Tuple[str, str]] = None, 
-        subscript_datasets: List[Tuple[str, str]] = None, 
-        limit_search: int = 500
-    ):
+    def get_instance(cls, host: str = None, port: int = None, api_key: str = None, ocr_datasets = None, subscript_datasets = None, limit_search: int = 500):
         """
         Get singleton instance (alternative way to access)
         """
         return cls(host, port, api_key, ocr_datasets, subscript_datasets, limit_search)
 
+    
     def create_indices(self):
         """
         Tạo indices với cấu hình tối ưu cho OCR search
@@ -199,20 +194,27 @@ class MeiliSearchService(metaclass=SingletonMeta):
             for index_name in self.ocr_index_names + self.subscript_index_names:
                 print(f"Creating/updating index: {index_name}")
                 
+                # Try to get existing index first
                 index = None
                 try:
                     index = self.client.get_index(index_name)
                     print(f"Index {index_name} already exists")
                 except Exception:
+                    # Index doesn't exist, create it
                     try:
                         task = self.client.create_index(index_name, {'primaryKey': 'id'})
                         print(f"Created index {index_name}, task: {task.task_uid if hasattr(task, 'task_uid') else 'N/A'}")                        
+                        # Wait a bit for index to be ready
+                        import time
                         time.sleep(1)
+                        
+                        # Now get the created index
                         index = self.client.get_index(index_name)
                     except Exception as create_e:
                         print(f"Failed to create index {index_name}: {create_e}")
                         continue
                 
+                # Configure search settings if we have the index
                 if index:
                     try:
                         settings = {
@@ -292,7 +294,7 @@ class MeiliSearchService(metaclass=SingletonMeta):
                         video_name = Path(json_file).stem
                         
                         for frame_index, frame_text in data.items():
-                            if frame_text.strip():
+                            if frame_text.strip(): # Chỉ index nếu có text
                                 doc = {
                                     "id": f"{index_name}_{video_name}_{frame_index}",
                                     "video_name": video_name,
@@ -304,14 +306,19 @@ class MeiliSearchService(metaclass=SingletonMeta):
                         successful_files += 1
 
                     except Exception as e:
+                        # Ghi lại lỗi của từng file mà không làm dừng toàn bộ quá trình
                         tqdm.write(f"  ✗ Lỗi khi đọc hoặc xử lý file {json_file}: {e}")
                         failed_files += 1
 
+                    # Điều kiện để gửi batch đi:
+                    # 1. Đã xử lý đủ số file trong một batch (BATCH_FILE_COUNT)
+                    # 2. Hoặc đã xử lý đến file cuối cùng của danh sách
                     if (i + 1) % BATCH_FILE_COUNT == 0 or (i + 1) == len(json_files):
-                        if document_batch:
+                        if document_batch: # Chỉ gửi nếu batch không rỗng
                             try:
+                                # Gửi toàn bộ batch đã gom được đến Meilisearch trong 1 lần gọi
                                 task = index.add_documents(document_batch)
-                                document_batch = []
+                                document_batch = [] # Reset lại batch để chuẩn bị cho lô tiếp theo
                             except Exception as e:
                                 tqdm.write(f"  ✗ Lỗi khi index lô dữ liệu kết thúc bằng file {json_file}: {e}")
                 
@@ -334,10 +341,12 @@ class MeiliSearchService(metaclass=SingletonMeta):
             return []
 
         all_query = set()
+        # query ≥2 từ → thêm bigram liên tiếp
         if n >= 2:
             for i in range(n - 1):
                 all_query.add("".join(words[i:i+2]))
 
+        # query =3 → thêm trigram
         if n == 3:
             all_query.add("".join(words))
 
@@ -353,37 +362,47 @@ class MeiliSearchService(metaclass=SingletonMeta):
         if not normalized_queries:
             return []
         try:
+            # 1. Chuẩn bị danh sách các truy vấn cho multi-search
+            # Chỉ thực hiện nếu có index_names được cấu hình
             if not self.ocr_index_names:
                 return []
             queries = []
             for index_name in self.ocr_index_names:
                 for normalized_query in normalized_queries:
-                    queries.append({
-                        "indexUid": index_name,
-                        "q": normalized_query,
-                        "limit": self.limit_search,
-                        "attributesToRetrieve": ['*'],
-                        'showRankingScore': False,
-                        'matchingStrategy': 'last',
-                    })
-            
-            multi_search_response = self.client.multi_search(queries)
+                    queries.append(
+                        {
+                            "indexUid": index_name,
+                            "q": normalized_query,
+                            "limit": self.limit_search,
+                            "attributesToRetrieve": ['*'],
+                            'showRankingScore': False,
+                            'matchingStrategy': 'last',
+                        }
+                    )
+            # 2. Gửi một yêu cầu multi-search duy nhất đến Meilisearch
+            # Đảm bảo format đúng cho Meilisearch 1.6.2
+            multi_search_response = self.client.http.post("multi-search", {"queries": queries})
+            # 3. Tập hợp kết quả vào một dict để không bị trùng lặp
             search_result = {}
             for response in multi_search_response['results']:
                 for doc in response['hits']:
+                    # dùng tuple làm key duy nhất
                     key = (doc['video_name'], doc['frame_index'])
                     if key not in search_result:
                         search_result[key] = doc
             search_result_list = list(search_result.values())
-            
+            # 4. Re-ranking hiệu suất cao với fastfuzz
             for result in search_result_list:
                 text = result.get('text', '').strip()
                 custom_score = self._scoring_matching(text, normalized_queries[0])
+                # custom_score = self._calculate_match_quality_fastfuzz(text, normalized_queries[0])
                 result['_rankingScore'] = custom_score
     
+            # Sắp xếp lại dựa trên điểm số cuối cùng
             search_result_list.sort(key=lambda x: x['_rankingScore'], reverse=True)
             return search_result_list[:size] 
         except Exception as e:
+            # Lỗi từ multi_search sẽ được bắt ở đây
             print(f"Multi-search ocr error: {e}")
             return []
     
@@ -392,39 +411,50 @@ class MeiliSearchService(metaclass=SingletonMeta):
         if not normalized_queries:
             return []
         try:
+            # 1. Chuẩn bị danh sách các truy vấn cho multi-search
+            # Chỉ thực hiện nếu có index_names được cấu hình
             if not self.subscript_index_names:
                 return []
             queries = []
             for index_name in self.subscript_index_names:
                 for normalized_query in normalized_queries:
-                    queries.append({
-                        "indexUid": index_name,
-                        "q": normalized_query,
-                        "limit": self.limit_search,
-                        "attributesToRetrieve": ['*'],
-                        'showRankingScore': False,
-                        'matchingStrategy': 'last',
-                    })
-            
-            multi_search_response = self.client.multi_search(queries)
+                    queries.append(
+                        {
+                            "indexUid": index_name,
+                            "q": normalized_query,
+                            "limit": self.limit_search,
+                            "attributesToRetrieve": ['*'],
+                            'showRankingScore': False,
+                            'matchingStrategy': 'last',
+                        }
+                    )
+            # 2. Gửi một yêu cầu multi-search duy nhất đến Meilisearch
+            # Đảm bảo format đúng cho Meilisearch 1.6.2
+            multi_search_response = self.client.http.post("multi-search", {"queries": queries})
+            # 3. Tập hợp kết quả vào một dict để không bị trùng lặp
             search_result = {}
             for response in multi_search_response['results']:
                 for doc in response['hits']:
+                    # dùng tuple làm key duy nhất
                     key = (doc['video_name'], doc['frame_index'])
                     if key not in search_result:
                         search_result[key] = doc
             search_result_list = list(search_result.values())
-            
+            # 4. Re-ranking hiệu suất cao với fastfuzz
             for result in search_result_list:
                 text = result.get('text', '').strip()
                 custom_score = self._scoring_matching(text, normalized_queries[0])
+                # custom_score = self._calculate_match_quality_fastfuzz(text, normalized_queries[0])
                 result['_rankingScore'] = custom_score
     
+            # Sắp xếp lại dựa trên điểm số cuối cùng
             search_result_list.sort(key=lambda x: x['_rankingScore'], reverse=True)
             return search_result_list[:size] 
         except Exception as e:
-            print(f"Multi-search subtitle error: {e}")
+            # Lỗi từ multi_search sẽ được bắt ở đây
+            print(f"Multi-search ocr error: {e}")
             return []
+
 
     def _scoring_matching(self, text, query):
         text_norm = ' '.join(text.lower().split())
@@ -432,4 +462,42 @@ class MeiliSearchService(metaclass=SingletonMeta):
             return 0.0
         if query in text_norm:
             return 1.0
-        return self.scoring.w_score(q=query, d=text_norm)
+        return scoring.w_score(q=query, d=text_norm)
+            
+
+    def _calculate_match_quality_fastfuzz(self, text: str, query: str) -> float:
+        """
+        Tính toán chất lượng khớp nối bằng fastfuzz để đạt hiệu suất cao.
+        Hàm này thay thế hoàn toàn cho hàm _calculate_match_quality cũ.
+
+        Returns:
+            Một điểm số trong khoảng [0.0, 1.0].
+        """
+        # Chuẩn hóa đầu vào
+        text_norm = ' '.join(text.lower().split())
+        
+        if not query or not text_norm:
+            return 0.0
+            
+        # 1. Kiểm tra khớp chính xác (trường hợp nhanh nhất và phổ biến)
+        if query in text_norm:
+            return 1.0
+            
+        # 2. Sử dụng fuzz.WRatio làm thước đo chính.
+        # WRatio rất mạnh mẽ, nó tự động xử lý các trường hợp khác biệt về thứ tự từ,
+        # khớp một phần, và các vấn đề phức tạp khác. Nó cho điểm từ 0-100.
+        main_score = fuzz.WRatio(query, text_norm)
+        
+        # 3. Xử lý trường hợp đặc biệt: từ ghép không có khoảng trắng (ví dụ: "vet cay" -> "vetcay")
+        # Trường hợp này WRatio có thể không xử lý tốt.
+        concat_score = 0
+        if ' ' in query: # Chỉ xử lý khi query có nhiều từ
+            concatenated_query = "".join(query.split())
+            # Tìm kiếm chuỗi ghép này bên trong văn bản đã loại bỏ khoảng trắng
+            concat_score = fuzz.WRatio(concatenated_query, text_norm)
+
+        # 4. Lấy điểm cao nhất từ hai phương pháp
+        final_score = max(main_score*1, concat_score*0.9)
+        
+        # 5. Chuẩn hóa điểm số về khoảng [0.0, 1.0]
+        return final_score / 100.0

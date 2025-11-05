@@ -4,9 +4,9 @@ from typing import List, Dict, Tuple, Optional, Any, Union, Set
 
 class Reranker:
     """
-    Rerank for multi model retrieval.
+    Rerank for mutil model retrieval.
 
-    suppose:
+    supose:
     - we use N models
     - r_i(d) is the rank order of doc d in model i-th
     - s() is the function convert from rank order into score ranging from 0 -> 1
@@ -21,7 +21,7 @@ class Reranker:
         indices: np.array, 
         unique_index: np.array, 
         out_top_order: int = None
-    ) -> np.array:
+    )-> np.array:
         
         """
         Get order of the given unique indexes in the indices.
@@ -39,7 +39,7 @@ class Reranker:
         
         rank_order = np.full(unique_index.shape, out_top_order)
         
-        in_top_mask = np.isin(unique_index, indices)
+        in_top_mask = np.isin(unique_index,indices)
         in_top = unique_index[in_top_mask]
         in_top_rank_oder = [np.where(indices == x)[0][0].item() for x in in_top]
         
@@ -53,8 +53,8 @@ class Reranker:
         rank_order: np.array, 
         initial_k: int, 
         alpha: float = 1.0, 
-        beta: float = 1.5, 
-        cutoff: int = None
+        beta : float =1.5, 
+        cutoff : int = None
     ) -> np.array:
         
         """
@@ -71,24 +71,23 @@ class Reranker:
         np.array, the score
         """
         if cutoff is None:
-            cutoff = rank_order.shape[0]
+            cutoff  = rank_order.shape[0]
             
         return np.where(
-            rank_order >= cutoff,
-            np.exp(-alpha * cutoff/initial_k) * np.exp(-beta*(rank_order - cutoff)/initial_k),
+          rank_order >= cutoff,
+          np.exp(-alpha * cutoff/initial_k) * np.exp(-beta*(rank_order - cutoff)/initial_k),
             np.exp(-alpha * rank_order/initial_k),
-        )
+          )
 
     def _rerank_by_rank_order(
         self, 
-        list_indices: Union[Tuple[np.array], List[np.array]], 
+        list_indices:Union[Tuple[np.array], List[np.array]], 
         top_k: int = None,
         alpha: float = 1.0, 
-        beta: float = 0.5, 
-        cutoff: int = 0, 
+        beta : float =0.5, 
+        cutoff : int = 0, 
         out_top_order = None, 
-        **kwargs
-    ) -> Tuple[np.array, np.array]:
+        **kwargs) -> Tuple[np.array, np.array]:
         
         """
         Rerank the candidates resulted from multi model search.
@@ -113,9 +112,9 @@ class Reranker:
             top_k = initial_k
 
         # merge all candidates , preparing for process of creating unique index
-        all_candidates = np.empty((num_queries, 0))
+        all_candidates = np.empty((num_queries,0))
         for indice in list_indices:
-            all_candidates = np.concatenate((all_candidates, indice), axis=1)
+            all_candidates = np.concatenate((all_candidates, indice), axis = 1)
 
         # rerank
         scores = []
@@ -129,13 +128,13 @@ class Reranker:
             # rank_scores[i] is the rank score of the order from model i_th
             rank_scores = []
             for j in range(num_models):
-                rank_order = self._get_rank_order(list_indices[j][i], unique_idx, out_top_order)
-                rank_score = self._calculate_rank_score(rank_order, initial_k=initial_k, alpha=alpha, beta=beta, cutoff=cutoff)
-                rank_scores.append(rank_score)
+               rank_order = self._get_rank_order(list_indices[j][i], unique_idx, out_top_order)
+               rank_score = self._calculate_rank_score(rank_order, initial_k =initial_k,  alpha = alpha, beta = beta, cutoff = cutoff)
+               rank_scores.append(rank_score)
 
             # calculate the fusion score, this type of score will be use for reranking
-            emnumerator = np.prod(rank_scores, axis=0)
-            denominator = np.sum(rank_scores, axis=0)
+            emnumerator = np.prod(rank_scores, axis = 0)
+            denominator = np.sum(rank_scores, axis = 0)
             fusion_score = num_models * emnumerator / denominator
 
             # sort and get top k
@@ -156,13 +155,13 @@ class Reranker:
             
         return set(paths)
 
-    def _create_gobal_mapping(self, list_paths: List[Set[str]]):
+    def _create_gobal_mapping(self, list_paths : List[Set[str]]):
         all_paths = list_paths[0]
-        for i in range(1, len(list_paths)):
+        for i in range(1,len(list_paths)):
             all_paths = all_paths | list_paths[i]
 
-        path2id = {path: i for i, path in enumerate(all_paths)}
-        id2path = {i: path for path, i in path2id.items()}
+        path2id = {path : i for i,path in enumerate(all_paths)}
+        id2path = {i : path for path, i in path2id.items()}
         return [path2id, id2path]
 
     def _reconstruct_batch_result_into_scores_indices(self, batch_result, path2id):
@@ -190,11 +189,11 @@ class Reranker:
     
     def __call__(
         self,
-        list_batch_result: List[List[List[Tuple[str, float]]]] = None,
-        list_indices: Union[Tuple[np.array], List[np.array]] = None, 
+        list_batch_result : List[List[List[Tuple[str, float]]]] = None,
+        list_indices:Union[Tuple[np.array], List[np.array]] = None, 
         top_k: int = None, 
         **kwargs 
-    ) -> Union[Tuple[np.array, np.array], List[List[Tuple[str, float]]]]:
+    ) -> Union[Tuple[np.array, np.array], List[List[Tuple[str, float]]]] :
 
         # convert batch result from mutil model into a unified index
         if list_batch_result is not None:
@@ -210,8 +209,8 @@ class Reranker:
 
         # reranking
         scores, indices = self._rerank_by_rank_order(
-            list_indices=list_indices,
-            top_k=top_k,
+            list_indices = list_indices,
+            top_k = top_k,
             **kwargs
         )
 
