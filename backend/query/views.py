@@ -304,6 +304,7 @@ class QueryListCreateAPIView(APIView):
                     search_data = response.json()
 
                     temporal_results = search_data.get('results', [])
+                    # print(f"temporal_results: ", temporal_results)
                     # Xử lý kết quả tương tự như trước
                     results = self.adjust_faiss_response(request, temporal_results)
                     frames = self._process_frames_by_viewmode(results, viewmode)

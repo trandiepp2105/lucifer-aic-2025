@@ -419,26 +419,21 @@ class SubmitTRAKEAnswerView(APIView):
                         'message': f'Item {i} is missing frame_index'
                     }, status=status.HTTP_400_BAD_REQUEST)
 
-            # Format target for TRAKE submission: TR-{video_name},stage1,stage2,stage3,stage4
+            # Format target for TRAKE submission: TR-{video_name}-frame1,frame2,frame3,frame4
             # Extract video_name from first item (all should be same video)
             video_name = items[0]['video_name']
             
-            # Get FPS from first item or use default
-            fps = items[0].get('fps', 25.0)
-            
-            # Convert frame indices to timestamps (milliseconds)
-            timestamps = []
+            # Extract frame indices directly (no conversion to milliseconds)
+            frame_ids = []
             for item in items:
                 frame_index = item['frame_index']
-                # Convert frame to milliseconds: (frame_index / fps) * 1000
-                timestamp_ms = int((frame_index / fps) * 1000)
-                timestamps.append(timestamp_ms)
+                frame_ids.append(frame_index)
             
-            # Sort timestamps in ascending order
-            timestamps.sort()
+            # Sort frame IDs in ascending order
+            frame_ids.sort()
             
-            # Format: TR-{video_name}-stage1,stage2,stage3,stage4
-            target = f"TR-{video_name}-" + ",".join(str(ts) for ts in timestamps)
+            # Format: TR-{video_name}-frame1,frame2,frame3,frame4
+            target = f"TR-{video_name}-" + ",".join(str(fid) for fid in frame_ids)
             
             logger.info(f"Formatted TRAKE target: {target}")
             logger.info(f"DRES Session: {dres_session}")
