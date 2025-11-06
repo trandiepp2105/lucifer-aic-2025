@@ -77,6 +77,7 @@ const VideoPlayer = ({
   const loadingTimeoutRef = useRef(null);
   const cursorTimeoutRef = useRef(null);
   const [cursorHidden, setCursorHidden] = useState(false);
+  const [frameStepMultiplier, setFrameStepMultiplier] = useState(1); // k value: 1-10
 
   // Generate video URL from frame URL - only HLS
   const generateVideoUrl = (frameUrl, videoName) => {
@@ -99,10 +100,11 @@ const VideoPlayer = ({
     
     const frames = [];
     const centerFrameIndex = parseInt(centerFrame.frame_index);
+    const step = frameStepMultiplier * 7;
     
-    // Generate 30 frames before and after (only frame_index divisible by 7)
-    for (let i = -30; i <= 30; i++) {
-      const targetFrameIndex = centerFrameIndex + (i * 7);
+    // Generate 30 frames before and after (with step k*7 where k is frameStepMultiplier)
+    for (let i = -50; i <= 50; i++) {
+      const targetFrameIndex = centerFrameIndex + (i * step);
       
       // Skip if frame index would be negative
       if (targetFrameIndex < 0) continue;
@@ -145,13 +147,14 @@ const VideoPlayer = ({
     }
     
     return frames;
-  }, [centerFrame?.video_name, centerFrame?.frame_index]);
+  }, [centerFrame?.video_name, centerFrame?.frame_index, frameStepMultiplier]);
 
   // Calculate frame index from current time and FPS
   const calculateFrameFromTime = (time, fps) => {
     const frameNumber = Math.round(time * fps);
-    // Round to nearest frame divisible by 7
-    return Math.round(frameNumber / 7) * 7;
+    const step = frameStepMultiplier * 7;
+    // Round to nearest frame divisible by step
+    return Math.round(frameNumber / step) * step;
   };
 
   // Calculate time from frame index and FPS
@@ -242,10 +245,11 @@ const VideoPlayer = ({
 
     const newFrameIndex = calculateFrameFromTime(currentTime, videoInfo.fps);
     const currentCenterFrameIndex = parseInt(centerFrame?.frame_index || 0);
+    const step = frameStepMultiplier * 7;
     
     // Only update centerFrame if frame index changed significantly (for gallery)
     // Throttle updates to max once per 200ms for smoother rendering
-    if (Math.abs(newFrameIndex - currentCenterFrameIndex) >= 7) {
+    if (Math.abs(newFrameIndex - currentCenterFrameIndex) >= step) {
       // Clear previous timeout
       if (updateCenterFrameRef.current) {
         clearTimeout(updateCenterFrameRef.current);
@@ -279,7 +283,7 @@ const VideoPlayer = ({
         clearTimeout(updateCenterFrameRef.current);
       }
     };
-  }, [currentTime, videoInfo, isUserSeeking, internalCurrentFrame, centerFrame?.frame_index]);
+  }, [currentTime, videoInfo, isUserSeeking, internalCurrentFrame, centerFrame?.frame_index, frameStepMultiplier]);
 
   // HLS initialization effect
   useEffect(() => {
@@ -682,6 +686,28 @@ const VideoPlayer = ({
     if (submissionModal.isOpen || isTeamAnswerModalOpen || isImageZoomOpen) {
       return;
     }
+    // alt and ctrl key combinations for frame step multiplier
+    // Handle Alt+N and Alt+M for frame step multiplier
+    if ((e.altKey && (e.key === '.' || e.key === '>')) || (e.ctrlKey && (e.key === '.' || e.key === '>'))) {
+      e.preventDefault();
+      setFrameStepMultiplier(prev => Math.min(10, prev + 1)); // Increase k, max 10
+      if (internalCurrentFrame) {
+        setCenterFrame({...internalCurrentFrame});
+      }
+      scrollToCenterFrame()
+      return;
+    }
+
+    if ((e.altKey && (e.key === ',' || e.key === '<')) || (e.ctrlKey && (e.key === ',' || e.key === '<'))) {
+      e.preventDefault();
+      setFrameStepMultiplier(prev => Math.max(1, prev - 1)); // Decrease k, min 1
+      // Force re-center by setting centerFrame to current frame
+      if (internalCurrentFrame) {
+        setCenterFrame({...internalCurrentFrame});
+      }
+      scrollToCenterFrame()
+      return;
+    }
     
     // Don't prevent default for tab key to allow normal navigation
     if (e.key !== 'Tab') {
@@ -1027,19 +1053,20 @@ const VideoPlayer = ({
     return Math.floor(time * videoInfo.fps);
   };
 
-  // Helper function to get rounded frame index (divisible by 7) from time
+  // Helper function to get rounded frame index (divisible by k*7) from time
   const getRoundedFrameFromTime = (time) => {
     if (!videoInfo?.fps) return 0;
     const frameIndex = Math.floor(time * videoInfo.fps);
-    // Round to nearest frame divisible by 7
-    return Math.round(frameIndex / 7) * 7;
+    const step = frameStepMultiplier * 7;
+    // Round to nearest frame divisible by step
+    return Math.round(frameIndex / step) * step;
   };
 
   // Helper function to get frame URL from time
   const getFrameUrlFromTime = (time) => {
     if (!videoInfo?.fps || !currentFrame?.url) return null;
     
-    // Get rounded frame index (divisible by 7) for thumbnail
+    // Get rounded frame index (divisible by k*7) for thumbnail
     const frameIndex = getRoundedFrameFromTime(time);
     
     // Extract the base URL pattern from current frame URL
@@ -1277,6 +1304,23 @@ const VideoPlayer = ({
 
           {/* Right side - Frame Gallery */}
           <div className="video-player__gallery-section">
+            {/* Frame Step Indicator */}
+            <div className="video-player__step-indicator" style={{ 
+              padding: '8px 12px', 
+              fontSize: '13px', 
+              background: '#2c3e50', 
+              color: '#ecf0f1',
+              marginBottom: '8px',
+              borderRadius: '4px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              fontWeight: '500'
+            }}>
+              <span>Frame Step: {frameStepMultiplier} × 7 = {frameStepMultiplier * 7}</span>
+              <span style={{ fontSize: '11px', opacity: '0.8' }}>Alt+N/Alt+M to adjust</span>
+            </div>
+            
             {/* Debug info */}
             {/* <div className="video-player__debug-info" style={{ 
               padding: '8px', 

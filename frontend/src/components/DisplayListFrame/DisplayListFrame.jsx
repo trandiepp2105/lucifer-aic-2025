@@ -74,6 +74,10 @@ const DisplayListFrame = forwardRef(({
   
   // Ref for content container to control scrolling (where the actual scrollbar is)
   const contentRef = useRef(null);
+  // Ref for samevideo gallery to scroll after render
+  const sameVideoGalleryRef = useRef(null);
+  // Ref for gallery view to scroll after render
+  const galleryRef = useRef(null);
 
   // Expose methods to parent component via ref
   useImperativeHandle(ref, () => ({
@@ -97,6 +101,20 @@ const DisplayListFrame = forwardRef(({
       });
     }
   }, [frames]); // Trigger when frames data changes
+
+  // Auto-scroll view containers to top after render (instant)
+  useEffect(() => {
+    if (frames.length > 0) {
+      // Use requestAnimationFrame to ensure scroll happens after DOM render
+      requestAnimationFrame(() => {
+        if (viewMode === 'gallery' && galleryRef.current) {
+          galleryRef.current.scrollTo({ top: 0, behavior: 'instant' });
+        } else if (viewMode === 'samevideo' && sameVideoGalleryRef.current) {
+          sameVideoGalleryRef.current.scrollTo({ top: 0, behavior: 'instant' });
+        }
+      });
+    }
+  }, [frames, viewMode]); // Trigger when frames or viewMode changes
 
   const handleFrameClick = (frame) => {
     onFrameSelect(frame);
@@ -287,7 +305,7 @@ const DisplayListFrame = forwardRef(({
 
     // Gallery mode - render flat grid, pass frames directly to FrameItem
     return (
-      <div className="display-frame__gallery">
+      <div className="display-frame__gallery" ref={galleryRef}>
         {validFrames.map((frame, index) => {
           const isChecked = queryMode === 'tra' ? isFrameInTempTrake(frame) : false;
           
@@ -366,7 +384,7 @@ const DisplayListFrame = forwardRef(({
     }
 
     return (
-      <div className="display-frame__samevideo-gallery">
+      <div className="display-frame__samevideo-gallery" ref={sameVideoGalleryRef}>
         {validVideoGroups.map((videoFrames, videoIndex) => {
           // Get video name from the first frame
           const videoName = videoFrames[0]?.video_name || `Video ${videoIndex + 1}`;
