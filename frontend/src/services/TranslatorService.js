@@ -83,7 +83,6 @@ class TranslatorService {
           'Content-Type': 'application/x-www-form-urlencoded',
         }
       });
-
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         

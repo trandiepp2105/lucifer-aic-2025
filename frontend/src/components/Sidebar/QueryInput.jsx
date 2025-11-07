@@ -286,6 +286,7 @@ const QueryInput = ({
         toast.success('Text translated successfully!');
       }
     } catch (error) {
+      
       toast.error('Failed to translate text');
     } finally {
       setIsTranslating(false);
