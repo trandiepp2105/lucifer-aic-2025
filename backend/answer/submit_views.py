@@ -393,11 +393,11 @@ class SubmitTRAKEAnswerView(APIView):
                 }, status=status.HTTP_400_BAD_REQUEST)
 
             # Check minimum 4 items required for TRAKE
-            if len(items) < 4:
-                return Response({
-                    'status': 'error',
-                    'message': f'TRAKE requires at least 4 items, but only {len(items)} provided'
-                }, status=status.HTTP_400_BAD_REQUEST)
+            # if len(items) < 4:
+            #     return Response({
+            #         'status': 'error',
+            #         'message': f'TRAKE requires at least 4 items, but only {len(items)} provided'
+            #     }, status=status.HTTP_400_BAD_REQUEST)
 
             # Validate each item
             for i, item in enumerate(items):
