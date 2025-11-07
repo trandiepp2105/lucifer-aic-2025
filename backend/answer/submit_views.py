@@ -121,7 +121,7 @@ class SubmitKISAnswerView(APIView):
                 ]
             }
 
-            logger.info(f"Submitting KIS answer to DRES - Video: {video_name}, Frame: {frame_index}, Time: {time_in_milliseconds}ms")
+            print(f"Submitting KIS answer to DRES - Video: {video_name}, Frame: {frame_index}, Time: {time_in_milliseconds}ms")
 
             # Get DRES submit endpoint from environment
             dres_submit_base_url = os.getenv('DRES_SUBMIT_ENDPOINT', "http://127.0.0.1:8080/api/v2/submit")
@@ -285,7 +285,7 @@ class SubmitQAAnswerView(APIView):
                 ]
             }
 
-            logger.info(f"Submitting QA answer to DRES - Video: {video_name}, Frame: {frame_index}, QA: {qa[:50]}..., Time: {time_in_milliseconds}ms")
+            print(f"Submitting QA answer to DRES - Video: {video_name}, Frame: {frame_index}, QA: {qa[:50]}..., Time: {time_in_milliseconds}ms")
 
             # Get DRES submit endpoint from environment
             dres_submit_base_url = os.getenv('DRES_SUBMIT_ENDPOINT', "http://127.0.0.1:8080/api/v2/submit")
@@ -435,9 +435,7 @@ class SubmitTRAKEAnswerView(APIView):
             # Format: TR-{video_name}-frame1,frame2,frame3,frame4
             target = f"TR-{video_name}-" + ",".join(str(fid) for fid in frame_ids)
             
-            logger.info(f"Formatted TRAKE target: {target}")
-            logger.info(f"DRES Session: {dres_session}")
-            logger.info(f"Evaluation ID: {evaluation_id}")
+            print(f"Formatted TRAKE target: {target}")
             
             # Build DRES payload for TRAKE text submission
             dres_payload = {
@@ -456,7 +454,6 @@ class SubmitTRAKEAnswerView(APIView):
             dres_submit_base_url = os.getenv('DRES_SUBMIT_ENDPOINT', "http://127.0.0.1:8080/api/v2/submit")
             dres_submit_url = f"{dres_submit_base_url}/{evaluation_id}"
             
-            logger.info(f"Submitting TRAKE answer to DRES: {dres_submit_url}")
             
             # Submit to DRES server
             try:
